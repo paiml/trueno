@@ -148,9 +148,9 @@ tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"], optional = true }
 tracing-appender = { version = "0.2", optional = true }
 dirs = { version = "5.0", optional = true }  # Hardware capability path detection (PMAT-447)
-# TUI monitoring (TRUENO-SPEC-020)
-ratatui = { version = "0.29", optional = true }
+# TUI monitoring (TRUENO-SPEC-020) — presentar replaces ratatui
 crossterm = { version = "0.28", optional = true }
+presentar-core = { version = "0.3", optional = true }
 # Stress test reporting types compatible with renacer (TRUENO-SPEC-025)
 # Note: renacer 0.9.1 has compilation issue; using compatible local types instead
 dhat = { version = "0.3", optional = true }
@@ -215,7 +215,7 @@ tracing = ["dep:tracing"]
 # Hardware capability detection with home directory support (PMAT-447)
 hardware-detect = ["dep:dirs"]
 # TUI monitoring (TRUENO-SPEC-020) with stress reporting and logging
-tui-monitor = ["ratatui", "crossterm", "trueno-gpu", "dep:tracing", "tracing-subscriber", "tracing-appender", "dep:dirs"]
+tui-monitor = ["presentar-core", "presentar-terminal", "crossterm", "trueno-gpu", "dep:tracing", "tracing-subscriber", "tracing-appender", "dep:dirs"]
 # CUDA support for TUI (real hardware monitoring)
 cuda = ["trueno-gpu/cuda"]
 # ML-based kernel selection and throughput prediction (SHOWCASE-BRICK-001)

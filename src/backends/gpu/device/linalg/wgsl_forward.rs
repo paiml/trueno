@@ -60,6 +60,8 @@ pub struct WgslForwardPass {
     tiled_matmul_pipeline: wgpu::ComputePipeline,
     /// PMAT-327: GEMV pipeline for M=1 decode (cooperative K-reduction)
     gemv_pipeline: wgpu::ComputePipeline,
+    /// C-WGPU-Q4K-001: Q4K GEMV pipeline — dequantize-on-the-fly, no F32 weights
+    q4k_gemv_pipeline: wgpu::ComputePipeline,
     /// Causal attention pipeline for training (full sequence, no KV cache)
     attention_pipeline: wgpu::ComputePipeline,
     attention_bgl: wgpu::BindGroupLayout,
@@ -363,6 +365,13 @@ impl WgslForwardPass {
         });
         let gemv_pipeline = make_pipeline(&gemv_shader, &matmul_bgl, "gemv_pipe");
 
+        // C-WGPU-Q4K-001: Q4K GEMV — dequantize on-the-fly, no F32 weight buffer
+        let q4k_gemv_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("q4k_gemv"),
+            source: wgpu::ShaderSource::Wgsl(crate::backends::gpu::shaders::Q4K_GEMV_SHADER.into()),
+        });
+        let q4k_gemv_pipeline = make_pipeline(&q4k_gemv_shader, &matmul_bgl, "q4k_gemv_pipe");
+
         let rmsnorm_pipeline = make_pipeline(&rmsnorm_shader, &elementwise_bgl, "rmsnorm_pipe");
         let silu_mul_pipeline = make_pipeline(&silu_mul_shader, &elementwise_bgl, "silu_pipe");
         let residual_pipeline = make_pipeline(&residual_shader_mod, &elementwise_bgl, "res_pipe");
@@ -431,6 +440,7 @@ impl WgslForwardPass {
             attention_pipeline,
             attention_bgl,
             gemv_pipeline,
+            q4k_gemv_pipeline,
             rmsnorm_pipeline,
             silu_mul_pipeline,
             rope_pipeline,
@@ -1735,6 +1745,12 @@ impl WgslForwardPass {
         k: u32,
         n: u32,
     ) {
+        // C-WGPU-Q4K-001: Try Q4K GEMV first for M=1 decode (7x less VRAM)
+        if m == 1 {
+            if self.encode_q4k_gemv(encoder, input, output, layer_prefix, proj_name, n, k) {
+                return;
+            }
+        }
         let weight_key = format!("{layer_prefix}.{proj_name}");
         let weight = match self.weight_buffers.get(&weight_key) {
             Some(w) => w,
@@ -1774,6 +1790,44 @@ impl WgslForwardPass {
             pass.set_bind_group(0, &bg, &[]);
             pass.dispatch_workgroups(m.div_ceil(16), n.div_ceil(16), 1);
         }
+    }
+
+    /// C-WGPU-Q4K-001: Encode Q4K GEMV — reads raw Q4K weight bytes, dequantizes on-the-fly.
+    /// Falls back to F32 GEMV if no Q4K weight found for this layer.
+    /// Returns true if Q4K path was used.
+    fn encode_q4k_gemv(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        input: &wgpu::Buffer,
+        output: &wgpu::Buffer,
+        layer_prefix: &str,
+        proj_name: &str,
+        n: u32,
+        k: u32,
+    ) -> bool {
+        let weight_key = format!("{layer_prefix}.{proj_name}");
+        let weight = match self.q4k_weights.get(&weight_key) {
+            Some(w) => w,
+            None => return false,
+        };
+        let num_superblocks = (k + 255) / 256;
+        let params = [n, k, num_superblocks, 0u32];
+        let params_buf = self.make_uniform(&params);
+        let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &self.matmul_bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: input.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: weight.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: output.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 3, resource: params_buf.as_entire_binding() },
+            ],
+        });
+        let mut pass = encoder.begin_compute_pass(&Default::default());
+        pass.set_pipeline(&self.q4k_gemv_pipeline);
+        pass.set_bind_group(0, &bg, &[]);
+        pass.dispatch_workgroups(n, 1, 1);
+        true
     }
 
     fn encode_silu_mul(

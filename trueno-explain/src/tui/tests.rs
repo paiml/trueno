@@ -1,5 +1,6 @@
 use super::*;
 use crate::analyzer::{MemoryPattern, RegisterUsage, RooflineMetric};
+use presentar_core::Color;
 
 fn sample_report() -> AnalysisReport {
     AnalysisReport {
@@ -27,6 +28,14 @@ fn sample_report() -> AnalysisReport {
         instruction_count: 150,
         estimated_occupancy: 0.875,
     }
+}
+
+/// Helper to compare f32 Color components with tolerance.
+fn color_approx_eq(a: Color, b: Color) -> bool {
+    (a.r - b.r).abs() < 0.01
+        && (a.g - b.g).abs() < 0.01
+        && (a.b - b.b).abs() < 0.01
+        && (a.a - b.a).abs() < 0.01
 }
 
 /// F026: TUI app creates without panic
@@ -165,32 +174,32 @@ fn test_home_end() {
 
 #[test]
 fn test_highlight_ptx_comment() {
-    let span = highlight_ptx_line("// This is a comment");
-    assert_eq!(span.style.fg, Some(Color::DarkGray));
+    let (_, color) = highlight_ptx_line("// This is a comment");
+    assert!(color_approx_eq(color, Color::new(0.5, 0.5, 0.5, 1.0)));
 }
 
 #[test]
 fn test_highlight_ptx_directive() {
-    let span = highlight_ptx_line(".entry test()");
-    assert_eq!(span.style.fg, Some(Color::Magenta));
+    let (_, color) = highlight_ptx_line(".entry test()");
+    assert!(color_approx_eq(color, Color::new(1.0, 0.3, 1.0, 1.0)));
 }
 
 #[test]
 fn test_highlight_ptx_memory() {
-    let span = highlight_ptx_line("    ld.global.f32 %f1, [%rd1]");
-    assert_eq!(span.style.fg, Some(Color::Yellow));
+    let (_, color) = highlight_ptx_line("    ld.global.f32 %f1, [%rd1]");
+    assert!(color_approx_eq(color, Color::new(1.0, 1.0, 0.3, 1.0)));
 }
 
 #[test]
 fn test_highlight_ptx_arithmetic() {
-    let span = highlight_ptx_line("    add.f32 %f1, %f2, %f3");
-    assert_eq!(span.style.fg, Some(Color::Green));
+    let (_, color) = highlight_ptx_line("    add.f32 %f1, %f2, %f3");
+    assert!(color_approx_eq(color, Color::new(0.3, 1.0, 0.3, 1.0)));
 }
 
 #[test]
 fn test_highlight_ptx_control() {
-    let span = highlight_ptx_line("    ret;");
-    assert_eq!(span.style.fg, Some(Color::Red));
+    let (_, color) = highlight_ptx_line("    ret;");
+    assert!(color_approx_eq(color, Color::new(1.0, 0.3, 0.3, 1.0)));
 }
 
 /// F028: Scroll source pane - ASM pane scrolls in sync

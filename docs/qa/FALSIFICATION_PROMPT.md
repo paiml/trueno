@@ -44,12 +44,12 @@ If you find *one* violation of the criteria below, the release is **REJECTED**.
     *   File: `crates/cbtop/src/bricks/collectors/memory.rs`
     *   **CHECK**: Reads `/proc/meminfo`.
 
-### Vector 3: The "Hidden Ratatui" (Dependency Contamination)
-**Claim**: "Zero reliance on `ratatui`, `tui-rs`, or external TUI rendering engines."
+### Vector 3: The "Hidden External TUI" (Dependency Contamination)
+**Claim**: "Zero reliance on `ratatui`, `tui-rs`, or external TUI rendering engines. All TUI rendering uses `presentar`."
 **Falsification Attack**:
 1.  Run: `cargo tree -p cbtop --invert ratatui`
 2.  Run: `grep "ratatui" crates/cbtop/Cargo.toml`
-3.  **FAILURE CONDITION**: Any output indicating `ratatui` is present in the dependency graph of `cbtop`.
+3.  **FAILURE CONDITION**: Any output indicating `ratatui` is present in the dependency graph of `cbtop`. All TUI must use `presentar`.
 
 ### Vector 4: The "Paper Tiger" Tests
 **Claim**: "Tests validate logic, they are not just empty assertions."
@@ -104,13 +104,13 @@ else
     exit 1
 fi
 
-# 4. Zero-Ratatui Check
+# 4. Zero-External-TUI Check (must use presentar, not ratatui)
 echo "Checking Dependencies..."
 if cargo tree -p cbtop | grep -q "ratatui"; then
-    echo "❌ FAIL: ratatui detected in dependencies"
+    echo "❌ FAIL: ratatui detected in dependencies (should use presentar)"
     exit 1
 else
-    echo "✅ Zero-Ratatui confirmed"
+    echo "✅ Zero-External-TUI confirmed (presentar only)"
 fi
 
 # 5. Run Tests

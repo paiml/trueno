@@ -1789,18 +1789,18 @@ INTERACTIVE CONTROLS:
 | **Mieruka** (見える化) | Make hidden states (warp stalls, memory pressure) visible | Liker (2004), Principle 7 |
 | **Hyojun-ka** (標準化) | Standardized work — uniform benchmark execution (warmup, pinning) | Liker (2004), Principle 6 |
 
-### 1.3 Zero-Ratatui Policy (MANDATORY)
+### 1.3 Zero-External-TUI Policy (MANDATORY)
 
 > **"If it's not a Brick, it's not in the interface."**
 
 `cbtop` is a reference implementation for **Brick-Native TUI Development**. Consequently:
 
-1.  **NO Ratatui**: The use of `ratatui` or `tui-rs` is strictly prohibited.
+1.  **NO External TUI Frameworks**: The use of `ratatui`, `tui-rs`, or similar is strictly prohibited.
 2.  **NO External Frameworks**: No `cursive`, `tuirealm`, or similar libraries.
 3.  **Pure `presentar-terminal`**: All widgets and canvas MUST come from `presentar-terminal`. **DO NOT reimplement widgets in cbtop.**
 4.  **Upstream First**: If a widget is missing from `presentar-terminal`, implement it THERE first, then use it in cbtop.
 5.  **Canvas-Level Control**: Rendering uses `DirectTerminalCanvas` from `presentar-terminal`.
-6.  **Quality Enforcement**: Every widget MUST have falsifiable assertions. `ratatui` widgets are passive and cannot be easily falsified at the structural level without external wrappers, violating PROBAR-SPEC-009.
+6.  **Quality Enforcement**: Every widget MUST have falsifiable assertions. External TUI framework widgets (e.g., from `ratatui`) are passive and cannot be easily falsified at the structural level without external wrappers, violating PROBAR-SPEC-009.
 
 **Widget Source Policy (MANDATORY)**:
 - `BrailleGraph` → from `presentar-terminal`
@@ -1811,7 +1811,7 @@ INTERACTIVE CONTROLS:
 - `ColorMode` → from `presentar-terminal`
 - `TuiApp`, `TuiConfig` → from `presentar-terminal`
 
-**Scientific Justification**: By using `presentar-terminal` widgets, we unify the runtime TUI with the automated QA suite. A `ratatui` widget is a black box; a `presentar` Brick is a self-verifying unit of value. Duplicating widget code violates DRY and introduces maintenance burden.
+**Scientific Justification**: By using `presentar-terminal` widgets, we unify the runtime TUI with the automated QA suite. An external TUI framework widget is a black box; a `presentar` Brick is a self-verifying unit of value. Duplicating widget code violates DRY and introduces maintenance burden.
 
 ---
 
@@ -1944,7 +1944,7 @@ wildcard_enum_match_arm = "deny"  # Yuan Gate: no catch-all patterns
 
 ```rust
 //! cbtop uses presentar-terminal for ALL widgets and canvas.
-//! NO ratatui, NO tui-rs, NO other TUI frameworks.
+//! NO external TUI frameworks (ratatui, tui-rs, etc).
 //! DO NOT reimplement widgets - use presentar-terminal.
 
 // Canonical source: presentar-core (traits and geometry)
@@ -4086,7 +4086,7 @@ Each clause is a falsifiable hypothesis. A single failure falsifies the claim.
 | F083 | `CellBuffer` and `DiffRenderer` from presentar-terminal | Import verification | 2 |
 | F084 | `ColorMode` from presentar-terminal | Import verification | 2 |
 | F085 | Terminal restored on exit | presentar-terminal handles cleanup | 2 |
-| F086 | Zero-Ratatui Compliance | No `ratatui` or `tui-rs` imports | 2 |
+| F086 | Zero-External-TUI Compliance | No `ratatui` or `tui-rs` imports | 2 |
 
 ### 11.8 Integration & Performance (F091-F100, 10 points)
 

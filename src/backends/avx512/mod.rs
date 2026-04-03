@@ -296,14 +296,42 @@ impl VectorBackend for Avx512Backend {
     unsafe fn relu(a: &[f32], result: &mut [f32]) {
         unsafe {
             let len = a.len();
+            let ap = a.as_ptr();
+            let rp = result.as_mut_ptr();
             let mut i = 0;
             let zero = _mm512_setzero_ps();
-            while i + 16 <= len {
-                _mm512_storeu_ps(
-                    result.as_mut_ptr().add(i),
-                    _mm512_max_ps(_mm512_loadu_ps(a.as_ptr().add(i)), zero),
-                );
-                i += 16;
+
+            if len >= 8192 {
+                // Non-temporal path: 4-way unrolled with prefetch
+                while i + 64 <= len {
+                    _mm_prefetch(ap.add(i + 128).cast::<i8>(), _MM_HINT_T0);
+
+                    _mm512_stream_ps(rp.add(i), _mm512_max_ps(_mm512_loadu_ps(ap.add(i)), zero));
+                    _mm512_stream_ps(
+                        rp.add(i + 16),
+                        _mm512_max_ps(_mm512_loadu_ps(ap.add(i + 16)), zero),
+                    );
+                    _mm512_stream_ps(
+                        rp.add(i + 32),
+                        _mm512_max_ps(_mm512_loadu_ps(ap.add(i + 32)), zero),
+                    );
+                    _mm512_stream_ps(
+                        rp.add(i + 48),
+                        _mm512_max_ps(_mm512_loadu_ps(ap.add(i + 48)), zero),
+                    );
+
+                    i += 64;
+                }
+                while i + 16 <= len {
+                    _mm512_stream_ps(rp.add(i), _mm512_max_ps(_mm512_loadu_ps(ap.add(i)), zero));
+                    i += 16;
+                }
+                _mm_sfence();
+            } else {
+                while i + 16 <= len {
+                    _mm512_storeu_ps(rp.add(i), _mm512_max_ps(_mm512_loadu_ps(ap.add(i)), zero));
+                    i += 16;
+                }
             }
             for j in i..len {
                 result[j] = a[j].max(0.0);

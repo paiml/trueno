@@ -36,14 +36,10 @@ pub fn relu(input: &[f32], output: &mut [f32]) -> Result<(), TruenoError> {
         )));
     }
 
-    // Parallel for very large arrays (≥4M elements = 16MB).
-    // Below 4M, single-core L3 bandwidth is saturated; multi-core adds
-    // contention (measured: 4 threads at 1M = 1.6× SLOWER than 1 thread
-    // due to L3 slice arbitration + Rayon dispatch on Zen 4).
-    // At 4M+ (16MB), data spills to DRAM where multi-core issues
-    // concurrent requests to multiple memory channels.
+    // Parallel for very large bandwidth-bound arrays (≥16M elements).
+    // Below 16M: single-core saturates channel, rayon overhead hurts.
     #[cfg(feature = "parallel")]
-    if n >= 4_000_000 {
+    if n >= 16_000_000 {
         use rayon::prelude::*;
         let threads = 4.min(rayon::current_num_threads());
         let chunk = (((n + threads - 1) / threads) + 15) & !15;
@@ -62,6 +58,16 @@ pub fn relu(input: &[f32], output: &mut [f32]) -> Result<(), TruenoError> {
 
     #[cfg(target_arch = "x86_64")]
     {
+        // For bandwidth-bound elementwise ops, AVX2 at full clock beats
+        // AVX-512 at throttled clock (Zen 4: ~30% frequency reduction).
+        // Use AVX-512 only for small arrays that fit in L1/L2 where
+        // compute throughput matters more than bandwidth.
+        if is_x86_feature_detected!("avx512f") && n <= 4096 {
+            unsafe {
+                relu_avx512(input, output);
+            }
+            return Ok(());
+        }
         if is_x86_feature_detected!("avx2") {
             unsafe {
                 relu_avx2(input, output);
@@ -76,16 +82,84 @@ pub fn relu(input: &[f32], output: &mut [f32]) -> Result<(), TruenoError> {
     Ok(())
 }
 
+/// AVX-512 ReLU with NT stores for large arrays.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f")]
+unsafe fn relu_avx512(input: &[f32], output: &mut [f32]) {
+    use std::arch::x86_64::*;
+    unsafe {
+        let n = input.len();
+        let ip = input.as_ptr();
+        let op = output.as_mut_ptr();
+        let zero = _mm512_setzero_ps();
+        let mut i = 0;
+
+        let data_bytes = n * 4;
+        let op_aligned = (op as usize) % 64 == 0;
+        if data_bytes > NT_STORE_THRESHOLD_BYTES && op_aligned {
+            // NT path: 4-way unrolled, requires 64-byte aligned output
+            while i + 64 <= n {
+                _mm_prefetch(ip.add(i + 128).cast::<i8>(), _MM_HINT_T0);
+
+                _mm512_stream_ps(op.add(i), _mm512_max_ps(_mm512_loadu_ps(ip.add(i)), zero));
+                _mm512_stream_ps(
+                    op.add(i + 16),
+                    _mm512_max_ps(_mm512_loadu_ps(ip.add(i + 16)), zero),
+                );
+                _mm512_stream_ps(
+                    op.add(i + 32),
+                    _mm512_max_ps(_mm512_loadu_ps(ip.add(i + 32)), zero),
+                );
+                _mm512_stream_ps(
+                    op.add(i + 48),
+                    _mm512_max_ps(_mm512_loadu_ps(ip.add(i + 48)), zero),
+                );
+                i += 64;
+            }
+            while i + 16 <= n {
+                _mm512_stream_ps(op.add(i), _mm512_max_ps(_mm512_loadu_ps(ip.add(i)), zero));
+                i += 16;
+            }
+            _mm_sfence();
+        } else {
+            while i + 64 <= n {
+                _mm512_storeu_ps(op.add(i), _mm512_max_ps(_mm512_loadu_ps(ip.add(i)), zero));
+                _mm512_storeu_ps(
+                    op.add(i + 16),
+                    _mm512_max_ps(_mm512_loadu_ps(ip.add(i + 16)), zero),
+                );
+                _mm512_storeu_ps(
+                    op.add(i + 32),
+                    _mm512_max_ps(_mm512_loadu_ps(ip.add(i + 32)), zero),
+                );
+                _mm512_storeu_ps(
+                    op.add(i + 48),
+                    _mm512_max_ps(_mm512_loadu_ps(ip.add(i + 48)), zero),
+                );
+                i += 64;
+            }
+            while i + 16 <= n {
+                _mm512_storeu_ps(op.add(i), _mm512_max_ps(_mm512_loadu_ps(ip.add(i)), zero));
+                i += 16;
+            }
+        }
+        for j in i..n {
+            output[j] = input[j].max(0.0);
+        }
+    } // unsafe
+}
+
 /// Prefetch distance in bytes. 8 cache lines (512 bytes = 128 f32) ahead.
 /// Tuned for Zen 4 L1→L2 latency (~4ns) and L2→L3 latency (~12ns).
 /// At ~1 iteration/ns throughput, 512B ahead hides ~12ns L2 latency.
 const PREFETCH_DISTANCE: usize = 512;
 
-/// L3 cache threshold (bytes). Use non-temporal stores only when data
-/// exceeds aggregate L3 cache and won't be reused soon.
-/// Zen 4 L3 = 128MB shared; set to 32MB per-stream to avoid evicting
-/// data that might be reused. Only truly one-shot DRAM writes benefit.
-const NT_STORE_THRESHOLD_BYTES: usize = 32 * 1024 * 1024;
+/// NT store threshold (bytes). Use non-temporal stores when total working set
+/// (2 inputs + 1 output = 3 arrays) exceeds L2 cache per core.
+/// Zen 4 L2 = 1MB/core. For add: 3 × data_bytes. NT is beneficial when
+/// data_bytes > ~333KB. Use 512KB for safety margin + alignment effects.
+/// Below this, data fits in L2 and cached stores are faster.
+const NT_STORE_THRESHOLD_BYTES: usize = 512 * 1024; // 512KB output = 128K f32
 
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
@@ -224,10 +298,12 @@ pub fn add(a: &[f32], b: &[f32], output: &mut [f32]) -> Result<(), TruenoError> 
         )));
     }
 
-    // Parallel for very large bandwidth-bound arrays (≥4M elements).
-    // Same as relu: below 4M, single-core saturates L3 bandwidth.
+    // Parallel for very large bandwidth-bound arrays (≥16M elements = 64MB).
+    // At 16M, total working set (3×64MB = 192MB) exceeds L3 (128MB on Zen 4).
+    // Multi-core issues concurrent DRAM requests across memory channels.
+    // Below 16M: single-core saturates its channel, rayon overhead hurts.
     #[cfg(feature = "parallel")]
-    if n >= 4_000_000 {
+    if n >= 16_000_000 {
         use rayon::prelude::*;
         let threads = 4.min(rayon::current_num_threads());
         let chunk = (((n + threads - 1) / threads) + 15) & !15;
@@ -248,6 +324,14 @@ pub fn add(a: &[f32], b: &[f32], output: &mut [f32]) -> Result<(), TruenoError> 
 
     #[cfg(target_arch = "x86_64")]
     {
+        // Bandwidth-bound: prefer AVX2 at full clock over AVX-512 at
+        // throttled clock for large arrays. AVX-512 only for L1/L2-resident.
+        if is_x86_feature_detected!("avx512f") && n <= 4096 {
+            unsafe {
+                add_avx512(a, b, output);
+            }
+            return Ok(());
+        }
         if is_x86_feature_detected!("avx2") {
             unsafe {
                 add_avx2(a, b, output);
@@ -260,6 +344,86 @@ pub fn add(a: &[f32], b: &[f32], output: &mut [f32]) -> Result<(), TruenoError> 
         output[i] = a[i] + b[i];
     }
     Ok(())
+}
+
+/// AVX-512 add with NT stores for large arrays.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f")]
+unsafe fn add_avx512(a: &[f32], b: &[f32], output: &mut [f32]) {
+    use std::arch::x86_64::*;
+    unsafe {
+        let n = a.len();
+        let ap = a.as_ptr();
+        let bp = b.as_ptr();
+        let rp = output.as_mut_ptr();
+        let mut i = 0;
+
+        let data_bytes = n * 4;
+        let rp_aligned = (rp as usize) % 64 == 0;
+        if data_bytes > NT_STORE_THRESHOLD_BYTES && rp_aligned {
+            // NT path: 4-way unrolled, requires 64-byte aligned output
+            while i + 64 <= n {
+                _mm_prefetch(ap.add(i + 128).cast::<i8>(), _MM_HINT_T0);
+                _mm_prefetch(bp.add(i + 128).cast::<i8>(), _MM_HINT_T0);
+
+                _mm512_stream_ps(
+                    rp.add(i),
+                    _mm512_add_ps(_mm512_loadu_ps(ap.add(i)), _mm512_loadu_ps(bp.add(i))),
+                );
+                _mm512_stream_ps(
+                    rp.add(i + 16),
+                    _mm512_add_ps(_mm512_loadu_ps(ap.add(i + 16)), _mm512_loadu_ps(bp.add(i + 16))),
+                );
+                _mm512_stream_ps(
+                    rp.add(i + 32),
+                    _mm512_add_ps(_mm512_loadu_ps(ap.add(i + 32)), _mm512_loadu_ps(bp.add(i + 32))),
+                );
+                _mm512_stream_ps(
+                    rp.add(i + 48),
+                    _mm512_add_ps(_mm512_loadu_ps(ap.add(i + 48)), _mm512_loadu_ps(bp.add(i + 48))),
+                );
+                i += 64;
+            }
+            while i + 16 <= n {
+                _mm512_stream_ps(
+                    rp.add(i),
+                    _mm512_add_ps(_mm512_loadu_ps(ap.add(i)), _mm512_loadu_ps(bp.add(i))),
+                );
+                i += 16;
+            }
+            _mm_sfence();
+        } else {
+            while i + 64 <= n {
+                _mm512_storeu_ps(
+                    rp.add(i),
+                    _mm512_add_ps(_mm512_loadu_ps(ap.add(i)), _mm512_loadu_ps(bp.add(i))),
+                );
+                _mm512_storeu_ps(
+                    rp.add(i + 16),
+                    _mm512_add_ps(_mm512_loadu_ps(ap.add(i + 16)), _mm512_loadu_ps(bp.add(i + 16))),
+                );
+                _mm512_storeu_ps(
+                    rp.add(i + 32),
+                    _mm512_add_ps(_mm512_loadu_ps(ap.add(i + 32)), _mm512_loadu_ps(bp.add(i + 32))),
+                );
+                _mm512_storeu_ps(
+                    rp.add(i + 48),
+                    _mm512_add_ps(_mm512_loadu_ps(ap.add(i + 48)), _mm512_loadu_ps(bp.add(i + 48))),
+                );
+                i += 64;
+            }
+            while i + 16 <= n {
+                _mm512_storeu_ps(
+                    rp.add(i),
+                    _mm512_add_ps(_mm512_loadu_ps(ap.add(i)), _mm512_loadu_ps(bp.add(i))),
+                );
+                i += 16;
+            }
+        }
+        for j in i..n {
+            output[j] = a[j] + b[j];
+        }
+    } // unsafe
 }
 
 #[cfg(target_arch = "x86_64")]

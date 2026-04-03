@@ -16,7 +16,7 @@
 use super::super::nf4::nf4_register_lut_lookup;
 use super::super::nf4_cpu::{NF4_BLOCK_SIZE, NF4_LUT};
 use crate::kernels::Kernel;
-use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl, PtxMemory};
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
 
 const NF4_BLOCK_SIZE_U32: u32 = NF4_BLOCK_SIZE as u32;

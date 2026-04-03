@@ -78,17 +78,22 @@ pub fn gemm_blis_parallel(
         return Err(TruenoError::InvalidInput("Dimension mismatch".to_string()));
     }
 
-    // Single-threaded threshold: 4M FLOPs ≈ 160³.
-    // Rayon dispatch costs ~3µs even on warm pool. For m*n*k < 4M,
-    // single-threaded GEMM (~10-30µs) doesn't benefit from parallelism
-    // after overhead. The direct rowmajor kernel handles ≤128 efficiently.
-    if m * n * k < 4_000_000 {
+    // Single-threaded threshold: 8M FLOPs ≈ 200³.
+    // Rayon dispatch costs ~3µs. For GEMM ≤128 (~4M FLOP, ~35µs compute),
+    // rayon overhead dominates. GEMM 256+ (33M FLOP, ~300µs) benefits.
+    let flops = m * n * k;
+    if flops < 8_000_000 {
         return gemm_blis(m, n, k, a, b, c, None);
     }
 
     // Scale thread count to problem size to avoid excessive partitioning.
-    let flops = m * n * k;
-    let max_threads = if flops < 16_000_000 { 4 } else { rayon::current_num_threads() };
+    let max_threads = if flops < 32_000_000 {
+        4
+    } else if flops < 128_000_000 {
+        8
+    } else {
+        rayon::current_num_threads()
+    };
 
     let mut scheduler = HeijunkaScheduler::default();
     scheduler.num_threads = scheduler.num_threads.min(max_threads);

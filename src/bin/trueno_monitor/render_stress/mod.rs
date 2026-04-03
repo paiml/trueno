@@ -6,66 +6,88 @@ mod stress;
 pub(crate) use dataflow::render_dataflow_tab;
 pub(crate) use stress::render_stress_tab;
 
-use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
-    Frame,
-};
+use presentar_core::{Canvas, Color, Point, Rect, TextStyle};
+use presentar_terminal::direct::DirectTerminalCanvas;
+use presentar_terminal::Theme;
 
-pub(crate) fn render_help_overlay(f: &mut Frame, size: Rect) {
-    let block = Block::default()
-        .title(" Help ")
-        .borders(Borders::ALL)
-        .style(Style::default().bg(Color::DarkGray));
+use super::render::{color_dark_gray, color_white};
 
-    let area = centered_rect(50, 60, size);
-    f.render_widget(ratatui::widgets::Clear, area);
-
-    let help_text = vec![
-        Line::from(""),
-        Line::from(Span::styled(
-            "Keyboard Controls",
-            Style::default().add_modifier(Modifier::BOLD),
-        )),
-        Line::from(""),
-        Line::from("  q        Quit"),
-        Line::from("  Tab      Next tab"),
-        Line::from("  Shift+Tab Previous tab"),
-        Line::from("  s        Toggle stress test"),
-        Line::from("  ?        Toggle this help"),
-        Line::from(""),
-        Line::from(Span::styled("Tabs", Style::default().add_modifier(Modifier::BOLD))),
-        Line::from(""),
-        Line::from("  Compute    CPU/GPU utilization"),
-        Line::from("  Memory     RAM/SWAP/VRAM usage"),
-        Line::from("  Data Flow  PCIe bandwidth"),
-        Line::from("  Stress     Stress test controls"),
-        Line::from(""),
-        Line::from(Span::styled("Press ? to close", Style::default().fg(Color::DarkGray))),
-    ];
-
-    let paragraph = Paragraph::new(help_text).block(block);
-    f.render_widget(paragraph, area);
+fn color_dark_bg() -> Color {
+    Color::new(0.2, 0.2, 0.2, 1.0)
 }
 
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
+pub(crate) fn render_help_overlay(
+    canvas: &mut DirectTerminalCanvas,
+    width: u16,
+    height: u16,
+    theme: &Theme,
+) {
+    // Calculate centered rectangle (50% x 60%)
+    let overlay_w = (width as f32 * 0.50).round() as usize;
+    let overlay_h = (height as f32 * 0.60).round() as usize;
+    let start_x = ((width as usize).saturating_sub(overlay_w)) / 2;
+    let start_y = ((height as usize).saturating_sub(overlay_h)) / 2;
 
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
+    // Fill background
+    canvas.fill_rect(
+        Rect::new(start_x as f32, start_y as f32, overlay_w as f32, overlay_h as f32),
+        color_dark_bg(),
+    );
+
+    let dim = TextStyle { color: color_dark_gray(), ..Default::default() };
+    let bright = TextStyle { color: color_white(), ..Default::default() };
+    let x = start_x as f32;
+    let mut y = start_y as f32;
+
+    // Top border
+    let top =
+        format!("\u{250c}\u{2500} Help {}\u{2510}", "\u{2500}".repeat(overlay_w.saturating_sub(9)));
+    canvas.draw_text(&top, Point::new(x, y), &dim);
+    y += 1.0;
+
+    let lines = [
+        "",
+        "Keyboard Controls",
+        "",
+        "  q        Quit",
+        "  Tab      Next tab",
+        "  Shift+Tab Previous tab",
+        "  s        Toggle stress test",
+        "  ?        Toggle this help",
+        "",
+        "Tabs",
+        "",
+        "  Compute    CPU/GPU utilization",
+        "  Memory     RAM/SWAP/VRAM usage",
+        "  Data Flow  PCIe bandwidth",
+        "  Stress     Stress test controls",
+        "",
+        "Press ? to close",
+    ];
+
+    for line in &lines {
+        let padding = overlay_w.saturating_sub(line.len() + 4);
+        let row = format!("\u{2502} {}{} \u{2502}", line, " ".repeat(padding));
+        let style = if *line == "Keyboard Controls" || *line == "Tabs" {
+            &bright
+        } else if *line == "Press ? to close" {
+            &dim
+        } else {
+            &TextStyle { color: theme.foreground, ..Default::default() }
+        };
+        canvas.draw_text(&row, Point::new(x, y), style);
+        y += 1.0;
+    }
+
+    // Fill remaining rows
+    while y < (start_y + overlay_h) as f32 - 1.0 {
+        let empty_padding = overlay_w.saturating_sub(4);
+        let row = format!("\u{2502} {} \u{2502}", " ".repeat(empty_padding));
+        canvas.draw_text(&row, Point::new(x, y), &dim);
+        y += 1.0;
+    }
+
+    // Bottom border
+    let bottom = format!("\u{2514}{}\u{2518}", "\u{2500}".repeat(overlay_w.saturating_sub(2)));
+    canvas.draw_text(&bottom, Point::new(x, y), &dim);
 }

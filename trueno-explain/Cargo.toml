@@ -16,8 +16,9 @@ thiserror = "2.0"
 colored = "2.0"
 regex = "1.10"
 
-# TUI dependencies
-ratatui = "0.29"
+# TUI dependencies — presentar replaces ratatui
+presentar-core = "0.3"
+presentar-terminal = "0.3"
 crossterm = "0.28"
 
 # Internal dependency for PTX generation

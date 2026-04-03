@@ -14,7 +14,7 @@
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2025-12-16 | Batuta Team | Initial specification with 10 peer-reviewed citations |
-| 1.1 | 2025-12-16 | Claude Code | Added TUI mode (Ratatui), Analyzer trait, and Muda mapping |
+| 1.1 | 2025-12-16 | Claude Code | Added TUI mode (Presentar), Analyzer trait, and Muda mapping |
 
 ---
 
@@ -101,7 +101,7 @@ Developers face critical questions they cannot easily answer:
 │         ▼                    ▼                    ▼             │
 │  ┌────────────┐       ┌────────────┐       ┌────────────┐       │
 │  │   Stdout   │       │   JSON     │       │   TUI      │       │
-│  │  Renderer  │       │  Exporter  │       │ (Ratatui)  │       │
+│  │  Renderer  │       │  Exporter  │       │ (Presentar)│       │
 │  └────────────┘       └────────────┘       └────────────┘       │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
@@ -216,7 +216,7 @@ Recommendations:
 
 ### 3.4 TUI Mode (Interactive Genchi Genbutsu)
 
-Launch an interactive split-pane interface using `ratatui`:
+Launch an interactive split-pane interface using `presentar`:
 
 ```bash
 trueno-explain tui --kernel q5k_gemm_ggml
@@ -361,7 +361,7 @@ Rich terminal interface for exploration.
 
 | ID | Task | Effort | Acceptance Criteria |
 |----|------|--------|---------------------|
-| TE-008 | TUI Scaffold (Ratatui) | 1 day | Split panes rendering |
+| TE-008 | TUI Scaffold (Presentar) | 1 day | Split panes rendering |
 | TE-009 | Source-ASM Sync | 3 days | Scrolling linkage |
 | TE-010 | Analysis Widgets | 2 days | Charts/Lists rendering |
 

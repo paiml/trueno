@@ -1021,9 +1021,9 @@ viz = ["dep:trueno-viz"]
 # Stress testing with randomized inputs (native only)
 stress-test = ["dep:simular", "dep:renacer"]
 # TUI monitoring mode for stress tests
-tui-monitor = ["stress-test", "dep:ratatui", "dep:crossterm"]
+tui-monitor = ["stress-test", "dep:presentar", "dep:crossterm"]
 # GPU pixel testing with probar TUI visualization
-gpu-pixels = ["dep:jugar-probar", "dep:ratatui", "dep:crossterm"]
+gpu-pixels = ["dep:jugar-probar", "dep:presentar", "dep:crossterm"]
 ```
 
 ### 8.6 trueno vs trueno-gpu Monitoring Comparison

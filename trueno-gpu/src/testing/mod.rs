@@ -21,7 +21,7 @@
 //!
 //! - `viz`: Enable GPU pixel renderer with trueno-viz
 //! - `stress-test`: Enable randomized frame-by-frame stress testing
-//! - `tui-monitor`: Enable TUI monitoring mode via ratatui
+//! - `tui-monitor`: Enable TUI monitoring mode via presentar
 
 #[cfg(feature = "viz")]
 mod gpu_renderer;

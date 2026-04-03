@@ -532,6 +532,208 @@ fn main(@builtin(workgroup_id) wg_id: vec3<u32>,
 }
 "#;
 
+/// Q4_K quantized matrix-vector product (WGSL) — C-WGPU-Q4K-001
+///
+/// Computes y[row] = Σ_col dequant(W_q4k[row, col]) × x[col]
+/// where W is stored as raw Q4_K super-blocks (144 bytes → 256 f32 values).
+///
+/// Dequantization happens on-the-fly per-thread — no F32 weight buffer.
+/// This reduces VRAM from 4×num_params (F32) to 144/256×num_params (Q4K) = 7.1x.
+///
+/// Q4_K super-block layout (144 bytes per 256 elements):
+///   bytes[0:2]   = d    (f16, global scale)
+///   bytes[2:4]   = dmin (f16, global min scale)
+///   bytes[4:16]  = 12 packed scale/min bytes (8 sub-blocks, 6-bit packed)
+///   bytes[16:144]= 128 quantized nibble bytes (4-bit, interleaved low/high)
+///
+/// Each sub-block (32 elements): value = d × scale × nibble - dmin × min
+///
+/// Workgroup: 256 threads per output row.
+/// Dispatch: N workgroups (one per output element).
+/// Each thread processes ceil(num_superblocks/256) super-blocks, accumulating
+/// 256 elements per super-block into a partial sum, then tree-reduces.
+pub(crate) const Q4K_GEMV_SHADER: &str = r#"
+// Q4K weights stored as array<u32> (144 bytes = 36 u32s per super-block)
+@group(0) @binding(0) var<storage, read> x: array<f32>;       // input [K]
+@group(0) @binding(1) var<storage, read> w_q4k: array<u32>;   // Q4K weight bytes as u32
+@group(0) @binding(2) var<storage, read_write> y: array<f32>;  // output [N]
+
+struct Q4kParams {
+    n: u32,               // output dim (number of rows)
+    k: u32,               // input dim (number of columns)
+    num_superblocks: u32, // super-blocks per row = ceil(K / 256)
+    _pad: u32,
+}
+@group(0) @binding(3) var<uniform> params: Q4kParams;
+
+var<workgroup> sdata: array<f32, 256>;
+
+// Extract a u8 from a u32 array (byte-level access)
+fn read_u8(base: u32, byte_offset: u32) -> u32 {
+    let word_idx = base + byte_offset / 4u;
+    let byte_pos = byte_offset % 4u;
+    return (w_q4k[word_idx] >> (byte_pos * 8u)) & 0xFFu;
+}
+
+// Convert f16 (stored as u16 in two bytes) to f32
+fn f16_to_f32(low: u32, high: u32) -> f32 {
+    let bits = low | (high << 8u);
+    let sign_bit = (bits >> 15u) & 1u;
+    let exp = (bits >> 10u) & 0x1Fu;
+    let mantissa = bits & 0x3FFu;
+
+    if (exp == 0u) {
+        if (mantissa == 0u) {
+            if (sign_bit == 1u) { return -0.0; }
+            return 0.0;
+        }
+        // Subnormal — convert to f32
+        var m = mantissa;
+        var e = 0i;
+        while ((m & 0x400u) == 0u) {
+            m = m << 1u;
+            e -= 1i;
+        }
+        let f_exp = f32(127 - 15 + 1 + e);
+        let f_man = f32(m & 0x3FFu) / 1024.0;
+        var result = (1.0 + f_man) * pow(2.0, f_exp - 127.0);
+        if (sign_bit == 1u) { result = -result; }
+        return result;
+    }
+    if (exp == 31u) {
+        if (mantissa == 0u) {
+            if (sign_bit == 1u) { return -1.0 / 0.0; }  // -inf
+            return 1.0 / 0.0;  // +inf
+        }
+        return 0.0 / 0.0;  // NaN
+    }
+    // Normal f16
+    let f_exp = f32(i32(exp) - 15 + 127);
+    let f_man = f32(mantissa) / 1024.0;
+    var result = (1.0 + f_man) * pow(2.0, f_exp - 127.0);
+    if (sign_bit == 1u) { result = -result; }
+    return result;
+}
+
+@compute @workgroup_size(256)
+fn main(@builtin(workgroup_id) wg_id: vec3<u32>,
+        @builtin(local_invocation_id) lid: vec3<u32>) {
+    let row = wg_id.x;
+    let tid = lid.x;
+
+    if (row >= params.n) { return; }
+
+    // Each super-block is 36 u32s (144 bytes). Row data starts at:
+    let row_base_u32 = row * params.num_superblocks * 36u;
+
+    var partial_sum: f32 = 0.0;
+
+    // Each thread processes a subset of super-blocks for this row
+    var sb_idx = tid;
+    while (sb_idx < params.num_superblocks) {
+        let sb_base = row_base_u32 + sb_idx * 36u;
+        let input_offset = sb_idx * 256u;
+
+        // Read d and dmin (f16 → f32)
+        let byte0 = read_u8(sb_base, 0u);
+        let byte1 = read_u8(sb_base, 1u);
+        let byte2 = read_u8(sb_base, 2u);
+        let byte3 = read_u8(sb_base, 3u);
+        let d = f16_to_f32(byte0, byte1);
+        let dmin = f16_to_f32(byte2, byte3);
+
+        // Unpack 8 scales and 8 mins from bytes[4:16]
+        var scales: array<f32, 8>;
+        var mins: array<f32, 8>;
+
+        let s0 = read_u8(sb_base, 4u);
+        let s1 = read_u8(sb_base, 5u);
+        let s2 = read_u8(sb_base, 6u);
+        let s3 = read_u8(sb_base, 7u);
+        let m0 = read_u8(sb_base, 8u);
+        let m1 = read_u8(sb_base, 9u);
+        let m2 = read_u8(sb_base, 10u);
+        let m3 = read_u8(sb_base, 11u);
+        let h0 = read_u8(sb_base, 12u);
+        let h1 = read_u8(sb_base, 13u);
+        let h2 = read_u8(sb_base, 14u);
+        let h3 = read_u8(sb_base, 15u);
+
+        scales[0] = f32(s0 & 0x3Fu);
+        scales[1] = f32(s1 & 0x3Fu);
+        scales[2] = f32(s2 & 0x3Fu);
+        scales[3] = f32(s3 & 0x3Fu);
+        scales[4] = f32((h0 & 0x0Fu) | ((s0 >> 6u) << 4u));
+        scales[5] = f32((h1 & 0x0Fu) | ((s1 >> 6u) << 4u));
+        scales[6] = f32((h2 & 0x0Fu) | ((s2 >> 6u) << 4u));
+        scales[7] = f32((h3 & 0x0Fu) | ((s3 >> 6u) << 4u));
+
+        mins[0] = f32(m0 & 0x3Fu);
+        mins[1] = f32(m1 & 0x3Fu);
+        mins[2] = f32(m2 & 0x3Fu);
+        mins[3] = f32(m3 & 0x3Fu);
+        mins[4] = f32((h0 >> 4u) | ((m0 >> 6u) << 4u));
+        mins[5] = f32((h1 >> 4u) | ((m1 >> 6u) << 4u));
+        mins[6] = f32((h2 >> 4u) | ((m2 >> 6u) << 4u));
+        mins[7] = f32((h3 >> 4u) | ((m3 >> 6u) << 4u));
+
+        // Process 4 chunks × 64 elements (32 low nibbles + 32 high nibbles)
+        for (var chunk = 0u; chunk < 4u; chunk++) {
+            let d1 = d * scales[chunk * 2u];
+            let dm1 = dmin * mins[chunk * 2u];
+            let d2 = d * scales[chunk * 2u + 1u];
+            let dm2 = dmin * mins[chunk * 2u + 1u];
+
+            let q_byte_start = 16u + chunk * 32u;  // offset into super-block
+            let elem_base = input_offset + chunk * 64u;
+
+            // Low nibbles: 32 elements
+            for (var i = 0u; i < 32u; i++) {
+                let idx = elem_base + i;
+                if (idx < params.k) {
+                    let q_byte = read_u8(sb_base, q_byte_start + i);
+                    let q_val = f32(q_byte & 0x0Fu);
+                    partial_sum += (d1 * q_val - dm1) * x[idx];
+                }
+            }
+            // High nibbles: 32 elements
+            for (var i = 0u; i < 32u; i++) {
+                let idx = elem_base + 32u + i;
+                if (idx < params.k) {
+                    let q_byte = read_u8(sb_base, q_byte_start + i);
+                    let q_val = f32(q_byte >> 4u);
+                    partial_sum += (d2 * q_val - dm2) * x[idx];
+                }
+            }
+        }
+
+        sb_idx += 256u;  // stride by workgroup size
+    }
+
+    // Tree reduction (same as GEMV_SHADER)
+    sdata[tid] = partial_sum;
+    workgroupBarrier();
+
+    if (tid < 128u) { sdata[tid] += sdata[tid + 128u]; }
+    workgroupBarrier();
+    if (tid < 64u) { sdata[tid] += sdata[tid + 64u]; }
+    workgroupBarrier();
+    if (tid < 32u) { sdata[tid] += sdata[tid + 32u]; }
+    workgroupBarrier();
+    if (tid < 16u) { sdata[tid] += sdata[tid + 16u]; }
+    workgroupBarrier();
+    if (tid < 8u) { sdata[tid] += sdata[tid + 8u]; }
+    workgroupBarrier();
+    if (tid < 4u) { sdata[tid] += sdata[tid + 4u]; }
+    workgroupBarrier();
+    if (tid < 2u) { sdata[tid] += sdata[tid + 2u]; }
+    workgroupBarrier();
+    if (tid == 0u) {
+        y[row] = sdata[0] + sdata[1];
+    }
+}
+"#;
+
 /// Vector addition compute shader (WGSL)
 ///
 /// Computes c = a + b element-wise

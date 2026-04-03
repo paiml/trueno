@@ -22,14 +22,9 @@ mod tui_report {
         terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     };
     use jugar_probar::gpu_pixels::GpuPixelTestSuite;
-    use ratatui::{
-        backend::CrosstermBackend,
-        layout::{Constraint, Direction, Layout},
-        style::{Color, Style},
-        text::{Line, Span},
-        widgets::{Block, Borders, List, ListItem, Paragraph},
-        Frame, Terminal,
-    };
+    use presentar_core::{Canvas, Color, Point, Rect, TextStyle};
+    use presentar_terminal::direct::{CellBuffer, DiffRenderer, DirectTerminalCanvas};
+    use presentar_terminal::{ColorMode, Theme};
     use std::io;
 
     pub struct GpuPixelTuiReport {
@@ -61,10 +56,20 @@ mod tui_report {
             enable_raw_mode()?;
             let mut stdout = io::stdout();
             execute!(stdout, EnterAlternateScreen)?;
-            let backend = CrosstermBackend::new(stdout);
-            let mut terminal = Terminal::new(backend)?;
 
-            terminal.draw(|f| self.ui(f))?;
+            let (width, height) = crossterm::terminal::size()?;
+            let mut buffer = CellBuffer::new(width, height);
+            let renderer = DiffRenderer::with_color_mode(ColorMode::TrueColor);
+            let theme = Theme::tokyo_night();
+
+            {
+                let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+                self.render_ui(&mut canvas, width, height, &theme);
+            }
+
+            let mut output = Vec::with_capacity(8192);
+            renderer.flush(&mut buffer, &mut output).ok();
+            std::io::Write::write_all(&mut stdout, &output)?;
 
             // Wait for key press
             loop {
@@ -76,18 +81,27 @@ mod tui_report {
             }
 
             disable_raw_mode()?;
-            execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+            execute!(stdout, LeaveAlternateScreen)?;
             Ok(())
         }
 
-        fn ui(&self, f: &mut Frame<'_>) {
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .margin(1)
-                .constraints([Constraint::Length(3), Constraint::Min(10), Constraint::Length(5)])
-                .split(f.area());
+        fn render_ui(
+            &self,
+            canvas: &mut DirectTerminalCanvas<'_>,
+            width: u16,
+            height: u16,
+            _theme: &Theme,
+        ) {
+            let green = Color::new(0.3, 1.0, 0.3, 1.0);
+            let red = Color::new(1.0, 0.3, 0.3, 1.0);
+            let yellow = Color::new(1.0, 1.0, 0.3, 1.0);
+            let cyan = Color::new(0.3, 1.0, 1.0, 1.0);
+            let gray = Color::new(0.5, 0.5, 0.5, 1.0);
 
-            // Header
+            let _w = width as f32;
+            let mut y: f32 = 1.0;
+
+            // Header: Summary
             let total_passed: usize = self.suites.iter().map(|s| s.passed_count()).sum();
             let total_tests: usize = self.suites.iter().map(|s| s.results.len()).sum();
             let pass_rate = if total_tests > 0 {
@@ -96,52 +110,75 @@ mod tui_report {
                 0.0
             };
 
-            let header = Paragraph::new(format!(
-                "GPU Pixel Tests: {}/{} passed ({:.1}%)",
-                total_passed, total_tests, pass_rate
-            ))
-            .style(Style::default().fg(if pass_rate == 100.0 {
-                Color::Green
-            } else {
-                Color::Yellow
-            }))
-            .block(Block::default().borders(Borders::ALL).title("Summary"));
-            f.render_widget(header, chunks[0]);
+            let header_color = if pass_rate == 100.0 { green } else { yellow };
+            let header_style = TextStyle::default().with_color(header_color);
+
+            canvas.draw_text(
+                Point::new(1.0, y),
+                &format!(
+                    "--- Summary ---  GPU Pixel Tests: {}/{} passed ({:.1}%)",
+                    total_passed, total_tests, pass_rate
+                ),
+                header_style,
+            );
+            y += 2.0;
 
             // Kernel results
-            let items: Vec<ListItem<'_>> = self
-                .suites
-                .iter()
-                .map(|suite| {
-                    let status = if suite.all_passed() { "✓" } else { "✗" };
-                    let color = if suite.all_passed() { Color::Green } else { Color::Red };
-                    ListItem::new(Line::from(vec![
-                        Span::styled(format!("[{}] ", status), Style::default().fg(color)),
-                        Span::raw(&suite.kernel_name),
-                        Span::styled(
-                            format!(" ({}/{})", suite.passed_count(), suite.results.len()),
-                            Style::default().fg(Color::Gray),
-                        ),
-                    ]))
-                })
-                .collect();
+            canvas.draw_text(
+                Point::new(1.0, y),
+                "--- Kernels ---",
+                TextStyle::default().with_color(gray),
+            );
+            y += 1.0;
 
-            let list =
-                List::new(items).block(Block::default().borders(Borders::ALL).title("Kernels"));
-            f.render_widget(list, chunks[1]);
+            for suite in &self.suites {
+                if y >= height as f32 - 6.0 {
+                    break;
+                }
+                let status = if suite.all_passed() { "✓" } else { "✗" };
+                let color = if suite.all_passed() { green } else { red };
+                let style = TextStyle::default().with_color(color);
+
+                let line = format!(
+                    "[{}] {} ({}/{})",
+                    status,
+                    suite.kernel_name,
+                    suite.passed_count(),
+                    suite.results.len()
+                );
+                canvas.draw_text(Point::new(2.0, y), &line, style);
+                y += 1.0;
+            }
+
+            y += 1.0;
 
             // Bug class legend
-            let legend = Paragraph::new(vec![
-                Line::from("Bug Classes Detected:"),
-                Line::from(
-                    "  shared_mem_u64 - Shared memory uses 64-bit addressing (should be 32-bit)",
-                ),
-                Line::from("  loop_branch_end - Loop branches to END instead of START"),
-                Line::from("  missing_barrier - No bar.sync with shared memory"),
-            ])
-            .style(Style::default().fg(Color::Cyan))
-            .block(Block::default().borders(Borders::ALL).title("Legend (press 'q' to exit)"));
-            f.render_widget(legend, chunks[2]);
+            let legend_style = TextStyle::default().with_color(cyan);
+            canvas.draw_text(
+                Point::new(1.0, y),
+                "--- Legend (press 'q' to exit) ---",
+                legend_style,
+            );
+            y += 1.0;
+            canvas.draw_text(Point::new(1.0, y), "Bug Classes Detected:", legend_style);
+            y += 1.0;
+            canvas.draw_text(
+                Point::new(1.0, y),
+                "  shared_mem_u64 - Shared memory uses 64-bit addressing (should be 32-bit)",
+                legend_style,
+            );
+            y += 1.0;
+            canvas.draw_text(
+                Point::new(1.0, y),
+                "  loop_branch_end - Loop branches to END instead of START",
+                legend_style,
+            );
+            y += 1.0;
+            canvas.draw_text(
+                Point::new(1.0, y),
+                "  missing_barrier - No bar.sync with shared memory",
+                legend_style,
+            );
         }
 
         pub fn print_summary(&self) {

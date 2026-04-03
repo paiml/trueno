@@ -49,7 +49,7 @@ This specification defines a real-time Terminal User Interface (TUI) for monitor
 │              └───────────────┬─────────────────┘                             │
 │                              │                                                │
 │              ┌───────────────▼─────────────────┐                             │
-│              │    TUI Renderer (ratatui)       │                             │
+│              │    TUI Renderer (presentar)     │                             │
 │              │   - Sparklines (60-point)       │                             │
 │              │   - Gauges (memory bars)        │                             │
 │              │   - Tables (process list)       │                             │
@@ -2592,7 +2592,7 @@ summary:
 
 ### Phase 2: TUI Implementation (2 weeks)
 
-- [ ] Create TUI layout with ratatui
+- [ ] Create TUI layout with presentar
 - [ ] Implement gauge, sparkline, progress widgets
 - [ ] Add keyboard navigation
 - [ ] Implement help overlay

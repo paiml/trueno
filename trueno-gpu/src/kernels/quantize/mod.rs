@@ -57,7 +57,8 @@ pub use fused::{
     FusedRmsNormNf4GemvKernel, FusedRmsNormQ4KGemvKernel,
 };
 pub use legacy::{Q4_0GemvKernel, Q4_1GemvKernel, Q5_0GemvKernel, Q8_0GemvKernel};
-pub use nf4::{nf4_register_lut_lookup, Nf4GemmKernel, Nf4GemmTransposeKernel};
+pub(crate) use nf4::nf4_register_lut_lookup;
+pub use nf4::{Nf4GemmKernel, Nf4GemmTransposeKernel};
 pub use nf4_cpu::{
     dequantize_nf4, pack_nf4_for_gpu, quantize_nf4, unpack_nf4_from_gpu, Nf4Quantized,
     NF4_BLOCK_BYTES, NF4_BLOCK_SIZE, NF4_LUT,

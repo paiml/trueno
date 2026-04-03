@@ -29,11 +29,13 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
-    execute,
+    event::{self, Event, KeyCode, KeyEventKind},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    ExecutableCommand,
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+
+use presentar_terminal::direct::{CellBuffer, DiffRenderer};
+use presentar_terminal::{ColorMode, Theme};
 
 use tracing::{debug, info, warn};
 
@@ -324,14 +326,22 @@ fn poll_and_handle_key(
 }
 
 fn run_event_loop(
-    terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
+    buffer: &mut CellBuffer,
+    renderer: &mut DiffRenderer,
+    theme: &Theme,
     app: &mut App,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let tick_rate = Duration::from_millis(100);
     let mut last_tick = Instant::now();
 
     loop {
-        terminal.draw(|f| render::ui(f, app))?;
+        // Resize buffer if terminal size changed
+        let (width, height) = crossterm::terminal::size()?;
+        if buffer.width() != width || buffer.height() != height {
+            *buffer = CellBuffer::new(width, height);
+        }
+
+        render::ui(buffer, renderer, theme, app)?;
 
         let timeout = tick_rate.saturating_sub(last_tick.elapsed());
         if poll_and_handle_key(app, timeout)? {
@@ -361,24 +371,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Trueno Monitor starting"
     );
 
+    let (width, height) = crossterm::terminal::size()?;
+    let mut buffer = CellBuffer::new(width, height);
+    let mut renderer = DiffRenderer::with_color_mode(ColorMode::TrueColor);
+    let theme = Theme::tokyo_night();
+
     enable_raw_mode()?;
-    let mut stdout = stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
+    stdout().execute(EnterAlternateScreen)?;
+    stdout().execute(crossterm::cursor::Hide)?;
 
     let mut app = App::new();
     if start_stress {
         app.toggle_stress();
     }
 
-    run_event_loop(&mut terminal, &mut app)?;
+    let result = run_event_loop(&mut buffer, &mut renderer, &theme, &mut app);
 
+    stdout().execute(crossterm::cursor::Show)?;
+    stdout().execute(LeaveAlternateScreen)?;
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
-    terminal.show_cursor()?;
 
     info!("Trueno Monitor shutdown complete");
 
-    Ok(())
+    result
 }

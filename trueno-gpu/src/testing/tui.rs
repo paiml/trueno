@@ -1,7 +1,7 @@
 //! TUI Monitoring Mode for Stress Testing
 //!
 //! Real-time terminal UI for monitoring stress test progress.
-//! Uses ratatui/crossterm (via simular) for rendering.
+//! Uses presentar/crossterm (via simular) for rendering.
 //!
 //! # Feature Flag
 //!
@@ -217,7 +217,7 @@ pub fn progress_bar(current: u32, total: u32, width: usize) -> String {
 
 #[cfg(feature = "tui-monitor")]
 pub mod interactive {
-    //! Interactive TUI using ratatui/crossterm
+    //! Interactive TUI using presentar/crossterm
     //!
     //! Only available with `tui-monitor` feature.
 
@@ -233,9 +233,9 @@ pub mod interactive {
         _config: TuiConfig,
         _state: &mut TuiState,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        // Full implementation requires ratatui/crossterm
+        // Full implementation requires presentar/crossterm
         // This is a placeholder for the feature-gated implementation
-        Err("Interactive TUI requires tui-monitor feature with ratatui".into())
+        Err("Interactive TUI requires tui-monitor feature with presentar".into())
     }
 }
 

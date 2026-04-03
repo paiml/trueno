@@ -843,13 +843,10 @@ pub fn gemm_blis(
     {
         unsafe {
             // Zero-pack row-major GEMM for ≤128: no packing, no C transpose.
-            // Beats AVX-512 at small sizes: zero packing overhead dominates
-            // the 2.67× compute advantage of wider tiles.
             if m <= 128 && n <= 128 && m % 8 == 0 && n % 8 == 0 {
                 return gemm_direct_rowmajor(m, n, k, a, b, c);
             }
-            // AVX-512 for medium matrices (129-256): 16×8 tiles, pre-packed B.
-            // At these sizes tile compute advantage outweighs packing overhead.
+            // AVX-512 for 129-256: 16×8 tiles, pre-packed B.
             if is_x86_feature_detected!("avx512f") && m >= 16 && m % 16 == 0 && n % 8 == 0 {
                 return gemm_small_avx512_16x8(m, n, k, a, b, c);
             }
