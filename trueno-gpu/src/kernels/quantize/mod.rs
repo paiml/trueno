@@ -40,6 +40,7 @@ pub mod fused_kv_scatter;
 mod legacy;
 mod nf4;
 mod nf4_cpu;
+mod nf4_tensor_core;
 mod q4k;
 mod q5k;
 mod q6k;
@@ -61,6 +62,7 @@ pub use nf4_cpu::{
     dequantize_nf4, pack_nf4_for_gpu, quantize_nf4, unpack_nf4_from_gpu, Nf4Quantized,
     NF4_BLOCK_BYTES, NF4_BLOCK_SIZE, NF4_LUT,
 };
+pub use nf4_tensor_core::Nf4TensorCoreGemmKernel;
 pub use q4k::interleaved::repack_q4k_interleaved;
 pub use q4k::w4a16::repack_q4k_w4a16;
 pub use q4k::{
