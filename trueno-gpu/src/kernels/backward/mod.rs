@@ -46,6 +46,7 @@ mod activations;
 mod cross_entropy;
 mod gemm;
 mod layer_norm;
+mod nf4_tensor_core;
 mod rms_norm;
 mod softmax;
 
@@ -54,6 +55,7 @@ pub use activations::{GeluBackwardKernel, ReluBackwardKernel, SiluBackwardKernel
 pub use cross_entropy::{FusedCausalCrossEntropyKernel, FusedCrossEntropyKernel};
 pub use gemm::{GemmBackwardAKernel, GemmBackwardBKernel};
 pub use layer_norm::LayerNormBackwardKernel;
+pub use nf4_tensor_core::Nf4TensorCoreGemmBackwardAKernel;
 pub use rms_norm::{BatchedRmsNormBackwardKernel, RmsNormBackwardKernel};
 pub use softmax::{BatchedSoftmaxBackwardKernel, SoftmaxBackwardKernel};
 
