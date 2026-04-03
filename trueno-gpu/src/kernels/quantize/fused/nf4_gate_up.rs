@@ -168,47 +168,71 @@ impl Kernel for FusedNf4GateUpGemmKernel {
                 let gd_addr = ctx.add_u64(wg_data_base, byte_off_64);
                 let ud_addr = ctx.add_u64(wu_data_base, byte_off_64);
 
-                // Load packed bytes (gate)
-                let gb0 = ctx.cvt_u32_u8(ctx.ld_global_u8(gd_addr));
-                let one_64 = ctx.mov_u64_imm(1);
-                let two_64 = ctx.mov_u64_imm(2);
-                let three_64 = ctx.mov_u64_imm(3);
-                let gb1 = ctx.cvt_u32_u8(ctx.ld_global_u8(ctx.add_u64(gd_addr, one_64)));
-                let gb2 = ctx.cvt_u32_u8(ctx.ld_global_u8(ctx.add_u64(gd_addr, two_64)));
-                let gb3 = ctx.cvt_u32_u8(ctx.ld_global_u8(ctx.add_u64(gd_addr, three_64)));
+                // Load 4 packed bytes from gate NF4 data
+                let off1 = ctx.mov_u64_imm(1);
+                let off2 = ctx.mov_u64_imm(2);
+                let off3 = ctx.mov_u64_imm(3);
+                let gb0_raw = ctx.ld_global_u8(gd_addr);
+                let gb0 = ctx.cvt_u32_u8(gb0_raw);
+                let gd1 = ctx.add_u64(gd_addr, off1);
+                let gb1_raw = ctx.ld_global_u8(gd1);
+                let gb1 = ctx.cvt_u32_u8(gb1_raw);
+                let gd2 = ctx.add_u64(gd_addr, off2);
+                let gb2_raw = ctx.ld_global_u8(gd2);
+                let gb2 = ctx.cvt_u32_u8(gb2_raw);
+                let gd3 = ctx.add_u64(gd_addr, off3);
+                let gb3_raw = ctx.ld_global_u8(gd3);
+                let gb3 = ctx.cvt_u32_u8(gb3_raw);
 
-                // Load packed bytes (up)
-                let ub0 = ctx.cvt_u32_u8(ctx.ld_global_u8(ud_addr));
-                let ub1 = ctx.cvt_u32_u8(ctx.ld_global_u8(ctx.add_u64(ud_addr, one_64)));
-                let ub2 = ctx.cvt_u32_u8(ctx.ld_global_u8(ctx.add_u64(ud_addr, two_64)));
-                let ub3 = ctx.cvt_u32_u8(ctx.ld_global_u8(ctx.add_u64(ud_addr, three_64)));
+                // Load 4 packed bytes from up NF4 data
+                let ub0_raw = ctx.ld_global_u8(ud_addr);
+                let ub0 = ctx.cvt_u32_u8(ub0_raw);
+                let ud1 = ctx.add_u64(ud_addr, off1);
+                let ub1_raw = ctx.ld_global_u8(ud1);
+                let ub1 = ctx.cvt_u32_u8(ub1_raw);
+                let ud2 = ctx.add_u64(ud_addr, off2);
+                let ub2_raw = ctx.ld_global_u8(ud2);
+                let ub2 = ctx.cvt_u32_u8(ub2_raw);
+                let ud3 = ctx.add_u64(ud_addr, off3);
+                let ub3_raw = ctx.ld_global_u8(ud3);
+                let ub3 = ctx.cvt_u32_u8(ub3_raw);
 
                 let mask4 = ctx.mov_u32_imm(0xF);
 
                 // Process 8 nibble pairs (gate + up) with shared A values
                 let k_base = ctx.mul_u32(blk_idx, NF4_BLOCK_SIZE_U32);
-                let k_base = ctx.add_u32_reg(k_base, ctx.mul_u32(chunk, eight));
+                let chunk_offset = ctx.mul_u32(chunk, 8);
+                let k_base = ctx.add_u32_reg(k_base, chunk_offset);
 
-                // Nibble extraction + LUT + FMA for all 8 values
+                // Extract 8 nibbles from gate bytes
+                let gb0_hi = ctx.shr_u32_imm(gb0, 4);
+                let gb1_hi = ctx.shr_u32_imm(gb1, 4);
+                let gb2_hi = ctx.shr_u32_imm(gb2, 4);
+                let gb3_hi = ctx.shr_u32_imm(gb3, 4);
                 let nibs_g = [
                     ctx.and_u32(gb0, mask4),
-                    ctx.and_u32(ctx.shr_u32_imm(gb0, 4), mask4),
+                    ctx.and_u32(gb0_hi, mask4),
                     ctx.and_u32(gb1, mask4),
-                    ctx.and_u32(ctx.shr_u32_imm(gb1, 4), mask4),
+                    ctx.and_u32(gb1_hi, mask4),
                     ctx.and_u32(gb2, mask4),
-                    ctx.and_u32(ctx.shr_u32_imm(gb2, 4), mask4),
+                    ctx.and_u32(gb2_hi, mask4),
                     ctx.and_u32(gb3, mask4),
-                    ctx.and_u32(ctx.shr_u32_imm(gb3, 4), mask4),
+                    ctx.and_u32(gb3_hi, mask4),
                 ];
+                // Extract 8 nibbles from up bytes
+                let ub0_hi = ctx.shr_u32_imm(ub0, 4);
+                let ub1_hi = ctx.shr_u32_imm(ub1, 4);
+                let ub2_hi = ctx.shr_u32_imm(ub2, 4);
+                let ub3_hi = ctx.shr_u32_imm(ub3, 4);
                 let nibs_u = [
                     ctx.and_u32(ub0, mask4),
-                    ctx.and_u32(ctx.shr_u32_imm(ub0, 4), mask4),
+                    ctx.and_u32(ub0_hi, mask4),
                     ctx.and_u32(ub1, mask4),
-                    ctx.and_u32(ctx.shr_u32_imm(ub1, 4), mask4),
+                    ctx.and_u32(ub1_hi, mask4),
                     ctx.and_u32(ub2, mask4),
-                    ctx.and_u32(ctx.shr_u32_imm(ub2, 4), mask4),
+                    ctx.and_u32(ub2_hi, mask4),
                     ctx.and_u32(ub3, mask4),
-                    ctx.and_u32(ctx.shr_u32_imm(ub3, 4), mask4),
+                    ctx.and_u32(ub3_hi, mask4),
                 ];
 
                 for i in 0..8u32 {
@@ -229,11 +253,11 @@ impl Kernel for FusedNf4GateUpGemmKernel {
                     ctx.fma_f64_acc_inplace(up_acc, a_val, uw);
                 }
 
-                ctx.add_u32_inplace(chunk, ctx.mov_u32_imm(1));
+                ctx.add_u32_inplace(chunk, 1);
                 ctx.branch("chunk_loop");
                 ctx.label("chunk_loop_end");
 
-                ctx.add_u32_inplace(blk_idx, ctx.mov_u32_imm(1));
+                ctx.add_u32_inplace(blk_idx, 1);
                 ctx.branch("blk_loop");
                 ctx.label("blk_loop_end");
 
