@@ -14,8 +14,7 @@
 // Contract: nf4-backward-tensor-core-gemm-v1.yaml
 // Refs: PMAT-481, PMAT-484, trueno#236
 
-use crate::kernels::quantize::nf4::nf4_register_lut_lookup;
-use crate::kernels::quantize::nf4_cpu::{NF4_BLOCK_SIZE, NF4_LUT};
+use crate::kernels::quantize::{nf4_register_lut_lookup, NF4_BLOCK_SIZE, NF4_LUT};
 use crate::kernels::Kernel;
 use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl, PtxMemory};
 use crate::ptx::{PtxKernel, PtxReg, PtxType, WmmaLayout};
