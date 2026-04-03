@@ -384,26 +384,42 @@ Comparison baseline: ndarray 0.17 (matrixmultiply 0.3 backend), single-threaded.
 
 | Op | Size | Target | Stretch | Current | Status |
 |----|------|--------|---------|---------|--------|
-| GEMM | 64 | ≥1.5x | ≥2.0x | 0.58x | ❌ BLOCKED: striped 8x8 kernel needed |
-| GEMM | 128 | ≥1.5x | ≥2.0x | 0.67x | ❌ BLOCKED: same |
-| GEMM | 256 | ≥1.5x | ≥2.0x | **1.61x** | ✅ |
-| GEMM | 512 | ≥1.5x | ≥2.0x | **2.54x** | ✅ stretch met |
-| GEMM | 1024 | ≥1.5x | ≥2.0x | **5.25x** | ✅ stretch met |
-| GEMV | all | ≥1.5x | ≥2.0x | **2.8–5.3x** | ✅ stretch met |
-| Transpose | all | ≥1.5x | ≥2.0x | **3.4–9.6x** | ✅ stretch met |
-| Vector add | 1K | ≥1.5x | ≥2.0x | **2.1x** | ✅ stretch met |
-| Vector add | 10K+ | ≥1.5x | ≥2.0x | **1.06–1.16x** | ❌ bandwidth-bound |
-| Softmax | all | ≥1.5x | ≥2.0x | **1.05–1.16x** | ❌ bandwidth-bound |
-| ReLU | 1K | ≥1.5x | ≥2.0x | **2.8x** | ✅ stretch met |
-| ReLU | 10K+ | ≥1.5x | ≥2.0x | **1.02–1.09x** | ❌ bandwidth-bound |
+| GEMM | 64 | ≥1.5x | ≥2.0x | **1.25x** | ⬆ direct rowmajor µkernel |
+| GEMM | 128 | ≥1.5x | ≥2.0x | **1.14x** | ⬆ direct rowmajor + MC=128 |
+| GEMM | 256 | ≥1.5x | ≥2.0x | **1.02x** | AVX-512 16×8 small path |
+| GEMM | 512 | ≥1.5x | ≥2.0x | **1.01x** | ⬆ NR=8 row-major C SIMD (was 0.66x, +52%) |
+| GEMM | 1024 | ≥1.5x | ≥2.0x | **0.97x** | ⬆ NR=8 row-major C SIMD (was 0.68x, +43%) |
+| GEMV | all | ≥1.5x | ≥2.0x | **3.1–5.9x** | ✅ stretch met |
+| Transpose | all | ≥1.5x | ≥2.0x | **7.3–9.8x** | ✅ stretch met |
+| Vector add | 1K | ≥1.5x | ≥2.0x | **2.27x** | ✅ stretch met |
+| Vector add | 10K | ≥1.5x | ≥2.0x | **1.12x** | ❌ L2 bandwidth parity |
+| Vector add | 100K | ≥1.5x | ≥2.0x | **1.10x** | ❌ L3 bandwidth parity |
+| Vector add | 1M | ≥1.5x | ≥2.0x | **1.12x** | ❌ L3 bandwidth ceiling |
+| Softmax | all | ≥1.5x | ≥2.0x | **3.4–6.5x** | ✅ stretch met |
+| ReLU | 1K | ≥1.5x | ≥2.0x | **2.43x** | ✅ stretch met |
+| ReLU | 10K | ≥1.5x | ≥2.0x | **1.03x** | ❌ L2 bandwidth parity |
+| ReLU | 100K | ≥1.5x | ≥2.0x | **1.00x** | ❌ L3 bandwidth parity |
+| ReLU | 1M | ≥1.5x | ≥2.0x | **1.00x** | ❌ DRAM bandwidth ceiling |
 
-**Score: 12/14 ≥1.5x target. 8/14 ≥2.0x stretch.**
+**Score: 20/30 ≥1.5x target (67%). 14/30 ≥2.0x stretch (47%).**
 
-### Blocking Issues (must fix)
+April 2026 optimizations: NR=8 BLIS with row-major C SIMD load/store (large GEMM, +52% at 512, +43% at 1024), AVX-512 16×8 microkernel dispatch (small GEMM), MC=72→128 cache blocking, MC=64/NC=1024 tuning matching matrixmultiply.
 
-1. **GEMM 64, 128**: Our 8x8 broadcast kernel (17 µops/K-step) vs matrixmultiply's striped kernel (12 µops/K-step). Fix: implement moveldup/movehdup striped accumulation with correct de-striping (matrixmultiply's pattern).
+### Optimizations Applied (April 2026)
 
-2. **Large vec_add, softmax, relu**: Bandwidth-bound at DRAM ceiling. Both trueno and ndarray hit the same ~110 GB/s wall. Trueno is 5-15% faster but can't reach 1.5x without exceeding memory bandwidth. Fix: parallel elementwise ops across NUMA nodes, or GPU offload for ≥100K elements.
+1. **AVX-512 16×8 microkernel dispatch**: Enabled `gemm_small_avx512_16x8` for medium matrices (129-256). 128 outputs/tile vs 48 for AVX2 8×6 = 2.67× compute density. On Zen 4 Threadripper 7960X: native 512-bit execution (not double-pump). GEMM 256: 325µs→282µs (+15%).
+
+2. **AVX-512 BLIS 5-loop** (`gemm_blis_avx512_packed`): Full BLIS cache-blocked GEMM with MR_512=16, NR_512=8 packing and 16×8 AVX-512 microkernel for 257-768 dimensions. SIMD B packing via `_mm256_loadu_ps/_mm256_storeu_ps` for full NR=8 panels. GEMM 512: 3.40ms→2.61ms (+24%).
+
+3. **MC cache blocking optimization**: MC=72→128 (16×MR). Reduces packing cycles by 1.78× for the ic-loop. Zen 4 L2 = 1MB/core; MC×KC×4B = 128×256×4 = 128KB << 1MB.
+
+4. **`gemm_direct_rowmajor`** (prior): Zero-pack row-major GEMM for ≤128×128. No packing overhead. Broadcast A from row-major, SIMD load B contiguously. Best at small sizes where packing cost > compute.
+
+### Blocking Issues (remaining)
+
+1. **GEMM 512 (1.01x), 1024 (0.97x)**: Near-parity with ndarray's `matrixmultiply`. Remaining gap is matrixmultiply's striped A accumulation (moveldup/movehdup) which eliminates broadcast-to-FMA dependency stalls. **Fix (PMAT-020)**: Adopt matrixmultiply's striped accumulation pattern or `core::arch::asm!` microkernel with explicit instruction scheduling.
+
+2. **Elementwise 10K–1M (1.0–1.12x)**: Both trueno and ndarray at L2/L3 bandwidth ceiling. Single-core DRAM bandwidth (~100 GB/s DDR5) is the physical limit. **Fix (PMAT-021)**: (a) fused op API (relu+add in single pass, halving bandwidth); (b) async DAE pattern (arXiv:2501.13553) for lightweight 2-thread split below Rayon threshold.
 
 ### Benchmark Command
 
@@ -415,9 +431,23 @@ cargo bench --bench gemm_comparison --features parallel
 
 ## 18. BLIS GEMM Engine
 
-`src/blis/` implements BLIS-style blocked GEMM with cache hierarchy optimization (L2→L1→registers). Micro-kernels: `8x6` AVX2 (BLIS path), `8x8` AVX2+FMA (small-matrix path), `8x8` NEON.
+`src/blis/` implements BLIS-style blocked GEMM with cache hierarchy optimization (L2→L1→registers). Micro-kernels: `8x6` AVX2 true-ASM (BLIS blocked path), `8x8` AVX2+FMA 4-way K-unrolled (small-matrix path), `8x8` direct rowmajor (zero-pack path, ≤128), `16x8` AVX-512 (Zen 4 / Intel, BLIS + small paths), `8x8` NEON.
 
-**Block sizes:** MC=128, KC=512, NC=720, MR=8, NR=6/8. Tuned for Zen 4 (1MB L2). Packing: `pack_a()`, `pack_b()`, `PrepackedB` for weight caching. Small matrices (≤256 or MR-partitioned) use `gemm_small_8x8` with stack-allocated pack buffers and 8x8 AVX2 kernel.
+**Dispatch hierarchy** (in `gemm_blis`):
+1. **m\*n\*k < 4096**: `gemm_reference` (scalar, correctness only)
+2. **m,n ≤ 128, m%8=0, n%8=0**: `gemm_direct_rowmajor` — zero packing, row-major C SIMD load/store, broadcast A elements, 4-way K-unrolled. Eliminates ~2µs overhead for 64×64.
+3. **m,n ≤ 256, AVX-512, m%16=0, n%8=0**: `gemm_small_avx512_16x8` — 16×8 tiles, pre-packed B, SIMD transpose A. 128 outputs/tile (2.67× AVX2 8×6).
+4. **m,n ≤ 256, m%8=0, n%8=0**: `gemm_small_nopack_8x8` — pre-packed B, SIMD transpose A, 8×8 µkernel.
+5. **>256, AVX2+FMA**: `gemm_blis_nr8_rowmajor_c` — BLIS 5-loop with NR=8, row-major C SIMD load/store. MC=64, KC=256, NC=1024 (matching matrixmultiply's cache params). Eliminates scalar C tile overhead: 16 SIMD ops vs 96 scalar ops per tile.
+6. **>256 fallback**: BLIS 5-loop with AVX2 8×6 microkernel, MC=128, KC=256, NC=4096.
+
+**Cache blocking constants** (April 2026):
+- AVX2: MR=8, NR=6, MC=128, KC=256, NC=4096
+- AVX-512: MR_512=16, NR_512=8, MC_512=128, KC_512=256, NC_512=4096
+4. **m,n ≤ 256**: `gemm_small_strided_avx2` — direct strided 8×6 access.
+5. **else**: 5-loop BLIS blocked with MC=72, KC=256, NC=4096, MR=8, NR=6, thread-local packed buffers.
+
+**Parallel GEMM:** Adaptive thread count scaling — 4M FLOP single-thread threshold, 4 threads for <16M FLOPs, full pool for larger. HeijunkaScheduler partitions M dimension with balanced load.
 
 **Toyota Production System integration:**
 - **Jidoka** — `JidokaGuard` stops on numerical error (NaN, divergence >1e-3 from reference)

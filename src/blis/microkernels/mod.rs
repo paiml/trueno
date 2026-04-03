@@ -20,6 +20,8 @@
 
 #[cfg(target_arch = "x86_64")]
 mod avx2;
+#[cfg(target_arch = "x86_64")]
+mod avx512;
 mod neon;
 
 // Re-export all public microkernel functions
@@ -28,6 +30,8 @@ pub use avx2::{
     microkernel_8x6_avx2, microkernel_8x6_avx2_asm, microkernel_8x6_true_asm,
     microkernel_8x8_avx2_fma,
 };
+#[cfg(target_arch = "x86_64")]
+pub use avx512::microkernel_16x8_avx512;
 #[cfg(target_arch = "aarch64")]
 pub use neon::microkernel_8x8_neon;
 

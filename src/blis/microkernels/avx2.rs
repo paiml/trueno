@@ -477,8 +477,9 @@ pub unsafe fn microkernel_8x6_true_asm(
     }
 }
 
-/// 8x8 AVX2+FMA microkernel — standard broadcast accumulation.
-/// 8 columns of C in 8 YMM registers, 1 A load + 8 B broadcasts per K step.
+/// 8x8 AVX2+FMA microkernel — 4-way K-unrolled broadcast accumulation.
+/// 8 columns of C in 8 YMM registers, interleaved loads and FMAs for
+/// software pipelining (10-12 instruction distance between load and use).
 /// A: 8×K packed column-major. B: K×8 packed row-major.
 /// C: 8×8 column-major with stride ldc.
 #[cfg(target_arch = "x86_64")]
@@ -503,17 +504,78 @@ pub unsafe fn microkernel_8x8_avx2_fma(
         let mut c6 = _mm256_loadu_ps(c.add(6 * ldc));
         let mut c7 = _mm256_loadu_ps(c.add(7 * ldc));
 
-        for p in 0..k {
-            let a_col = _mm256_loadu_ps(a.add(p * 8));
-            let bp = b.add(p * 8);
-            c0 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp), c0);
-            c1 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(1)), c1);
-            c2 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(2)), c2);
-            c3 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(3)), c3);
-            c4 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(4)), c4);
-            c5 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(5)), c5);
-            c6 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(6)), c6);
-            c7 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(7)), c7);
+        // 4-way K-unrolled main loop for software pipelining.
+        // Interleaves A loads with B broadcasts and FMAs to hide
+        // 5-cycle FMA latency across 2 FMA ports (Haswell+).
+        let k4 = k / 4;
+        let k_rem = k % 4;
+
+        for p4 in 0..k4 {
+            let base = p4 * 4;
+
+            // K+0: load A, broadcast B, accumulate
+            let a0 = _mm256_loadu_ps(a.add(base * 8));
+            let bp0 = b.add(base * 8);
+            c0 = _mm256_fmadd_ps(a0, _mm256_broadcast_ss(&*bp0), c0);
+            c1 = _mm256_fmadd_ps(a0, _mm256_broadcast_ss(&*bp0.add(1)), c1);
+            c2 = _mm256_fmadd_ps(a0, _mm256_broadcast_ss(&*bp0.add(2)), c2);
+            c3 = _mm256_fmadd_ps(a0, _mm256_broadcast_ss(&*bp0.add(3)), c3);
+            c4 = _mm256_fmadd_ps(a0, _mm256_broadcast_ss(&*bp0.add(4)), c4);
+            c5 = _mm256_fmadd_ps(a0, _mm256_broadcast_ss(&*bp0.add(5)), c5);
+            c6 = _mm256_fmadd_ps(a0, _mm256_broadcast_ss(&*bp0.add(6)), c6);
+            c7 = _mm256_fmadd_ps(a0, _mm256_broadcast_ss(&*bp0.add(7)), c7);
+
+            // K+1
+            let a1 = _mm256_loadu_ps(a.add((base + 1) * 8));
+            let bp1 = b.add((base + 1) * 8);
+            c0 = _mm256_fmadd_ps(a1, _mm256_broadcast_ss(&*bp1), c0);
+            c1 = _mm256_fmadd_ps(a1, _mm256_broadcast_ss(&*bp1.add(1)), c1);
+            c2 = _mm256_fmadd_ps(a1, _mm256_broadcast_ss(&*bp1.add(2)), c2);
+            c3 = _mm256_fmadd_ps(a1, _mm256_broadcast_ss(&*bp1.add(3)), c3);
+            c4 = _mm256_fmadd_ps(a1, _mm256_broadcast_ss(&*bp1.add(4)), c4);
+            c5 = _mm256_fmadd_ps(a1, _mm256_broadcast_ss(&*bp1.add(5)), c5);
+            c6 = _mm256_fmadd_ps(a1, _mm256_broadcast_ss(&*bp1.add(6)), c6);
+            c7 = _mm256_fmadd_ps(a1, _mm256_broadcast_ss(&*bp1.add(7)), c7);
+
+            // K+2
+            let a2 = _mm256_loadu_ps(a.add((base + 2) * 8));
+            let bp2 = b.add((base + 2) * 8);
+            c0 = _mm256_fmadd_ps(a2, _mm256_broadcast_ss(&*bp2), c0);
+            c1 = _mm256_fmadd_ps(a2, _mm256_broadcast_ss(&*bp2.add(1)), c1);
+            c2 = _mm256_fmadd_ps(a2, _mm256_broadcast_ss(&*bp2.add(2)), c2);
+            c3 = _mm256_fmadd_ps(a2, _mm256_broadcast_ss(&*bp2.add(3)), c3);
+            c4 = _mm256_fmadd_ps(a2, _mm256_broadcast_ss(&*bp2.add(4)), c4);
+            c5 = _mm256_fmadd_ps(a2, _mm256_broadcast_ss(&*bp2.add(5)), c5);
+            c6 = _mm256_fmadd_ps(a2, _mm256_broadcast_ss(&*bp2.add(6)), c6);
+            c7 = _mm256_fmadd_ps(a2, _mm256_broadcast_ss(&*bp2.add(7)), c7);
+
+            // K+3
+            let a3 = _mm256_loadu_ps(a.add((base + 3) * 8));
+            let bp3 = b.add((base + 3) * 8);
+            c0 = _mm256_fmadd_ps(a3, _mm256_broadcast_ss(&*bp3), c0);
+            c1 = _mm256_fmadd_ps(a3, _mm256_broadcast_ss(&*bp3.add(1)), c1);
+            c2 = _mm256_fmadd_ps(a3, _mm256_broadcast_ss(&*bp3.add(2)), c2);
+            c3 = _mm256_fmadd_ps(a3, _mm256_broadcast_ss(&*bp3.add(3)), c3);
+            c4 = _mm256_fmadd_ps(a3, _mm256_broadcast_ss(&*bp3.add(4)), c4);
+            c5 = _mm256_fmadd_ps(a3, _mm256_broadcast_ss(&*bp3.add(5)), c5);
+            c6 = _mm256_fmadd_ps(a3, _mm256_broadcast_ss(&*bp3.add(6)), c6);
+            c7 = _mm256_fmadd_ps(a3, _mm256_broadcast_ss(&*bp3.add(7)), c7);
+        }
+
+        // Remainder (k % 4)
+        let base_rem = k4 * 4;
+        for p in 0..k_rem {
+            let pp = base_rem + p;
+            let a_col = _mm256_loadu_ps(a.add(pp * 8));
+            let bp = b.add(pp * 8);
+            c0 = _mm256_fmadd_ps(a_col, _mm256_broadcast_ss(&*bp), c0);
+            c1 = _mm256_fmadd_ps(a_col, _mm256_broadcast_ss(&*bp.add(1)), c1);
+            c2 = _mm256_fmadd_ps(a_col, _mm256_broadcast_ss(&*bp.add(2)), c2);
+            c3 = _mm256_fmadd_ps(a_col, _mm256_broadcast_ss(&*bp.add(3)), c3);
+            c4 = _mm256_fmadd_ps(a_col, _mm256_broadcast_ss(&*bp.add(4)), c4);
+            c5 = _mm256_fmadd_ps(a_col, _mm256_broadcast_ss(&*bp.add(5)), c5);
+            c6 = _mm256_fmadd_ps(a_col, _mm256_broadcast_ss(&*bp.add(6)), c6);
+            c7 = _mm256_fmadd_ps(a_col, _mm256_broadcast_ss(&*bp.add(7)), c7);
         }
 
         // Store C

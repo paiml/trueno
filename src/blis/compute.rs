@@ -14,13 +14,19 @@ use std::time::Instant;
 use crate::error::TruenoError;
 
 #[cfg(target_arch = "x86_64")]
+use super::microkernels::microkernel_16x8_avx512;
+#[cfg(target_arch = "x86_64")]
 use super::microkernels::microkernel_8x6_true_asm;
 use super::microkernels::microkernel_scalar;
 use super::packing::{pack_a_block, pack_b_block, packed_a_size, packed_b_size};
+#[cfg(target_arch = "x86_64")]
+use super::packing::{pack_a_block_512, pack_b_block_512, packed_a_size_512, packed_b_size_512};
 use super::prepacked::PrepackedB;
 use super::profiler::{BlisProfileLevel, BlisProfiler};
 use super::reference::gemm_reference;
 use super::{KC, MC, MR, NC, NR};
+#[cfg(target_arch = "x86_64")]
+use super::{KC_512, MC_512, MR_512, NC_512, NR_512};
 
 // Thread-local workspace buffers to eliminate allocation churn in gemm_blis.
 // These grow to the high-water mark and are reused across calls, avoiding
@@ -160,6 +166,148 @@ fn compute_macroblock(
     }
 }
 
+/// Zero-pack row-major GEMM for small matrices (≤128).
+///
+/// Key design: NO packing of A or B, NO C layout conversion.
+/// - A: broadcast scalar elements directly from row-major layout
+/// - B: SIMD load contiguous rows directly from row-major layout
+/// - C: SIMD load/store of contiguous rows (row-major accumulation)
+///
+/// This eliminates ~2µs of overhead for 64×64 GEMM:
+/// - No heap allocation for packed buffers
+/// - No SIMD transpose for A packing
+/// - No scalar C load/store (128 ops → 16 SIMD ops per tile)
+///
+/// Inner loop: for each K, load 1 B row (8 f32), broadcast 8 A elements,
+/// execute 8 FMAs into 8 C row accumulators. 4-way K unrolled.
+///
+/// Reference: Goto & Van de Geijn (2008), "Anatomy of High-Performance
+/// Matrix Multiplication" — panel-panel multiply with register blocking.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2", enable = "fma")]
+unsafe fn gemm_direct_rowmajor(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    b: &[f32],
+    c: &mut [f32],
+) -> Result<(), TruenoError> {
+    use std::arch::x86_64::*;
+
+    let a_ptr = a.as_ptr();
+    let b_ptr = b.as_ptr();
+    let c_ptr = c.as_mut_ptr();
+
+    unsafe {
+        for ir in (0..m).step_by(8) {
+            for jr in (0..n).step_by(8) {
+                // Load 8 rows of C (each row is contiguous in row-major)
+                let c_base = c_ptr.add(ir * n + jr);
+                let mut c0 = _mm256_loadu_ps(c_base);
+                let mut c1 = _mm256_loadu_ps(c_base.add(n));
+                let mut c2 = _mm256_loadu_ps(c_base.add(2 * n));
+                let mut c3 = _mm256_loadu_ps(c_base.add(3 * n));
+                let mut c4 = _mm256_loadu_ps(c_base.add(4 * n));
+                let mut c5 = _mm256_loadu_ps(c_base.add(5 * n));
+                let mut c6 = _mm256_loadu_ps(c_base.add(6 * n));
+                let mut c7 = _mm256_loadu_ps(c_base.add(7 * n));
+
+                // A row base pointers (stride = k between columns)
+                let a0 = a_ptr.add(ir * k);
+                let a1 = a_ptr.add((ir + 1) * k);
+                let a2 = a_ptr.add((ir + 2) * k);
+                let a3 = a_ptr.add((ir + 3) * k);
+                let a4 = a_ptr.add((ir + 4) * k);
+                let a5 = a_ptr.add((ir + 5) * k);
+                let a6 = a_ptr.add((ir + 6) * k);
+                let a7 = a_ptr.add((ir + 7) * k);
+
+                // B base (stride = n between K rows)
+                let b_base = b_ptr.add(jr);
+
+                // 4-way K-unrolled main loop
+                let k4 = k / 4;
+                let k_rem = k % 4;
+
+                for p4 in 0..k4 {
+                    let p = p4 * 4;
+
+                    // K+0
+                    let b_row = _mm256_loadu_ps(b_base.add(p * n));
+                    c0 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a0.add(p)), b_row, c0);
+                    c1 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a1.add(p)), b_row, c1);
+                    c2 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a2.add(p)), b_row, c2);
+                    c3 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a3.add(p)), b_row, c3);
+                    c4 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a4.add(p)), b_row, c4);
+                    c5 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a5.add(p)), b_row, c5);
+                    c6 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a6.add(p)), b_row, c6);
+                    c7 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a7.add(p)), b_row, c7);
+
+                    // K+1
+                    let b_row = _mm256_loadu_ps(b_base.add((p + 1) * n));
+                    c0 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a0.add(p + 1)), b_row, c0);
+                    c1 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a1.add(p + 1)), b_row, c1);
+                    c2 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a2.add(p + 1)), b_row, c2);
+                    c3 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a3.add(p + 1)), b_row, c3);
+                    c4 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a4.add(p + 1)), b_row, c4);
+                    c5 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a5.add(p + 1)), b_row, c5);
+                    c6 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a6.add(p + 1)), b_row, c6);
+                    c7 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a7.add(p + 1)), b_row, c7);
+
+                    // K+2
+                    let b_row = _mm256_loadu_ps(b_base.add((p + 2) * n));
+                    c0 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a0.add(p + 2)), b_row, c0);
+                    c1 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a1.add(p + 2)), b_row, c1);
+                    c2 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a2.add(p + 2)), b_row, c2);
+                    c3 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a3.add(p + 2)), b_row, c3);
+                    c4 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a4.add(p + 2)), b_row, c4);
+                    c5 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a5.add(p + 2)), b_row, c5);
+                    c6 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a6.add(p + 2)), b_row, c6);
+                    c7 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a7.add(p + 2)), b_row, c7);
+
+                    // K+3
+                    let b_row = _mm256_loadu_ps(b_base.add((p + 3) * n));
+                    c0 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a0.add(p + 3)), b_row, c0);
+                    c1 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a1.add(p + 3)), b_row, c1);
+                    c2 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a2.add(p + 3)), b_row, c2);
+                    c3 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a3.add(p + 3)), b_row, c3);
+                    c4 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a4.add(p + 3)), b_row, c4);
+                    c5 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a5.add(p + 3)), b_row, c5);
+                    c6 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a6.add(p + 3)), b_row, c6);
+                    c7 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a7.add(p + 3)), b_row, c7);
+                }
+
+                // Remainder
+                let base_rem = k4 * 4;
+                for rp in 0..k_rem {
+                    let pp = base_rem + rp;
+                    let b_row = _mm256_loadu_ps(b_base.add(pp * n));
+                    c0 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a0.add(pp)), b_row, c0);
+                    c1 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a1.add(pp)), b_row, c1);
+                    c2 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a2.add(pp)), b_row, c2);
+                    c3 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a3.add(pp)), b_row, c3);
+                    c4 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a4.add(pp)), b_row, c4);
+                    c5 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a5.add(pp)), b_row, c5);
+                    c6 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a6.add(pp)), b_row, c6);
+                    c7 = _mm256_fmadd_ps(_mm256_broadcast_ss(&*a7.add(pp)), b_row, c7);
+                }
+
+                // Store 8 rows of C (contiguous SIMD stores)
+                _mm256_storeu_ps(c_base, c0);
+                _mm256_storeu_ps(c_base.add(n), c1);
+                _mm256_storeu_ps(c_base.add(2 * n), c2);
+                _mm256_storeu_ps(c_base.add(3 * n), c3);
+                _mm256_storeu_ps(c_base.add(4 * n), c4);
+                _mm256_storeu_ps(c_base.add(5 * n), c5);
+                _mm256_storeu_ps(c_base.add(6 * n), c6);
+                _mm256_storeu_ps(c_base.add(7 * n), c7);
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Small-matrix stride-based GEMM — no packing, no c_micro buffer.
 /// For m,n,k <= 96 where packing overhead > cache benefit.
 #[cfg(target_arch = "x86_64")]
@@ -246,8 +394,12 @@ unsafe fn gemm_small_strided_avx2(
     Ok(())
 }
 
-/// No-alloc 8x8 GEMM: stack buffers, SIMD transpose packing, K-unrolled micro-kernel.
+/// 8x8 GEMM: pre-packed B, SIMD transpose A packing, K-unrolled micro-kernel.
 /// For m,n divisible by 8 and m,n,k ≤ 256.
+///
+/// Key optimization: B panels are packed ONCE before the tile loop, eliminating
+/// panels_m redundant repacking passes. For 128x128 this removes 15/16 = 94%
+/// of B packing work.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2", enable = "fma")]
 unsafe fn gemm_small_nopack_8x8(
@@ -258,22 +410,33 @@ unsafe fn gemm_small_nopack_8x8(
     b: &[f32],
     c: &mut [f32],
 ) -> Result<(), TruenoError> {
+    use crate::blis::microkernels::microkernel_8x8_avx2_fma;
     use std::arch::x86_64::*;
 
     let panels_m = m / 8;
     let panels_n = n / 8;
 
-    // Stack buffers — no heap allocation.
-    // A panel: 8×K col-major. B panel: K×8 row-major.
+    // Stack buffer for one A panel (8×K col-major).
     let mut packed_a = [0.0f32; 8 * 256];
-    let mut packed_b = [0.0f32; 256 * 8];
     let mut c_micro = [0.0f32; 64];
 
+    // Pre-pack ALL B panels once (eliminates panels_m redundant repacking).
+    // For 256x256: 32 panels × 256 × 8 = 256KB — acceptable heap alloc.
+    let mut all_packed_b = vec![0.0f32; panels_n * k * 8];
+
     unsafe {
+        for jr_panel in 0..panels_n {
+            let jr = jr_panel * 8;
+            let b_dst = all_packed_b.as_mut_ptr().add(jr_panel * k * 8);
+            for p in 0..k {
+                _mm256_storeu_ps(b_dst.add(p * 8), _mm256_loadu_ps(b.as_ptr().add(p * n + jr)));
+            }
+        }
+
         for ir_panel in 0..panels_m {
             let ir = ir_panel * 8;
 
-            // Pack A panel: SIMD 8×8 transpose blocks
+            // Pack A panel: SIMD 8×8 transpose blocks (row-major → col-major)
             let k_blocks = k / 8;
             let k_rem = k_blocks * 8;
             for kb in 0..k_blocks {
@@ -323,77 +486,27 @@ unsafe fn gemm_small_nopack_8x8(
 
             for jr_panel in 0..panels_n {
                 let jr = jr_panel * 8;
+                let packed_b_ptr = all_packed_b.as_ptr().add(jr_panel * k * 8);
 
-                // Pack B panel: SIMD 8-wide contiguous copies (only once per M-iteration
-                // but B changes per N-panel, so pack here — still only panels_n × K copies)
-                for p in 0..k {
-                    _mm256_storeu_ps(
-                        packed_b.as_mut_ptr().add(p * 8),
-                        _mm256_loadu_ps(b.as_ptr().add(p * n + jr)),
-                    );
-                }
-
-                // Zero C tile accumulator
-                for v in c_micro.iter_mut() {
-                    *v = 0.0;
-                }
-
-                // 8×8 micro-kernel: K-unrolled by 4 for ILP
-                let ap = packed_a.as_ptr();
-                let bp = packed_b.as_ptr();
-                let k4 = k / 4;
-                let k4_rem = k4 * 4;
-
-                let mut c0 = _mm256_setzero_ps();
-                let mut c1 = _mm256_setzero_ps();
-                let mut c2 = _mm256_setzero_ps();
-                let mut c3 = _mm256_setzero_ps();
-                let mut c4 = _mm256_setzero_ps();
-                let mut c5 = _mm256_setzero_ps();
-                let mut c6 = _mm256_setzero_ps();
-                let mut c7 = _mm256_setzero_ps();
-
-                for p4 in 0..k4 {
-                    let p = p4 * 4;
-                    // Unroll K by 4: 4 A loads, 4×8 B broadcasts, 4×8 FMAs
-                    for dp in 0..4 {
-                        let pp = p + dp;
-                        let a_col = _mm256_loadu_ps(ap.add(pp * 8));
-                        let bpp = bp.add(pp * 8);
-                        c0 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp), c0);
-                        c1 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(1)), c1);
-                        c2 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(2)), c2);
-                        c3 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(3)), c3);
-                        c4 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(4)), c4);
-                        c5 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(5)), c5);
-                        c6 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(6)), c6);
-                        c7 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(7)), c7);
+                // Load C tile (column-major for micro-kernel)
+                for jj in 0..8 {
+                    for ii in 0..8 {
+                        c_micro[jj * 8 + ii] = *c.get_unchecked((ir + ii) * n + jr + jj);
                     }
                 }
-                // K remainder
-                for pp in k4_rem..k {
-                    let a_col = _mm256_loadu_ps(ap.add(pp * 8));
-                    let bpp = bp.add(pp * 8);
-                    c0 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp), c0);
-                    c1 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(1)), c1);
-                    c2 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(2)), c2);
-                    c3 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(3)), c3);
-                    c4 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(4)), c4);
-                    c5 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(5)), c5);
-                    c6 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(6)), c6);
-                    c7 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(7)), c7);
-                }
 
-                // Accumulate into C (row-major output)
-                // c_micro is column-major (col j at offset j*8), but we write row-major
-                for ii in 0..8 {
-                    let row_base = (ir + ii) * n + jr;
-                    let ci = [c0, c1, c2, c3, c4, c5, c6, c7];
-                    for jj in 0..8 {
-                        // Extract element ii from column jj accumulator
-                        let mut tmp = [0.0f32; 8];
-                        _mm256_storeu_ps(tmp.as_mut_ptr(), ci[jj]);
-                        *c.get_unchecked_mut(row_base + jj) += tmp[ii];
+                microkernel_8x8_avx2_fma(
+                    k,
+                    packed_a.as_ptr(),
+                    packed_b_ptr,
+                    c_micro.as_mut_ptr(),
+                    8,
+                );
+
+                // Store C tile back to row-major
+                for jj in 0..8 {
+                    for ii in 0..8 {
+                        *c.get_unchecked_mut((ir + ii) * n + jr + jj) = c_micro[jj * 8 + ii];
                     }
                 }
             }
@@ -407,6 +520,7 @@ unsafe fn gemm_small_nopack_8x8(
 /// For dimensions that are multiples of 8.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2", enable = "fma")]
+#[allow(dead_code)] // Superseded by gemm_small_nopack_8x8 but retained for profiling comparison
 unsafe fn gemm_small_8x8(
     m: usize,
     n: usize,
@@ -475,6 +589,169 @@ unsafe fn gemm_small_8x8(
                 for jj in 0..nr {
                     for ii in 0..mr {
                         *c.get_unchecked_mut((ir + ii) * n + jr + jj) = c_micro[jj * 8 + ii];
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// AVX-512 small GEMM: 16×8 tiles, pre-packed B, scalar-packed A.
+/// For m divisible by 16, n divisible by 8, m,n,k ≤ 256.
+/// 2× vector width over AVX2 gives ~2× throughput on compute-bound tiles.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f")]
+unsafe fn gemm_small_avx512_16x8(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    b: &[f32],
+    c: &mut [f32],
+) -> Result<(), TruenoError> {
+    use super::microkernels::microkernel_16x8_avx512;
+    use std::arch::x86_64::*;
+
+    let panels_m = m / 16;
+    let panels_n = n / 8;
+
+    // Pre-pack ALL B panels once (SIMD 8-wide contiguous copies).
+    let mut all_packed_b = vec![0.0f32; panels_n * k * 8];
+    unsafe {
+        for jr_panel in 0..panels_n {
+            let jr = jr_panel * 8;
+            let b_dst = all_packed_b.as_mut_ptr().add(jr_panel * k * 8);
+            for p in 0..k {
+                _mm256_storeu_ps(b_dst.add(p * 8), _mm256_loadu_ps(b.as_ptr().add(p * n + jr)));
+            }
+        }
+    }
+
+    // Stack buffers — A panel: 16×K column-major, C micro tile: 16×8.
+    let mut packed_a = [0.0f32; 16 * 256];
+    let mut c_micro = [0.0f32; 16 * 8];
+
+    unsafe {
+        for ir_panel in 0..panels_m {
+            let ir = ir_panel * 16;
+
+            // Pack A: row-major → column-major via two 8×8 SIMD transposes.
+            let k_blocks = k / 8;
+            let k_rem_start = k_blocks * 8;
+
+            for kb in 0..k_blocks {
+                let p = kb * 8;
+
+                // Upper 8 rows
+                let r0 = _mm256_loadu_ps(a.as_ptr().add(ir * k + p));
+                let r1 = _mm256_loadu_ps(a.as_ptr().add((ir + 1) * k + p));
+                let r2 = _mm256_loadu_ps(a.as_ptr().add((ir + 2) * k + p));
+                let r3 = _mm256_loadu_ps(a.as_ptr().add((ir + 3) * k + p));
+                let r4 = _mm256_loadu_ps(a.as_ptr().add((ir + 4) * k + p));
+                let r5 = _mm256_loadu_ps(a.as_ptr().add((ir + 5) * k + p));
+                let r6 = _mm256_loadu_ps(a.as_ptr().add((ir + 6) * k + p));
+                let r7 = _mm256_loadu_ps(a.as_ptr().add((ir + 7) * k + p));
+
+                let t0 = _mm256_unpacklo_ps(r0, r1);
+                let t1 = _mm256_unpackhi_ps(r0, r1);
+                let t2 = _mm256_unpacklo_ps(r2, r3);
+                let t3 = _mm256_unpackhi_ps(r2, r3);
+                let t4 = _mm256_unpacklo_ps(r4, r5);
+                let t5 = _mm256_unpackhi_ps(r4, r5);
+                let t6 = _mm256_unpacklo_ps(r6, r7);
+                let t7 = _mm256_unpackhi_ps(r6, r7);
+
+                let u0 = _mm256_shuffle_ps(t0, t2, 0x44);
+                let u1 = _mm256_shuffle_ps(t0, t2, 0xEE);
+                let u2 = _mm256_shuffle_ps(t1, t3, 0x44);
+                let u3 = _mm256_shuffle_ps(t1, t3, 0xEE);
+                let u4 = _mm256_shuffle_ps(t4, t6, 0x44);
+                let u5 = _mm256_shuffle_ps(t4, t6, 0xEE);
+                let u6 = _mm256_shuffle_ps(t5, t7, 0x44);
+                let u7 = _mm256_shuffle_ps(t5, t7, 0xEE);
+
+                // Direct stores — stride 16 between K columns
+                let dst = packed_a.as_mut_ptr().add(p * 16);
+                _mm256_storeu_ps(dst, _mm256_permute2f128_ps(u0, u4, 0x20));
+                _mm256_storeu_ps(dst.add(16), _mm256_permute2f128_ps(u1, u5, 0x20));
+                _mm256_storeu_ps(dst.add(32), _mm256_permute2f128_ps(u2, u6, 0x20));
+                _mm256_storeu_ps(dst.add(48), _mm256_permute2f128_ps(u3, u7, 0x20));
+                _mm256_storeu_ps(dst.add(64), _mm256_permute2f128_ps(u0, u4, 0x31));
+                _mm256_storeu_ps(dst.add(80), _mm256_permute2f128_ps(u1, u5, 0x31));
+                _mm256_storeu_ps(dst.add(96), _mm256_permute2f128_ps(u2, u6, 0x31));
+                _mm256_storeu_ps(dst.add(112), _mm256_permute2f128_ps(u3, u7, 0x31));
+
+                // Lower 8 rows
+                let r0 = _mm256_loadu_ps(a.as_ptr().add((ir + 8) * k + p));
+                let r1 = _mm256_loadu_ps(a.as_ptr().add((ir + 9) * k + p));
+                let r2 = _mm256_loadu_ps(a.as_ptr().add((ir + 10) * k + p));
+                let r3 = _mm256_loadu_ps(a.as_ptr().add((ir + 11) * k + p));
+                let r4 = _mm256_loadu_ps(a.as_ptr().add((ir + 12) * k + p));
+                let r5 = _mm256_loadu_ps(a.as_ptr().add((ir + 13) * k + p));
+                let r6 = _mm256_loadu_ps(a.as_ptr().add((ir + 14) * k + p));
+                let r7 = _mm256_loadu_ps(a.as_ptr().add((ir + 15) * k + p));
+
+                let t0 = _mm256_unpacklo_ps(r0, r1);
+                let t1 = _mm256_unpackhi_ps(r0, r1);
+                let t2 = _mm256_unpacklo_ps(r2, r3);
+                let t3 = _mm256_unpackhi_ps(r2, r3);
+                let t4 = _mm256_unpacklo_ps(r4, r5);
+                let t5 = _mm256_unpackhi_ps(r4, r5);
+                let t6 = _mm256_unpacklo_ps(r6, r7);
+                let t7 = _mm256_unpackhi_ps(r6, r7);
+
+                let u0 = _mm256_shuffle_ps(t0, t2, 0x44);
+                let u1 = _mm256_shuffle_ps(t0, t2, 0xEE);
+                let u2 = _mm256_shuffle_ps(t1, t3, 0x44);
+                let u3 = _mm256_shuffle_ps(t1, t3, 0xEE);
+                let u4 = _mm256_shuffle_ps(t4, t6, 0x44);
+                let u5 = _mm256_shuffle_ps(t4, t6, 0xEE);
+                let u6 = _mm256_shuffle_ps(t5, t7, 0x44);
+                let u7 = _mm256_shuffle_ps(t5, t7, 0xEE);
+
+                // Lower rows at +8 offset
+                let dst_lo = packed_a.as_mut_ptr().add(p * 16 + 8);
+                _mm256_storeu_ps(dst_lo, _mm256_permute2f128_ps(u0, u4, 0x20));
+                _mm256_storeu_ps(dst_lo.add(16), _mm256_permute2f128_ps(u1, u5, 0x20));
+                _mm256_storeu_ps(dst_lo.add(32), _mm256_permute2f128_ps(u2, u6, 0x20));
+                _mm256_storeu_ps(dst_lo.add(48), _mm256_permute2f128_ps(u3, u7, 0x20));
+                _mm256_storeu_ps(dst_lo.add(64), _mm256_permute2f128_ps(u0, u4, 0x31));
+                _mm256_storeu_ps(dst_lo.add(80), _mm256_permute2f128_ps(u1, u5, 0x31));
+                _mm256_storeu_ps(dst_lo.add(96), _mm256_permute2f128_ps(u2, u6, 0x31));
+                _mm256_storeu_ps(dst_lo.add(112), _mm256_permute2f128_ps(u3, u7, 0x31));
+            }
+
+            // Remainder k columns: scalar pack
+            for p in k_rem_start..k {
+                for i in 0..16 {
+                    *packed_a.get_unchecked_mut(p * 16 + i) = *a.get_unchecked((ir + i) * k + p);
+                }
+            }
+
+            for jr_panel in 0..panels_n {
+                let jr = jr_panel * 8;
+                let packed_b_ptr = all_packed_b.as_ptr().add(jr_panel * k * 8);
+
+                // Load C tile (column-major for micro-kernel: c_micro[j*16+i])
+                for jj in 0..8 {
+                    for ii in 0..16 {
+                        c_micro[jj * 16 + ii] = *c.get_unchecked((ir + ii) * n + jr + jj);
+                    }
+                }
+
+                microkernel_16x8_avx512(
+                    k,
+                    packed_a.as_ptr(),
+                    packed_b_ptr,
+                    c_micro.as_mut_ptr(),
+                    16,
+                );
+
+                // Store C tile back to row-major
+                for jj in 0..8 {
+                    for ii in 0..16 {
+                        *c.get_unchecked_mut((ir + ii) * n + jr + jj) = c_micro[jj * 16 + ii];
                     }
                 }
             }
@@ -555,22 +832,42 @@ pub fn gemm_blis(
         return gemm_reference(m, n, k, a, b, c);
     }
 
-    // Small: optimized no-pack GEMM for ≤256 (skip when profiler active).
+    // Small: optimized GEMM paths (skip when profiler active).
     #[cfg(target_arch = "x86_64")]
     if profiler.is_none()
         && m <= 256
         && n <= 256
         && k <= 256
-        && m > MR
         && is_x86_feature_detected!("avx2")
         && is_x86_feature_detected!("fma")
     {
         unsafe {
-            if m % 8 == 0 && n % 8 == 0 {
+            // Zero-pack row-major GEMM for ≤128: no packing, no C transpose.
+            // Beats AVX-512 at small sizes: zero packing overhead dominates
+            // the 2.67× compute advantage of wider tiles.
+            if m <= 128 && n <= 128 && m % 8 == 0 && n % 8 == 0 {
+                return gemm_direct_rowmajor(m, n, k, a, b, c);
+            }
+            // AVX-512 for medium matrices (129-256): 16×8 tiles, pre-packed B.
+            // At these sizes tile compute advantage outweighs packing overhead.
+            if is_x86_feature_detected!("avx512f") && m >= 16 && m % 16 == 0 && n % 8 == 0 {
+                return gemm_small_avx512_16x8(m, n, k, a, b, c);
+            }
+            if m >= MR && m % 8 == 0 && n % 8 == 0 {
                 return gemm_small_nopack_8x8(m, n, k, a, b, c);
             }
             return gemm_small_strided_avx2(m, n, k, a, b, c);
         }
+    }
+
+    // NR=8 BLIS with row-major C SIMD load/store.
+    // Key insight from matrixmultiply: NR=8 maps perfectly to ymm width (8 f32),
+    // enabling _mm256_loadu_ps/_mm256_storeu_ps for C rows. This replaces
+    // 96 scalar C ops per tile with 16 SIMD ops (6× reduction).
+    // Also matches matrixmultiply's tile shape (MR=8, NR=8).
+    #[cfg(target_arch = "x86_64")]
+    if profiler.is_none() && is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
+        return unsafe { gemm_blis_nr8_rowmajor_c(m, n, k, a, b, c) };
     }
 
     // KAIZEN-038: Only call Instant::now() when profiler is active
@@ -646,6 +943,479 @@ pub fn gemm_blis(
                         s.elapsed().as_nanos() as u64,
                         (2 * m * n * k) as u64,
                     );
+                }
+            });
+        });
+    });
+
+    Ok(())
+}
+
+/// BLIS 5-loop GEMM with NR=8 and row-major C SIMD load/store.
+///
+/// Key optimization vs standard BLIS: C rows are loaded/stored with
+/// `_mm256_loadu_ps`/`_mm256_storeu_ps` (NR=8 = 1 ymm per row).
+/// This replaces 96 scalar C ops per tile with 16 SIMD ops.
+/// Matches matrixmultiply's approach (MR=8, NR=8, contiguous C rows).
+///
+/// Uses existing `pack_a_block` (MR=8) and `pack_b_block_512` (NR=8).
+/// Inner loop: broadcast packed A elements, load packed B row, FMA.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2", enable = "fma")]
+unsafe fn gemm_blis_nr8_rowmajor_c(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    b: &[f32],
+    c: &mut [f32],
+) -> Result<(), TruenoError> {
+    use std::arch::x86_64::*;
+
+    // Cache blocking: match matrixmultiply's parameters.
+    // MC=64: A~ = MC×KC×4 = 64KB, fits in L2 (1MB/core on Zen 4).
+    // KC=256: B panel per tile = KC×8×4 = 8KB, fits in L1 (32KB).
+    // NC=1024: B~ = KC×NC×4 = 1MB, fits in L3 (~5MB/CCX on Zen 4).
+    let mc = 64_usize.min(m);
+    let nc = 1024_usize.min(n);
+    let kc_param = KC;
+    let nr = 8_usize; // NR=8 for ymm-width C rows
+    let mr = MR; // MR=8
+
+    TL_PACKED_A.with(|tl_a| {
+        TL_PACKED_B.with(|tl_b| {
+            let mut packed_a = tl_a.borrow_mut();
+            let mut packed_b = tl_b.borrow_mut();
+
+            let needed_a = packed_a_size(mc, kc_param);
+            let needed_b = packed_b_size_512(kc_param, nc); // NR=8 packing
+            if packed_a.len() < needed_a {
+                packed_a.resize(needed_a, 0.0);
+            }
+            if packed_b.len() < needed_b {
+                packed_b.resize(needed_b, 0.0);
+            }
+
+            // BLIS 5-loop with NR=8 packing and row-major C
+            for jc in (0..n).step_by(nc) {
+                let nc_block = nc.min(n - jc);
+
+                for pc in (0..k).step_by(kc_param) {
+                    let kc_block = kc_param.min(k - pc);
+
+                    // Pack B with NR=8
+                    pack_b_block_512(b, n, pc, jc, kc_block, nc_block, &mut packed_b);
+
+                    for ic in (0..m).step_by(mc) {
+                        let mc_block = mc.min(m - ic);
+
+                        // Pack A with MR=8
+                        pack_a_block(a, k, ic, pc, mc_block, kc_block, &mut packed_a);
+
+                        // Microkernel loop: 8×8 tiles with row-major C
+                        let panels_m = (mc_block + mr - 1) / mr;
+                        let panels_n = (nc_block + nr - 1) / nr;
+
+                        for ir_panel in 0..panels_m {
+                            let ir = ir_panel * mr;
+                            let mr_block = mr.min(mc_block - ir);
+
+                            for jr_panel in 0..panels_n {
+                                let jr = jr_panel * nr;
+                                let nr_block = nr.min(nc_block - jr);
+
+                                let a_panel = &packed_a[ir_panel * mr * kc_block..];
+                                let b_panel = &packed_b[jr_panel * nr * kc_block..];
+
+                                if mr_block == 8 && nr_block == 8 {
+                                    // Full 8×8 tile: SIMD C load/store + FMA
+                                    unsafe {
+                                        let c_base = c.as_mut_ptr().add((ic + ir) * n + (jc + jr));
+
+                                        // Load 8 C rows (each 8 f32 = 1 ymm)
+                                        let mut c0 = _mm256_loadu_ps(c_base);
+                                        let mut c1 = _mm256_loadu_ps(c_base.add(n));
+                                        let mut c2 = _mm256_loadu_ps(c_base.add(2 * n));
+                                        let mut c3 = _mm256_loadu_ps(c_base.add(3 * n));
+                                        let mut c4 = _mm256_loadu_ps(c_base.add(4 * n));
+                                        let mut c5 = _mm256_loadu_ps(c_base.add(5 * n));
+                                        let mut c6 = _mm256_loadu_ps(c_base.add(6 * n));
+                                        let mut c7 = _mm256_loadu_ps(c_base.add(7 * n));
+
+                                        let ap = a_panel.as_ptr();
+                                        let bp = b_panel.as_ptr();
+
+                                        // 4-way K-unrolled inner loop
+                                        let k4 = kc_block / 4;
+                                        let k_rem = kc_block % 4;
+
+                                        for p4 in 0..k4 {
+                                            let p = p4 * 4;
+
+                                            let b_row = _mm256_loadu_ps(bp.add(p * 8));
+                                            c0 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add(p * 8)),
+                                                b_row,
+                                                c0,
+                                            );
+                                            c1 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add(p * 8 + 1)),
+                                                b_row,
+                                                c1,
+                                            );
+                                            c2 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add(p * 8 + 2)),
+                                                b_row,
+                                                c2,
+                                            );
+                                            c3 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add(p * 8 + 3)),
+                                                b_row,
+                                                c3,
+                                            );
+                                            c4 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add(p * 8 + 4)),
+                                                b_row,
+                                                c4,
+                                            );
+                                            c5 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add(p * 8 + 5)),
+                                                b_row,
+                                                c5,
+                                            );
+                                            c6 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add(p * 8 + 6)),
+                                                b_row,
+                                                c6,
+                                            );
+                                            c7 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add(p * 8 + 7)),
+                                                b_row,
+                                                c7,
+                                            );
+
+                                            let b_row = _mm256_loadu_ps(bp.add((p + 1) * 8));
+                                            c0 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 1) * 8)),
+                                                b_row,
+                                                c0,
+                                            );
+                                            c1 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 1) * 8 + 1)),
+                                                b_row,
+                                                c1,
+                                            );
+                                            c2 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 1) * 8 + 2)),
+                                                b_row,
+                                                c2,
+                                            );
+                                            c3 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 1) * 8 + 3)),
+                                                b_row,
+                                                c3,
+                                            );
+                                            c4 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 1) * 8 + 4)),
+                                                b_row,
+                                                c4,
+                                            );
+                                            c5 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 1) * 8 + 5)),
+                                                b_row,
+                                                c5,
+                                            );
+                                            c6 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 1) * 8 + 6)),
+                                                b_row,
+                                                c6,
+                                            );
+                                            c7 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 1) * 8 + 7)),
+                                                b_row,
+                                                c7,
+                                            );
+
+                                            let b_row = _mm256_loadu_ps(bp.add((p + 2) * 8));
+                                            c0 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 2) * 8)),
+                                                b_row,
+                                                c0,
+                                            );
+                                            c1 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 2) * 8 + 1)),
+                                                b_row,
+                                                c1,
+                                            );
+                                            c2 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 2) * 8 + 2)),
+                                                b_row,
+                                                c2,
+                                            );
+                                            c3 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 2) * 8 + 3)),
+                                                b_row,
+                                                c3,
+                                            );
+                                            c4 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 2) * 8 + 4)),
+                                                b_row,
+                                                c4,
+                                            );
+                                            c5 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 2) * 8 + 5)),
+                                                b_row,
+                                                c5,
+                                            );
+                                            c6 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 2) * 8 + 6)),
+                                                b_row,
+                                                c6,
+                                            );
+                                            c7 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 2) * 8 + 7)),
+                                                b_row,
+                                                c7,
+                                            );
+
+                                            let b_row = _mm256_loadu_ps(bp.add((p + 3) * 8));
+                                            c0 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 3) * 8)),
+                                                b_row,
+                                                c0,
+                                            );
+                                            c1 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 3) * 8 + 1)),
+                                                b_row,
+                                                c1,
+                                            );
+                                            c2 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 3) * 8 + 2)),
+                                                b_row,
+                                                c2,
+                                            );
+                                            c3 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 3) * 8 + 3)),
+                                                b_row,
+                                                c3,
+                                            );
+                                            c4 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 3) * 8 + 4)),
+                                                b_row,
+                                                c4,
+                                            );
+                                            c5 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 3) * 8 + 5)),
+                                                b_row,
+                                                c5,
+                                            );
+                                            c6 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 3) * 8 + 6)),
+                                                b_row,
+                                                c6,
+                                            );
+                                            c7 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add((p + 3) * 8 + 7)),
+                                                b_row,
+                                                c7,
+                                            );
+                                        }
+
+                                        let base_rem = k4 * 4;
+                                        for rp in 0..k_rem {
+                                            let pp = base_rem + rp;
+                                            let b_row = _mm256_loadu_ps(bp.add(pp * 8));
+                                            c0 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add(pp * 8)),
+                                                b_row,
+                                                c0,
+                                            );
+                                            c1 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add(pp * 8 + 1)),
+                                                b_row,
+                                                c1,
+                                            );
+                                            c2 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add(pp * 8 + 2)),
+                                                b_row,
+                                                c2,
+                                            );
+                                            c3 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add(pp * 8 + 3)),
+                                                b_row,
+                                                c3,
+                                            );
+                                            c4 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add(pp * 8 + 4)),
+                                                b_row,
+                                                c4,
+                                            );
+                                            c5 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add(pp * 8 + 5)),
+                                                b_row,
+                                                c5,
+                                            );
+                                            c6 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add(pp * 8 + 6)),
+                                                b_row,
+                                                c6,
+                                            );
+                                            c7 = _mm256_fmadd_ps(
+                                                _mm256_broadcast_ss(&*ap.add(pp * 8 + 7)),
+                                                b_row,
+                                                c7,
+                                            );
+                                        }
+
+                                        // Store 8 C rows (SIMD)
+                                        _mm256_storeu_ps(c_base, c0);
+                                        _mm256_storeu_ps(c_base.add(n), c1);
+                                        _mm256_storeu_ps(c_base.add(2 * n), c2);
+                                        _mm256_storeu_ps(c_base.add(3 * n), c3);
+                                        _mm256_storeu_ps(c_base.add(4 * n), c4);
+                                        _mm256_storeu_ps(c_base.add(5 * n), c5);
+                                        _mm256_storeu_ps(c_base.add(6 * n), c6);
+                                        _mm256_storeu_ps(c_base.add(7 * n), c7);
+                                    }
+                                } else {
+                                    // Edge tile: scalar fallback
+                                    for p in 0..kc_block {
+                                        for jj in 0..nr_block {
+                                            let b_val = b_panel[p * nr + jj];
+                                            for ii in 0..mr_block {
+                                                c[(ic + ir + ii) * n + (jc + jr + jj)] +=
+                                                    a_panel[p * mr + ii] * b_val;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    });
+
+    Ok(())
+}
+
+/// AVX-512 BLIS 5-loop GEMM with packed 16×8 microkernel.
+///
+/// Uses MR_512=16, NR_512=8 packing for 2× compute density over AVX2 8×6.
+/// C tiles loaded/stored with AVX-512 `_mm512_loadu_ps` (16 f32 per load).
+/// Packing converts strided A/B into contiguous micro-panel layout for
+/// sequential access in the microkernel.
+#[cfg(target_arch = "x86_64")]
+#[allow(dead_code)] // Retained for AVX-512-only systems; superseded by nr8_rowmajor_c on AVX2
+fn gemm_blis_avx512_packed(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    b: &[f32],
+    c: &mut [f32],
+) -> Result<(), TruenoError> {
+    let mc = MC_512.min(m);
+    let nc = NC_512.min(n);
+    let kc = KC_512.min(k);
+
+    let needed_a = packed_a_size_512(mc, kc);
+    let needed_b = packed_b_size_512(kc, nc);
+    let needed_c = MR_512 * NR_512;
+
+    TL_PACKED_A.with(|tl_a| {
+        TL_PACKED_B.with(|tl_b| {
+            TL_C_MICRO.with(|tl_c| {
+                let mut packed_a = tl_a.borrow_mut();
+                let mut packed_b = tl_b.borrow_mut();
+                let mut c_micro = tl_c.borrow_mut();
+
+                if packed_a.len() < needed_a {
+                    packed_a.resize(needed_a, 0.0);
+                }
+                if packed_b.len() < needed_b {
+                    packed_b.resize(needed_b, 0.0);
+                }
+                if c_micro.len() < needed_c {
+                    c_micro.resize(needed_c, 0.0);
+                }
+
+                for jc in (0..n).step_by(NC_512) {
+                    let nc_block = NC_512.min(n - jc);
+
+                    for pc in (0..k).step_by(KC_512) {
+                        let kc_block = KC_512.min(k - pc);
+
+                        pack_b_block_512(b, n, pc, jc, kc_block, nc_block, &mut packed_b);
+
+                        for ic in (0..m).step_by(MC_512) {
+                            let mc_block = MC_512.min(m - ic);
+
+                            pack_a_block_512(a, k, ic, pc, mc_block, kc_block, &mut packed_a);
+
+                            // AVX-512 macroblock: 16×8 tiles
+                            for ir in (0..mc_block).step_by(MR_512) {
+                                let mr_block = MR_512.min(mc_block - ir);
+                                for jr in (0..nc_block).step_by(NR_512) {
+                                    let nr_block = NR_512.min(nc_block - jr);
+
+                                    let a_panel = &packed_a[(ir / MR_512) * MR_512 * kc_block..];
+                                    let b_panel = &packed_b[(jr / NR_512) * NR_512 * kc_block..];
+
+                                    // Load C tile (column-major for microkernel)
+                                    for jj in 0..nr_block {
+                                        for ii in 0..mr_block {
+                                            c_micro[jj * MR_512 + ii] =
+                                                c[(ic + ir + ii) * n + (jc + jr + jj)];
+                                        }
+                                        for ii in mr_block..MR_512 {
+                                            c_micro[jj * MR_512 + ii] = 0.0;
+                                        }
+                                    }
+                                    for jj in nr_block..NR_512 {
+                                        for ii in 0..MR_512 {
+                                            c_micro[jj * MR_512 + ii] = 0.0;
+                                        }
+                                    }
+
+                                    // Full tile → AVX-512, edge → scalar
+                                    if mr_block == MR_512 && nr_block == NR_512 {
+                                        // SAFETY: AVX-512 verified by is_x86_feature_detected
+                                        // in caller. Packed layout matches microkernel.
+                                        unsafe {
+                                            microkernel_16x8_avx512(
+                                                kc_block,
+                                                a_panel.as_ptr(),
+                                                b_panel.as_ptr(),
+                                                c_micro.as_mut_ptr(),
+                                                MR_512,
+                                            );
+                                        }
+                                    } else {
+                                        // Edge tiles: scalar
+                                        for p in 0..kc_block {
+                                            for jj in 0..NR_512 {
+                                                let b_val = b_panel[p * NR_512 + jj];
+                                                for ii in 0..MR_512 {
+                                                    c_micro[jj * MR_512 + ii] +=
+                                                        a_panel[p * MR_512 + ii] * b_val;
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Store C tile
+                                    for jj in 0..nr_block {
+                                        for ii in 0..mr_block {
+                                            c[(ic + ir + ii) * n + (jc + jr + jj)] =
+                                                c_micro[jj * MR_512 + ii];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             });
         });

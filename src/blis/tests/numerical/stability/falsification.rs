@@ -60,8 +60,8 @@ fn test_falsification_45_tiny_matrix() {
 fn test_falsification_53_heijunka_variance() {
     let scheduler = HeijunkaScheduler { num_threads: 4, variance_threshold: 0.05 };
 
-    // Test with M values that divide evenly into MC-sized tiles
-    for m in [576, 720, 1024, 2048] {
+    // Test with M values that are multiples of 4*MC for even division
+    for m in [4 * MC, 8 * MC, 1024, 2048] {
         let partitions = scheduler.partition_m(m, MC);
 
         if partitions.len() < 2 {

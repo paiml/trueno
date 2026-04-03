@@ -7,6 +7,7 @@ use crate::error::TruenoError;
 
 use super::compute::{gemm_blis, gemm_blis_with_prepacked_b};
 use super::prepacked::PrepackedB;
+#[cfg(feature = "parallel")]
 use super::{MC, MR};
 
 /// Heijunka (load-leveling) scheduler for parallel GEMM
@@ -77,13 +78,21 @@ pub fn gemm_blis_parallel(
         return Err(TruenoError::InvalidInput("Dimension mismatch".to_string()));
     }
 
-    // Small matrices: single-threaded
-    if m * n * k < 1_000_000 {
+    // Single-threaded threshold: 4M FLOPs ≈ 160³.
+    // Rayon dispatch costs ~3µs even on warm pool. For m*n*k < 4M,
+    // single-threaded GEMM (~10-30µs) doesn't benefit from parallelism
+    // after overhead. The direct rowmajor kernel handles ≤128 efficiently.
+    if m * n * k < 4_000_000 {
         return gemm_blis(m, n, k, a, b, c, None);
     }
 
-    let scheduler = HeijunkaScheduler::default();
-    let ps = if m <= MC { MR.max(m / rayon::current_num_threads()) } else { MC };
+    // Scale thread count to problem size to avoid excessive partitioning.
+    let flops = m * n * k;
+    let max_threads = if flops < 16_000_000 { 4 } else { rayon::current_num_threads() };
+
+    let mut scheduler = HeijunkaScheduler::default();
+    scheduler.num_threads = scheduler.num_threads.min(max_threads);
+    let ps = if m <= MC { MR.max(m / scheduler.num_threads) } else { MC };
     let partitions = scheduler.partition_m(m, ps);
 
     // KAIZEN-042: Removed dead packed_b allocation that was never used.

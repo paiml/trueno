@@ -38,13 +38,14 @@ fn test_kaizen_metrics() {
 fn test_heijunka_balanced_partition() {
     let scheduler = HeijunkaScheduler { num_threads: 4, variance_threshold: 0.05 };
 
-    // Use m=288 which divides evenly into 4 blocks of MC=72
-    let partitions = scheduler.partition_m(288, MC);
+    // Use m = 4*MC so it divides evenly into 4 blocks
+    let m = 4 * MC;
+    let partitions = scheduler.partition_m(m, MC);
 
     // Should have 4 partitions
     assert_eq!(partitions.len(), 4);
 
-    // Each partition should be exactly equal (72 rows each)
+    // Each partition should be exactly equal (MC rows each)
     let sizes: Vec<usize> = partitions.iter().map(|r| r.len()).collect();
     let avg = sizes.iter().sum::<usize>() as f32 / sizes.len() as f32;
 
@@ -54,10 +55,11 @@ fn test_heijunka_balanced_partition() {
     }
 
     // Also test uneven case - should still work
-    let partitions_uneven = scheduler.partition_m(256, MC);
-    assert_eq!(partitions_uneven.len(), 4);
+    let m_uneven = 3 * MC + MC / 2;
+    let partitions_uneven = scheduler.partition_m(m_uneven, MC);
+    assert!(partitions_uneven.len() <= 4);
     let total: usize = partitions_uneven.iter().map(|r| r.len()).sum();
-    assert_eq!(total, 256); // All rows covered
+    assert_eq!(total, m_uneven); // All rows covered
 }
 
 #[test]

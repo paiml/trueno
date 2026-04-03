@@ -97,11 +97,34 @@ pub const NR: usize = 6;
 /// K-dimension blocking for L1 cache (256 elements = 1KB)
 pub const KC: usize = 256;
 
-/// M-dimension blocking for L2 cache
-pub const MC: usize = 72;
+/// M-dimension blocking for L2 cache.
+/// Must be a multiple of MR. 128 = 16×MR for AVX2 (vs old 72 = 9×MR).
+/// Larger MC reduces packing overhead per macroblock (fewer ic-loop iterations).
+/// Zen 4 L2 = 1MB per core; MC×KC×4B = 128×256×4 = 128KB << 1MB.
+pub const MC: usize = 128;
 
 /// N-dimension blocking for L3 cache
 pub const NC: usize = 4096;
+
+// ============================================================================
+// AVX-512 BLIS Configuration Constants
+// ============================================================================
+
+/// AVX-512 microkernel row dimension (16 f32 per zmm register)
+pub const MR_512: usize = 16;
+
+/// AVX-512 microkernel column dimension (8 columns in remaining zmm registers)
+pub const NR_512: usize = 8;
+
+/// AVX-512 K-dimension blocking (same as AVX2, L1 limited)
+pub const KC_512: usize = 256;
+
+/// AVX-512 M-dimension blocking for L2 cache.
+/// 128 = 8×MR_512. Zen 4 L2 = 1MB; 128×256×4 = 128KB.
+pub const MC_512: usize = 128;
+
+/// AVX-512 N-dimension blocking for L3 cache
+pub const NC_512: usize = 4096;
 
 // ============================================================================
 // Public API

@@ -232,51 +232,46 @@ unsafe fn softmax_avx2(logits: &[f32]) -> Vec<f32> {
 #[inline]
 unsafe fn fast_exp_avx2(x: std::arch::x86_64::__m256) -> std::arch::x86_64::__m256 {
     use std::arch::x86_64::*;
-    unsafe {
-        // Constants
-        let log2e = _mm256_set1_ps(1.442_695_04); // log2(e)
-        let ln2_hi = _mm256_set1_ps(0.693_145_751_953_125); // ln(2) high bits
-        let ln2_lo = _mm256_set1_ps(1.428_606_765_330_187_1e-6); // ln(2) low bits
-        let one = _mm256_set1_ps(1.0);
 
-        // Polynomial coefficients (Remez minimax for e^r on [-ln2/2, ln2/2])
-        let c2 = _mm256_set1_ps(0.500_000_0); // 1/2!
-        let c3 = _mm256_set1_ps(0.166_666_671_6); // ~1/3!
-        let c4 = _mm256_set1_ps(0.041_666_645_8); // ~1/4!
-        let c5 = _mm256_set1_ps(0.008_333_345_2); // ~1/5!
-        let c6 = _mm256_set1_ps(0.001_388_731_6); // ~1/6!
+    let log2e = _mm256_set1_ps(std::f32::consts::LOG2_E);
+    let ln2_hi = _mm256_set1_ps(0.693_145_751_953_125); // ln(2) high bits
+    let ln2_lo = _mm256_set1_ps(1.428_606_765_330_187_1e-6); // ln(2) low bits
+    let one = _mm256_set1_ps(1.0);
 
-        // Clamp to avoid overflow/underflow in integer conversion
-        let x = _mm256_max_ps(x, _mm256_set1_ps(-87.33654));
-        let x = _mm256_min_ps(x, _mm256_set1_ps(88.72284));
+    // Polynomial coefficients (Remez minimax for e^r on [-ln2/2, ln2/2])
+    let c2 = _mm256_set1_ps(0.500_000_0); // 1/2!
+    let c3 = _mm256_set1_ps(0.166_666_671_6); // ~1/3!
+    let c4 = _mm256_set1_ps(0.041_666_645_8); // ~1/4!
+    let c5 = _mm256_set1_ps(0.008_333_345_2); // ~1/5!
+    let c6 = _mm256_set1_ps(0.001_388_731_6); // ~1/6!
 
-        // Range reduction: n = round(x / ln(2))
-        let t = _mm256_fmadd_ps(x, log2e, _mm256_set1_ps(0.5));
-        let n = _mm256_floor_ps(t); // floor(x*log2e + 0.5) = round
+    // Clamp to avoid overflow/underflow in integer conversion
+    let x = _mm256_max_ps(x, _mm256_set1_ps(-87.33654));
+    let x = _mm256_min_ps(x, _mm256_set1_ps(88.72284));
 
-        // r = x - n * ln(2) (high + low for precision)
-        let r = _mm256_sub_ps(x, _mm256_mul_ps(n, ln2_hi));
-        let r = _mm256_sub_ps(r, _mm256_mul_ps(n, ln2_lo));
+    // Range reduction: n = round(x / ln(2))
+    let t = _mm256_fmadd_ps(x, log2e, _mm256_set1_ps(0.5));
+    let n = _mm256_floor_ps(t); // floor(x*log2e + 0.5) = round
 
-        // Polynomial: e^r ≈ 1 + r + c2*r² + c3*r³ + c4*r⁴ + c5*r⁵ + c6*r⁶
-        // Horner: ((((c6*r + c5)*r + c4)*r + c3)*r + c2)*r + 1)*r + 1
-        // But re-arranged for FMA efficiency:
-        let p = _mm256_fmadd_ps(c6, r, c5);
-        let p = _mm256_fmadd_ps(p, r, c4);
-        let p = _mm256_fmadd_ps(p, r, c3);
-        let p = _mm256_fmadd_ps(p, r, c2);
-        let p = _mm256_fmadd_ps(p, r, one);
-        let p = _mm256_fmadd_ps(p, r, one);
+    // r = x - n * ln(2) (high + low for precision)
+    let r = _mm256_sub_ps(x, _mm256_mul_ps(n, ln2_hi));
+    let r = _mm256_sub_ps(r, _mm256_mul_ps(n, ln2_lo));
 
-        // Reconstruct: multiply by 2^n via integer exponent manipulation
-        let n_i = _mm256_cvtps_epi32(n);
-        let pow2n = _mm256_castsi256_ps(_mm256_slli_epi32(
-            _mm256_add_epi32(n_i, _mm256_set1_epi32(127)),
-            23,
-        ));
+    // Polynomial: e^r ≈ 1 + r + c2*r² + c3*r³ + c4*r⁴ + c5*r⁵ + c6*r⁶
+    // Horner form re-arranged for FMA efficiency:
+    let p = _mm256_fmadd_ps(c6, r, c5);
+    let p = _mm256_fmadd_ps(p, r, c4);
+    let p = _mm256_fmadd_ps(p, r, c3);
+    let p = _mm256_fmadd_ps(p, r, c2);
+    let p = _mm256_fmadd_ps(p, r, one);
+    let p = _mm256_fmadd_ps(p, r, one);
 
-        _mm256_mul_ps(p, pow2n)
-    }
+    // Reconstruct: multiply by 2^n via integer exponent manipulation
+    let n_i = _mm256_cvtps_epi32(n);
+    let pow2n =
+        _mm256_castsi256_ps(_mm256_slli_epi32(_mm256_add_epi32(n_i, _mm256_set1_epi32(127)), 23));
+
+    _mm256_mul_ps(p, pow2n)
 }
 
 #[cfg(test)]
