@@ -307,3 +307,155 @@ fn test_bench_missing() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("CGP Bench") || stdout.contains("not found"), "stdout: {stdout}");
 }
+
+/// cgp profile simd --arch neon must degrade gracefully on x86.
+/// FALSIFY-CGP-071.
+#[test]
+#[cfg(target_arch = "x86_64")]
+fn test_neon_graceful_on_x86() {
+    let output = cgp_cmd()
+        .args(["profile", "simd", "--function", "test", "--size", "1024", "--arch", "neon"])
+        .output()
+        .expect("Failed to run cgp profile simd neon");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("NEON not available"), "Should mention NEON not available: {stdout}");
+}
+
+/// cgp profile wgpu must detect backend and not crash.
+/// FALSIFY-CGP-079 partial: wgpu with native target.
+#[test]
+fn test_wgpu_native_profile() {
+    let output = cgp_cmd()
+        .args(["profile", "wgpu", "--shader", "nonexistent.wgsl", "--dispatch", "256,256,1"])
+        .output()
+        .expect("Failed to run cgp profile wgpu");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("wgpu"), "Should mention wgpu: {stdout}");
+    assert!(
+        stdout.contains("Vulkan") || stdout.contains("Metal") || stdout.contains("DX12"),
+        "Should detect backend: {stdout}"
+    );
+}
+
+/// cgp profile wgpu --target web must mention browser fallback.
+/// FALSIFY-CGP-079.
+#[test]
+fn test_wgpu_web_fallback() {
+    let output = cgp_cmd()
+        .args(["profile", "wgpu", "--shader", "test.wgsl", "--target", "web"])
+        .output()
+        .expect("Failed to run cgp profile wgpu web");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Should either find Chrome or fall back
+    assert!(
+        stdout.contains("Chrome") || stdout.contains("falling back"),
+        "Should handle browser presence: {stdout}"
+    );
+}
+
+/// cgp profile wasm must handle missing wasmtime gracefully.
+/// FALSIFY-CGP-072 partial.
+#[test]
+fn test_wasm_profile() {
+    let output = cgp_cmd()
+        .args(["profile", "wasm", "--function", "vector_dot_wasm", "--size", "1024"])
+        .output()
+        .expect("Failed to run cgp profile wasm");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("WASM"), "Should mention WASM: {stdout}");
+    // Should either find wasmtime or show install instructions
+    assert!(
+        stdout.contains("wasmtime") || stdout.contains("Install"),
+        "Should handle wasmtime presence: {stdout}"
+    );
+}
+
+/// cgp profile scalar must not crash.
+#[test]
+fn test_scalar_profile() {
+    let output = cgp_cmd()
+        .args(["profile", "scalar", "--function", "matrix_mul_naive", "--size", "256"])
+        .output()
+        .expect("Failed to run cgp profile scalar");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Scalar"), "Should mention Scalar: {stdout}");
+    assert!(stdout.contains("baseline"), "Should mention baseline: {stdout}");
+}
+
+/// cgp profile parallel must not crash.
+/// FALSIFY-CGP-080 partial.
+#[test]
+fn test_parallel_profile() {
+    let output = cgp_cmd()
+        .args([
+            "profile",
+            "parallel",
+            "--function",
+            "gemm_heijunka",
+            "--size",
+            "1024",
+            "--threads",
+            "4",
+        ])
+        .output()
+        .expect("Failed to run cgp profile parallel");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Parallel") || stdout.contains("Rayon"), "stdout: {stdout}");
+}
+
+/// cgp --json roofline must produce valid JSON for different targets.
+#[test]
+fn test_json_roofline_avx2() {
+    let output = cgp_cmd()
+        .args(["--json", "roofline", "--target", "avx2"])
+        .output()
+        .expect("Failed to run cgp --json roofline avx2");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("Roofline AVX2 JSON is not valid JSON");
+    assert!(parsed.get("peak_compute").is_some());
+    assert!(parsed.get("target").is_some());
+}
+
+/// cgp profile quant must handle Q4K kernel.
+/// FALSIFY-CGP-074 partial.
+#[test]
+fn test_quant_profile() {
+    let output = cgp_cmd()
+        .args(["profile", "quant", "--kernel", "q4k_gemv", "--size", "4096x1x4096"])
+        .output()
+        .expect("Failed to run cgp profile quant");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Q4K") || stdout.contains("quant") || stdout.contains("Quant"),
+        "stdout: {stdout}"
+    );
+}
+
+/// cgp contract verify must handle missing directory.
+#[test]
+fn test_contract_verify_missing_dir() {
+    let output = cgp_cmd()
+        .args(["contract", "verify", "--contracts-dir", "/tmp/nonexistent_cgp_contracts_xyz"])
+        .output()
+        .expect("Failed to run cgp contract verify");
+
+    // Should succeed with 0 contracts (not crash)
+    assert!(output.status.success());
+}
