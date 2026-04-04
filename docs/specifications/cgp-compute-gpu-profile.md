@@ -1937,44 +1937,64 @@ Tested on: RTX 4090, Driver 570.207, ncu 2025.1.1.0, nsys 2025.3.2.367, perf 6.8
 
 **Summary**: 14 tests executed, 12 PASS, 2 FIXED (arithmetic intensity and coalescing threshold corrected).
 
-**Implementation status** (2026-04-04): cgp binary fully functional in `crates/cgp/` with 76 unit + 11 integration = 87 tests.
+**Implementation status** (2026-04-04): cgp binary fully functional in `crates/cgp/` with 109 unit + 28 integration = 137 tests.
 
-All 13 primary CLI subcommands implemented and dogfooded on RTX 4090 + Threadripper 7960X:
+All 16 CLI subcommands implemented and dogfooded on RTX 4090 + Threadripper 7960X:
 
 | Command | Status | Key capability |
 |---------|--------|----------------|
 | `cgp doctor` | **DONE** | Detects ncu, nsys, CUPTI, perf, GPU, CPU in <250ms |
-| `cgp profile kernel` | **DONE** | Runs ncu, parses CSV metrics, computes roofline, exports JSON |
+| `cgp profile kernel` | **DONE** | Runs ncu, parses CSV metrics, computes roofline, system health, VRAM, energy |
 | `cgp profile binary` | **DONE** | Runs nsys, extracts kernel stats table |
 | `cgp profile python` | **DONE** | Wraps nsys for Python CUDA workloads |
 | `cgp profile simd` | **DONE** | Runs perf stat, computes IPC/SIMD utilization/cache miss rate |
-| `cgp profile compare` | **DONE** | Cross-backend table: scalar/AVX2/AVX-512/CUDA/cuBLAS with TFLOP/s |
+| `cgp profile compare` | **DONE** | Cross-backend table with TFLOP/s + `--json` structured output |
+| `cgp profile scalar` | **DONE** | Scalar baseline with perf stat hardware counters |
+| `cgp profile parallel` | **DONE** | Real timing with RAYON_NUM_THREADS, speedup, Amdahl's law analysis |
+| `cgp profile wasm` | **DONE** | wasmtime detection, SIMD128 detection, fuel metering |
+| `cgp profile wgpu` | **DONE** | Shader validation, workgroup_size extraction, backend detection |
 | `cgp roofline` | **DONE** | cuda, avx2, avx512, neon, wgpu targets with JSON export |
 | `cgp diff` | **DONE** | JSON profile comparison with per-metric verdicts, <2ms |
 | `cgp compete` | **DONE** | Head-to-head timing with vs-best ratios |
-| `cgp baseline` | **DONE** | Save/load/list baselines in .cgp-baselines/ |
+| `cgp baseline` | **DONE** | Save/load/list baselines with system health context |
 | `cgp trace` | **DONE** | Wraps nsys with CUDA+NVTX+OSRT trace categories |
 | `cgp contract verify` | **DONE** | YAML parse + structural validation |
 | `cgp contract generate` | **DONE** | Generate YAML contract from profile or estimates |
-| `cgp explain` | STUB | Needs trueno-explain integration |
+| `cgp explain` | **DONE** | Static PTX analysis (instruction mix, registers, WMMA) + WGSL analysis |
+| `cgp bench` | **DONE** | Criterion wrapper with perf stat overlay via --counters |
 | `cgp tui` | STUB | Needs presentar integration |
-| `cgp bench` | STUB | Needs criterion integration |
 
-FALSIFY tests implemented (76 unit + 11 integration):
+New in Phase 2 (PMAT-019):
+- **system.rs**: nvidia-smi parsing for GPU temp/power/clock/VRAM, CPU freq, energy efficiency
+- **explain.rs**: Static PTX/WGSL analysis (instruction mix, register pressure, WMMA detection)
+- **NEON profiler**: Callable with graceful x86 degradation (FALSIFY-CGP-071)
+- **WASM profiler**: wasmtime + SIMD128 detection (FALSIFY-CGP-072/073)
+- **wgpu profiler**: Shader validation, dispatch parsing, backend detection (FALSIFY-CGP-079)
+- **Rayon profiler**: Real binary timing, parallel speedup, Amdahl's law (FALSIFY-CGP-080/082)
+- **Scalar profiler**: perf stat hardware counter integration
+- **Bench command**: perf stat overlay with --counters flag
+
+FALSIFY tests implemented (109 unit + 28 integration):
 - FALSIFY-CGP-010/011/012: Doctor tool detection (doctor.rs + integration)
 - FALSIFY-CGP-020/021: Roofline ridge points, all 4 precisions (analysis/roofline.rs + integration)
 - FALSIFY-CGP-030/031/032: Regression detection — bootstrap CI (analysis/regression.rs)
 - FALSIFY-CGP-040/041/042: Cross-backend comparison — CUDA>scalar, SIMD>scalar, cuBLAS>PTX (analysis/compare.rs)
+- FALSIFY-CGP-050: Register spill detection via PTX analysis (analysis/explain.rs)
 - FALSIFY-CGP-062: Diff speed <100ms (analysis/diff.rs + integration)
-- FALSIFY-CGP-074/075: Q4K superblock math (profilers/quant.rs)
+- FALSIFY-CGP-071: NEON graceful degradation on x86 (profilers/neon.rs + integration)
+- FALSIFY-CGP-072/073: WASM profiler with SIMD128 detection (profilers/wasm.rs + integration)
+- FALSIFY-CGP-074/075: Q4K superblock math (profilers/quant.rs + integration)
 - FALSIFY-CGP-077: Metal not available on Linux (integration test)
-- FALSIFY-CGP-081: Heijunka load balance (profilers/rayon_parallel.rs)
-- ncu CSV parsing, nsys stats parsing, perf stat CSV parsing (profilers/cuda.rs, simd.rs)
-- Full binary end-to-end: doctor, roofline export, diff, compare, compete, contract generate+verify
+- FALSIFY-CGP-079: wgpu web target fallback (profilers/wgpu_profiler.rs + integration)
+- FALSIFY-CGP-080/081/082: Parallel speedup, heijunka score (profilers/rayon_parallel.rs + integration)
+- System health: GPU temp/power/clock/VRAM via nvidia-smi (profilers/system.rs)
+- Energy efficiency: TFLOP/s per watt, joules per inference (profilers/system.rs)
+- ncu CSV parsing, nsys stats parsing, perf stat CSV parsing
+- PTX static analysis, WGSL analysis (analysis/explain.rs)
+- Full binary end-to-end: doctor, roofline, diff, compare, compete, baseline, explain, bench
 
 **Remaining** (require target hardware, root access, or platform-specific):
 - FALSIFY-CGP-052: Bank conflict detection (needs ncu with real GPU kernel)
-- FALSIFY-CGP-070/071: NEON profiling (needs ARM host or QEMU)
-- FALSIFY-CGP-072/073: WASM SIMD128 (needs wasmtime integration)
+- FALSIFY-CGP-070: NEON profiling on ARM host (needs aarch64 hardware)
 - FALSIFY-CGP-076: Metal native profiling (needs macOS host)
-- FALSIFY-CGP-078/079: WebGPU browser (needs headless Chrome + CDP)
+- FALSIFY-CGP-078: WebGPU browser profiling (needs headless Chrome + CDP)
