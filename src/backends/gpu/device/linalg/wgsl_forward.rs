@@ -612,7 +612,9 @@ impl WgslForwardPass {
             tx.send(r).ok();
         });
         self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
-        rx.recv().unwrap().unwrap();
+        rx.recv()
+            .expect("GPU map_async callback channel disconnected")
+            .expect("GPU buffer mapping failed");
 
         let data = slice.get_mapped_range();
         let result: Vec<f32> = bytemuck::cast_slice(&data)[..len].to_vec();

@@ -280,7 +280,13 @@ impl GpuMatmulCache {
 
         // Bind group (per-call — WGPU requires new bind group when buffer references change)
         let output_buf = self.output_buffer.as_ref().unwrap();
-        let weight_buf = &self.weight_buffers.get(weight_name).unwrap().buffer;
+        let weight_buf = &self
+            .weight_buffers
+            .get(weight_name)
+            .ok_or_else(|| {
+                format!("weight '{}' not loaded — call load_weight() first", weight_name)
+            })?
+            .buffer;
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &self.bind_group_layout,
