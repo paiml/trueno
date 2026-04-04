@@ -218,3 +218,92 @@ fn test_version() {
     // Either it shows version or clap error — both are fine
     assert!(combined.contains("cgp") || combined.contains("0.1"), "output: {combined}");
 }
+
+/// cgp --json doctor must output valid JSON with operational status.
+#[test]
+fn test_json_doctor() {
+    let output =
+        cgp_cmd().args(["--json", "doctor"]).output().expect("Failed to run cgp --json doctor");
+
+    assert!(output.status.success(), "cgp --json doctor failed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Must be valid JSON
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("Doctor JSON output is not valid JSON");
+
+    // Must have expected fields
+    assert!(parsed.get("checks").is_some(), "Missing 'checks' field");
+    assert!(parsed.get("operational").is_some(), "Missing 'operational' field");
+    assert!(parsed.get("elapsed_ms").is_some(), "Missing 'elapsed_ms' field");
+    assert!(parsed["ok_count"].as_u64().unwrap_or(0) > 0, "No OK checks");
+}
+
+/// cgp --json roofline must output valid JSON model.
+#[test]
+fn test_json_roofline() {
+    let output = cgp_cmd()
+        .args(["--json", "roofline", "--target", "cuda"])
+        .output()
+        .expect("Failed to run cgp --json roofline");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("Roofline JSON is not valid JSON");
+
+    assert!(parsed.get("peak_compute").is_some(), "Missing peak_compute");
+    assert!(parsed.get("peak_bandwidth").is_some(), "Missing peak_bandwidth");
+    assert!(parsed.get("target").is_some(), "Missing target");
+}
+
+/// cgp --json diff must output valid JSON metric diffs.
+#[test]
+fn test_json_diff() {
+    let baseline = r#"{"version":"2.0","timestamp":"","hardware":{"cpu_features":[]},"timing":{"wall_clock_time_us":35.7,"samples":1,"stddev_us":0.0,"ci_95_low_us":0.0,"ci_95_high_us":0.0},"throughput":{"tflops":7.5,"gflops":0.0,"bandwidth_gbps":0.0,"arithmetic_intensity":0.0},"muda":[]}"#;
+    let current = r#"{"version":"2.0","timestamp":"","hardware":{"cpu_features":[]},"timing":{"wall_clock_time_us":23.2,"samples":1,"stddev_us":0.0,"ci_95_low_us":0.0,"ci_95_high_us":0.0},"throughput":{"tflops":11.6,"gflops":0.0,"bandwidth_gbps":0.0,"arithmetic_intensity":0.0},"muda":[]}"#;
+
+    std::fs::write("/tmp/cgp-json-test-b.json", baseline).unwrap();
+    std::fs::write("/tmp/cgp-json-test-c.json", current).unwrap();
+
+    let output = cgp_cmd()
+        .args([
+            "--json",
+            "diff",
+            "--baseline",
+            "/tmp/cgp-json-test-b.json",
+            "--current",
+            "/tmp/cgp-json-test-c.json",
+        ])
+        .output()
+        .expect("Failed to run cgp --json diff");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("Diff JSON is not valid JSON");
+
+    assert!(parsed.is_array(), "Diff output should be an array");
+    let arr = parsed.as_array().unwrap();
+    assert!(!arr.is_empty(), "Diff array should not be empty");
+    assert!(arr[0].get("verdict").is_some(), "Missing verdict field");
+
+    let _ = std::fs::remove_file("/tmp/cgp-json-test-b.json");
+    let _ = std::fs::remove_file("/tmp/cgp-json-test-c.json");
+}
+
+/// cgp bench must handle missing benchmark gracefully.
+#[test]
+fn test_bench_missing() {
+    let output = cgp_cmd()
+        .args(["bench", "--bench", "nonexistent_bench_xyz_99"])
+        .output()
+        .expect("Failed to run cgp bench");
+
+    // Should succeed (graceful handling, not crash)
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("CGP Bench") || stdout.contains("not found"), "stdout: {stdout}");
+}
