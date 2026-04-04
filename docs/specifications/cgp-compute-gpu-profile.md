@@ -1672,51 +1672,159 @@ Every metric cgp captures, organized by collection source.
 
 ---
 
-## 10. Implementation Plan
+## 11. Contract-Driven Design (Mandatory)
 
-### 10.1 Phase 1: Foundation (Week 1-2)
+### 11.1 The Rule
 
-| Task | Description | Deliverable |
-|------|-------------|-------------|
-| CGP-001 | Create `cgp` crate in workspace | Cargo.toml + lib.rs + main.rs |
-| CGP-002 | Implement `cgp doctor` | Tool detection, version checks |
-| CGP-003 | Implement ncu wrapper | Parse ncu --csv output into Rust structs |
-| CGP-004 | Implement nsys wrapper | Parse nsys export --type=json |
-| CGP-005 | Implement roofline model | RTX 4090 + AVX2 parameters |
+> **NO CODE WITHOUT A CONTRACT.** Every cgp feature, profiler backend, metric collector, and analysis engine MUST have a provable-contracts YAML written and reviewed BEFORE any Rust implementation begins. Code PRs without a corresponding contract PR are rejected.
 
-### 10.2 Phase 2: Core Profiling (Week 3-4)
+This follows the trueno ecosystem's escape-proof pipeline:
 
-| Task | Description | Deliverable |
-|------|-------------|-------------|
-| CGP-010 | `cgp profile kernel` | CUDA kernel profiling end-to-end |
-| CGP-011 | `cgp profile simd` | perf stat + renacer integration |
-| CGP-012 | `cgp profile compare` | Cross-backend comparison |
-| CGP-013 | Muda detection engine | 7 Muda categories implemented |
-| CGP-014 | JSON export | Full schema output |
+```
+Paper/Spec → Math → YAML Contract → Lean Proof → build.rs Codegen → #[contract] Macro → FALSIFY Tests → Implementation
+```
 
-### 10.3 Phase 3: Contracts + CI (Week 5-6)
+For cgp specifically:
 
-| Task | Description | Deliverable |
-|------|-------------|-------------|
-| CGP-020 | `cgp contract verify` | YAML contract evaluation |
-| CGP-021 | `cgp diff` | Baseline comparison |
-| CGP-022 | `cgp bench` | Enhanced criterion |
-| CGP-023 | Regression detector | Bootstrap CI + effect size |
-| CGP-024 | Makefile integration | profile-cgp, profile-cgp-ci targets |
+```
+Feature Idea → cgp-spec.md update → contracts/cgp/<feature>.yaml → FALSIFY tests → Rust code
+                                            ↓
+                                    pv lint contracts/cgp/
+                                    pv verify-bindings
+```
 
-### 10.4 Phase 4: TUI + Polish (Week 7-8)
+### 11.2 Contract Location
 
-| Task | Description | Deliverable |
-|------|-------------|-------------|
-| CGP-030 | `cgp tui` | Presentar-based TUI |
-| CGP-031 | Roofline chart | ASCII roofline in TUI |
-| CGP-032 | Timeline view | Kernel timeline visualization |
-| CGP-033 | All FALSIFY tests pass | 20+ falsification tests green |
-| CGP-034 | Documentation | README, man page, examples |
+All cgp contracts live in `contracts/cgp/` under the provable-contracts repo, with bindings in `contracts/cgp/binding.yaml`.
+
+### 11.3 Required Contracts (one per feature)
+
+Every task in the implementation plan requires a contract FIRST:
+
+| Contract File | Feature | Key Equations/Bounds |
+|--------------|---------|---------------------|
+| `cgp-doctor-v1.yaml` | `cgp doctor` | Tool detection latency < 2s, graceful degradation |
+| `cgp-roofline-v1.yaml` | Roofline model | ridge = peak_compute / peak_bw, hierarchical L1/L2/DRAM [4][13] |
+| `cgp-ncu-wrapper-v1.yaml` | ncu integration | CSV parse correctness, metric name mapping to CUPTI strings |
+| `cgp-nsys-wrapper-v1.yaml` | nsys integration | SQLite/JSON parse, kernel timeline extraction |
+| `cgp-cupti-profiler-v1.yaml` | CUPTI direct | Activity tracing correctness, metric replay passes |
+| `cgp-perf-wrapper-v1.yaml` | perf stat integration | Counter mapping, SIMD utilization formula [1] |
+| `cgp-regression-v1.yaml` | Regression detector | Bootstrap CI [8], PELT changepoint [43], Cohen's d |
+| `cgp-muda-v1.yaml` | Muda detection | 7 waste categories, threshold calibration [7] |
+| `cgp-compare-v1.yaml` | Cross-backend comparison | TFLOP/s normalization = 2*M*N*K / time [4] |
+| `cgp-compete-v1.yaml` | Competitor profiling | nsys binary wrapping, perf stat fallback |
+| `cgp-wgpu-profiler-v1.yaml` | wgpu timestamp queries | TIMESTAMP_QUERY feature gate, clock correlation |
+| `cgp-metal-profiler-v1.yaml` | Metal native | MTLCounterSampleBuffer, macOS-only gate |
+| `cgp-wasm-profiler-v1.yaml` | WASM SIMD128 | wasmtime fuel metering, jitdump integration |
+| `cgp-quant-profiler-v1.yaml` | Q4K/Q6K CPU | superblock throughput = elements / 256 / time |
+| `cgp-rayon-profiler-v1.yaml` | Rayon parallel | heijunka_score = variance(per_thread_work) |
+| `cgp-neon-profiler-v1.yaml` | ARM NEON | ASE_SPEC counter, QEMU fallback |
+| `cgp-json-export-v1.yaml` | JSON schema v2.0 | Schema validation, all 158 metrics typed |
+| `cgp-tui-v1.yaml` | Presentar TUI | Roofline chart, timeline, keyboard controls |
+| `cgp-contract-verify-v1.yaml` | Contract CI gate | YAML parse, bound evaluation, exit code semantics |
+| `cgp-vram-v1.yaml` | GPU VRAM tracking | cuMemGetInfo correctness, peak tracking, fragmentation |
+| `cgp-system-health-v1.yaml` | System health | NVML temp/power/clock, thermal throttle detection |
+| `cgp-memory-v1.yaml` | CPU memory/swap/IO | /proc parse, dhat integration, swap red flag |
+
+### 11.4 Contract Template
+
+Every cgp contract follows this structure:
+
+```yaml
+# contracts/cgp/cgp-roofline-v1.yaml
+metadata:
+  version: "1.0.0"
+  created: "2026-04-04"
+  author: "PAIML Engineering"
+  description: "Roofline model generation for GPU and CPU targets"
+  references:
+    - "[4] Williams et al. Roofline (2009)"
+    - "[13] Yang et al. Hierarchical Roofline for GPUs (2020)"
+    - "[6] ERT: Empirical Roofline Toolkit (2013)"
+
+equations:
+  ridge_point:
+    formula: "ridge = peak_compute_flops / peak_bandwidth_bytes_per_sec"
+    domain: "peak_compute > 0, peak_bandwidth > 0"
+    properties:
+      - "ridge > 0 for all valid hardware"
+      - "ridge monotonically increases with compute/bandwidth ratio"
+
+  arithmetic_intensity:
+    formula: "AI = total_flops / total_bytes_transferred"
+    domain: "total_bytes > 0"
+
+  bound_classification:
+    formula: |
+      if AI < ridge: Memory-Bound (bandwidth ceiling)
+      if AI >= ridge: Compute-Bound (compute ceiling)
+
+  achieved_throughput:
+    formula: "throughput = min(peak_compute, AI * peak_bandwidth)"
+    domain: "AI >= 0"
+
+performance_bounds:
+  - target: "RTX 4090 FP16 TC"
+    peak_compute_tflops: 330
+    peak_bandwidth_gbps: 1008
+    ridge_flop_per_byte: 327.4
+    tolerance_pct: 1.0
+
+falsification:
+  - name: FALSIFY-ROOF-001
+    description: "Ridge point computation is mathematically correct"
+    check: "abs(ridge - 327.4) < 0.5"
+  - name: FALSIFY-ROOF-002
+    description: "Memory-bound kernel classified correctly"
+    check: "classify(AI=8.0, ridge=327.4) == MemoryBound"
+  - name: FALSIFY-ROOF-003
+    description: "Compute-bound kernel classified correctly"
+    check: "classify(AI=500.0, ridge=327.4) == ComputeBound"
+
+implementation:
+  module_path: "cgp::analysis::roofline"
+  function: "RooflineModel::new"
+  binding_status: not_implemented
+```
+
+### 11.5 Enforcement
+
+The `build.rs` for cgp reads all contracts from `contracts/cgp/` and enforces:
+
+1. **AllImplemented policy**: Every binding with `status: not_implemented` causes a build warning. After Phase 1 deadline, `not_implemented` fails the build.
+2. **pv lint**: All contracts must pass 7-gate quality check before merge.
+3. **FALSIFY coverage**: Every contract equation must have at least one FALSIFY test.
+4. **CI gate**: `cgp contract verify --self` validates cgp's own contracts in CI.
+
+### 11.6 Implementation Sequence (Contract-First)
+
+Each phase writes contracts first, then implements:
+
+**Phase 1 (Week 1-2): Foundation Contracts**
+1. Write `cgp-doctor-v1.yaml`, `cgp-roofline-v1.yaml`, `cgp-ncu-wrapper-v1.yaml`, `cgp-nsys-wrapper-v1.yaml`
+2. `pv lint contracts/cgp/` — all pass
+3. Implement code against contracts
+4. `cgp contract verify --self` green
+
+**Phase 2 (Week 3-4): Profiler Contracts**
+1. Write `cgp-cupti-profiler-v1.yaml`, `cgp-perf-wrapper-v1.yaml`, `cgp-compare-v1.yaml`, `cgp-muda-v1.yaml`, `cgp-json-export-v1.yaml`
+2. Implement
+3. FALSIFY tests green
+
+**Phase 3 (Week 5-6): Backend + CI Contracts**
+1. Write `cgp-wgpu-profiler-v1.yaml`, `cgp-metal-profiler-v1.yaml`, `cgp-wasm-profiler-v1.yaml`, `cgp-quant-profiler-v1.yaml`, `cgp-rayon-profiler-v1.yaml`, `cgp-neon-profiler-v1.yaml`
+2. Write `cgp-regression-v1.yaml`, `cgp-contract-verify-v1.yaml`, `cgp-compete-v1.yaml`
+3. Implement
+4. Full FALSIFY suite green
+
+**Phase 4 (Week 7-8): System + TUI Contracts**
+1. Write `cgp-vram-v1.yaml`, `cgp-system-health-v1.yaml`, `cgp-memory-v1.yaml`, `cgp-tui-v1.yaml`
+2. Implement
+3. All 22+ contracts implemented, all FALSIFY tests pass
 
 ---
 
-## 11. References
+## 12. References
 
 [1] J. Treibig, G. Hager, and G. Wellein, "LIKWID: A Lightweight Performance-Oriented Tool Suite for x86 Multicore Environments," in *ICPPW*, 2010. DOI: 10.1109/ICPPW.2010.38
 
@@ -1777,6 +1885,32 @@ Every metric cgp captures, organized by collection source.
 [29] S. Chetlur et al., "cuDNN: Efficient Primitives for Deep Learning," arXiv:1410.0759, 2014. (Convolution kernel profiling, auto-tuning methodology)
 
 [30] NVIDIA Corporation, "NVIDIA Management Library (NVML) Reference Manual," 2025. (Device monitoring API for real-time GPU metrics)
+
+[31] S. Shen et al., "PEAK: A Performance Engineering AI-Assistant for GPU Kernels Powered by Natural Language Transformations," arXiv:2512.19018, December 2025. (LLM-driven iterative kernel optimization via natural language transformation descriptions)
+
+[32] R. Chen et al., "Towards Robust Agentic CUDA Kernel Benchmarking, Verification, and Optimization," arXiv:2509.14279, September 2025. (Robust-KBench: LLM-based kernel verification + NCU hardware profiling pipeline)
+
+[33] F. Liu and B. Grover, "A Performance Model for Warp Specialization Kernels," arXiv:2506.11209, June 2025. (Differential equation model for warp specialization: factors in warp size, tiling, matrix dims, bandwidth, thread divergence)
+
+[34] A. Haj-Ali et al., "Twill: Optimal Software Pipelining and Warp Specialization for Tensor Core GPUs," arXiv:2512.18134, December 2025. (Provably optimal SWP+WS schedules via constraint solvers — rediscovered Flash Attention schedules)
+
+[35] cuThermo Authors, "cuThermo: Understanding GPU Memory Inefficiencies with Heat Map Profiling," arXiv:2507.18729, July 2025. (Word-sector-level memory heat maps, 5 portable access patterns, up to 721% improvement)
+
+[36] D. Mattson et al., "Detection of Performance Changes in MooBench Results," arXiv:2510.11310, October 2025. (E-Divisive means algorithm for CI/CD performance regression detection via GitHub Actions)
+
+[37] Tawa Authors, "Tawa: Automatic Warp Specialization for Modern GPUs," arXiv:2510.14719, October 2025. (Automatic warp specialization via aref abstraction — overlaps TMA, shared memory, and WGMMA)
+
+[38] Blackwell Microbenchmarking Authors, "Microbenchmarking NVIDIA's Blackwell Architecture," arXiv:2512.02189, December 2025. (Open-source microbench suite for B200: tensor cores 2.9-11.6x lower latency than Hopper wgmma)
+
+[39] Opal Authors, "Opal: A Modular Framework for Optimizing Performance using Analytics and LLMs," arXiv:2510.00932, October 2025. (Roofline + LLM optimization: 98.5% success rate, 19-52% speedups across 1640 kernels)
+
+[40] F. Ren et al., "Can Large Language Models Predict Parallel Code Performance?," arXiv:2505.03988, May 2025. (340-kernel benchmark, 100% roofline classification accuracy with profiling data)
+
+[41] NeuSight Authors, "Forecasting GPU Performance for Deep Learning Training and Inference," arXiv:2407.13853, 2024/2025. (Tile-level utilization prediction with performance bounds from GPU architecture specs)
+
+[42] KernelCraft Authors, "KernelCraft: Benchmarking for Agentic Close-to-Metal Kernel Generation on Emerging Hardware," arXiv:2603.08721, March 2026. (Multi-platform kernel gen benchmark: PLENA, AMD NPU, Coral NPU)
+
+[43] R. Killick, P. Fearnhead, and I. A. Eckley, "Optimal Detection of Changepoints with a Linear Computational Cost," *JASA*, 2012. arXiv:1101.1438. (PELT algorithm for O(n) changepoint detection — foundational for regression detection)
 
 ---
 
