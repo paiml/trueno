@@ -5,7 +5,7 @@
 //!
 //! Contract: cublas-gemm-v1.yaml (FALSIFY-CUBLAS-001, -003, -005)
 
-use crate::driver::{CublasHandle, CudaContext, CudaStream, GpuBuffer};
+use crate::driver::{CublasHandle, CudaContext, CudaStream, GpuBuffer, LaunchConfig};
 
 /// FALSIFY-CUBLAS-005: CublasHandle creates and destroys cleanly
 #[test]
@@ -298,4 +298,163 @@ fn cublas_bench_gemm_fp16_throughput() {
         );
     }
     eprintln!();
+}
+
+/// PTX GEMM vs cuBLAS side-by-side benchmark.
+///
+/// Compares trueno-gpu's pure-Rust PTX kernels against NVIDIA cuBLAS.
+/// Run: cargo test -p trueno-gpu --features cuda --lib --release -- ptx_vs_cublas --no-capture
+#[test]
+fn ptx_vs_cublas_gemm_f32() {
+    use crate::driver::module::CudaModule;
+    use crate::kernels::{GemmKernel, Kernel};
+    use std::ffi::c_void;
+    use std::time::Instant;
+
+    let ctx = CudaContext::new(0).expect("CUDA context");
+    let stream = CudaStream::new(&ctx).expect("stream");
+    let handle = CublasHandle::new(&ctx).expect("cuBLAS handle");
+    handle.set_stream(&stream).expect("set_stream");
+
+    eprintln!();
+    eprintln!("=== PTX GEMM (pure Rust) vs cuBLAS (NVIDIA) — FP32 ===");
+    eprintln!("{:<10} {:>12} {:>12} {:>10}", "Size", "PTX(µs)", "cuBLAS(µs)", "Ratio");
+    eprintln!("{}", "-".repeat(48));
+
+    // FP32 tiled GEMM — test small sizes where PTX launch overhead matters
+    for &n in &[32_usize, 64, 128, 256] {
+        let m = n;
+        let k = n;
+
+        let a_data = vec![1.0f32; m * k];
+        let b_data = vec![1.0f32; k * n];
+        let c_data = vec![0.0f32; m * n];
+
+        let a_buf = GpuBuffer::from_host(&ctx, &a_data).expect("A");
+        let b_buf = GpuBuffer::from_host(&ctx, &b_data).expect("B");
+        let c_buf = GpuBuffer::from_host(&ctx, &c_data).expect("C");
+
+        // --- PTX GEMM ---
+        let tile_size = 32.min(n);
+        let kernel = GemmKernel::tiled(m as u32, n as u32, k as u32, tile_size as u32);
+        let ptx = kernel.emit_ptx();
+        let mut module = match CudaModule::from_ptx(&ctx, &ptx) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("{:<10} PTX compile failed: {e}", format!("{n}x{n}"));
+                continue;
+            }
+        };
+
+        let grid_x = ((n + tile_size - 1) / tile_size) as u32;
+        let grid_y = ((m + tile_size - 1) / tile_size) as u32;
+        let config = LaunchConfig {
+            grid: (grid_x, grid_y, 1),
+            block: (tile_size as u32, tile_size as u32, 1),
+            shared_mem: 0,
+        };
+
+        let mut a_ptr = a_buf.as_ptr();
+        let mut b_ptr = b_buf.as_ptr();
+        let mut c_ptr = c_buf.as_ptr();
+        let mut m_val = m as u32;
+        let mut n_val = n as u32;
+        let mut k_val = k as u32;
+
+        let mut args: Vec<*mut c_void> = vec![
+            &mut a_ptr as *mut _ as *mut c_void,
+            &mut b_ptr as *mut _ as *mut c_void,
+            &mut c_ptr as *mut _ as *mut c_void,
+            &mut m_val as *mut _ as *mut c_void,
+            &mut n_val as *mut _ as *mut c_void,
+            &mut k_val as *mut _ as *mut c_void,
+        ];
+
+        // Warmup PTX
+        for _ in 0..3 {
+            unsafe {
+                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args).ok();
+            }
+        }
+        stream.synchronize().ok();
+
+        // Benchmark PTX
+        let iters = 50;
+        let start = Instant::now();
+        for _ in 0..iters {
+            unsafe {
+                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args).ok();
+            }
+        }
+        stream.synchronize().ok();
+        let ptx_us = start.elapsed().as_micros() as f64 / iters as f64;
+
+        // --- cuBLAS FP32 ---
+        // cuBLAS uses column-major, so we transpose: C^T = B^T @ A^T
+        use crate::driver::GemmOp;
+        // Warmup
+        for _ in 0..3 {
+            handle
+                .gemm_f32(
+                    GemmOp::NoTrans,
+                    GemmOp::NoTrans,
+                    n as i32,
+                    m as i32,
+                    k as i32,
+                    1.0,
+                    b_buf.as_ptr(),
+                    n as i32,
+                    a_buf.as_ptr(),
+                    k as i32,
+                    0.0,
+                    c_buf.as_ptr(),
+                    n as i32,
+                )
+                .ok();
+        }
+        stream.synchronize().ok();
+
+        let start = Instant::now();
+        for _ in 0..iters {
+            handle
+                .gemm_f32(
+                    GemmOp::NoTrans,
+                    GemmOp::NoTrans,
+                    n as i32,
+                    m as i32,
+                    k as i32,
+                    1.0,
+                    b_buf.as_ptr(),
+                    n as i32,
+                    a_buf.as_ptr(),
+                    k as i32,
+                    0.0,
+                    c_buf.as_ptr(),
+                    n as i32,
+                )
+                .ok();
+        }
+        stream.synchronize().ok();
+        let cublas_us = start.elapsed().as_micros() as f64 / iters as f64;
+
+        let ratio = if cublas_us > 0.0 { ptx_us / cublas_us } else { 0.0 };
+        let status = if ratio < 2.0 {
+            "competitive"
+        } else if ratio < 5.0 {
+            "gap"
+        } else {
+            "needs work"
+        };
+
+        eprintln!(
+            "{:<10} {:>10.1}µs {:>10.1}µs {:>8.1}x  {status}",
+            format!("{n}x{n}"),
+            ptx_us,
+            cublas_us,
+            ratio,
+        );
+    }
+    eprintln!();
+    eprintln!("Note: PTX kernels are pure Rust (no nvcc). cuBLAS is NVIDIA vendor-optimized.");
+    eprintln!("PTX/cuBLAS ratio <2x = competitive, <5x = gap, >5x = needs work.");
 }
