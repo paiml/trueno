@@ -1937,7 +1937,57 @@ Tested on: RTX 4090, Driver 570.207, ncu 2025.1.1.0, nsys 2025.3.2.367, perf 6.8
 
 **Summary**: 14 tests executed, 12 PASS, 2 FIXED (arithmetic intensity and coalescing threshold corrected).
 
-**Implementation status** (2026-04-04): cgp binary fully functional in `crates/cgp/` with 109 unit + 28 integration = 137 tests.
+### Appendix A.1: FALSIFY Suite (automated, 2026-04-04)
+
+10 end-to-end falsification tests in `tests/falsify.rs`, all passed:
+
+| Test ID | Claim | Result | Method |
+|---------|-------|--------|--------|
+| FALSIFY-CGP-021 | Ridge = 330000/1008 = 327.4 | **PASS** | JSON roofline parse, math check |
+| FALSIFY-CGP-030 | Detect 10% regression | **PASS** | Synthetic profiles, bootstrap CI |
+| FALSIFY-CGP-031 | No false positive <2% | **PASS** | 0.9% diff → NO_CHANGE verdict |
+| FALSIFY-CGP-041 | AVX2 >= 3x scalar | **PASS** | JSON compare, speedup = 4.8x |
+| FALSIFY-CGP-043 | Profile binary via nsys | **PASS** | nvidia-smi as test binary |
+| FALSIFY-CGP-045 | Compete normalized table | **PASS** | sleep 0.01 vs 0.02, labels verified |
+| FALSIFY-CGP-047 | Crash handling | **PASS** | `false` binary, no cgp crash |
+| FALSIFY-CGP-061 | Doctor < 2s | **PASS** | 107ms measured |
+| FALSIFY-CGP-062 | Diff < 100ms | **PASS** | 2ms measured (pure JSON analysis) |
+| FALSIFY-CGP-075 | Q4K = 9.44 MB | **PASS** | Compressed size in output |
+
+### Appendix A.2: Performance Measurements (2026-04-04)
+
+Measured on: Threadripper 7960X (24C/48T, AVX2+FMA+AVX-512) + RTX 4090
+
+**CPU GEMM (trueno BLIS, `benchmark_matrix_suite --features parallel`):**
+
+| Size | Single-Thread | GFLOPS | Parallel (24C) | GFLOPS | Per-Core Eff |
+|------|--------------|--------|----------------|--------|-------------|
+| 256 | 0.57 ms | 59.0 | 0.22 ms | 154.9 | 53% |
+| 512 | 3.75 ms | 71.6 | 0.87 ms | 309.2 | 64% |
+| 1024 | 30.14 ms | 71.3 | 4.20 ms | 511.3 | 64% |
+
+Per-core peak (AVX2+FMA @ 3.5GHz): 112 GFLOPS. Multi-core peak: 2688 GFLOPS.
+Best single-thread efficiency: 64%. Best parallel efficiency: 19%.
+
+**GPU GEMM (trueno CTA WMMA + cuBLAS, RTX 4090):**
+
+| Backend | 512x512 | TFLOP/s | Efficiency vs FP16 Peak |
+|---------|---------|---------|------------------------|
+| cuBLAS FP16 | ~7.7 us | 34.7 | 10.5% |
+| CTA WMMA FP16 | 23.2 us | 11.6 | 3.5% |
+
+**Head-to-Head (cgp compete, full benchmark suite):**
+
+| Library | Time | vs Best |
+|---------|------|---------|
+| trueno (parallel BLIS) | 184.8 ms | 1.00x |
+| NumPy 2.x (MKL) | 388.3 ms | 2.10x |
+
+**Roofline gap analysis:**
+- CPU BLIS at 1024: 511 GFLOPS / 2688 peak = 19% → M-dimension parallelism + NUMA locality needed
+- GPU CTA WMMA: 11.6 TFLOP/s / 330 peak = 3.5% → larger tiles + double-buffering needed
+
+**Implementation status** (2026-04-04): cgp binary fully functional in `crates/cgp/` with 109 unit + 10 falsify + 28 integration = 147 tests.
 
 All 16 CLI subcommands implemented and dogfooded on RTX 4090 + Threadripper 7960X:
 
@@ -1958,7 +2008,8 @@ All 16 CLI subcommands implemented and dogfooded on RTX 4090 + Threadripper 7960
 | `cgp compete` | **DONE** | Head-to-head timing with vs-best ratios |
 | `cgp baseline` | **DONE** | Save/load/list baselines with system health context |
 | `cgp trace` | **DONE** | Wraps nsys with CUDA+NVTX+OSRT trace categories |
-| `cgp contract verify` | **DONE** | YAML parse + structural validation |
+| `cgp profile cublas` | **DONE** | cuBLAS estimates from roofline, nsys kernel extraction |
+| `cgp contract verify` | **DONE** | Real perf bounds checking against saved profiles + falsification expression eval |
 | `cgp contract generate` | **DONE** | Generate YAML contract from profile or estimates |
 | `cgp explain` | **DONE** | Static PTX analysis (instruction mix, registers, WMMA) + WGSL analysis |
 | `cgp bench` | **DONE** | Criterion wrapper with perf stat overlay via --counters |
@@ -1974,7 +2025,7 @@ New in Phase 2 (PMAT-019):
 - **Scalar profiler**: perf stat hardware counter integration
 - **Bench command**: perf stat overlay with --counters flag
 
-FALSIFY tests implemented (109 unit + 28 integration):
+FALSIFY tests implemented (109 unit + 10 falsify + 28 integration = 147):
 - FALSIFY-CGP-010/011/012: Doctor tool detection (doctor.rs + integration)
 - FALSIFY-CGP-020/021: Roofline ridge points, all 4 precisions (analysis/roofline.rs + integration)
 - FALSIFY-CGP-030/031/032: Regression detection — bootstrap CI (analysis/regression.rs)
