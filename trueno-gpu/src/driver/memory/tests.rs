@@ -83,10 +83,13 @@ mod cuda_tests {
         let ctx = cuda_ctx!();
         let buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, 100).unwrap();
 
-        // Try to copy into too-small buffer
-        let mut result: Vec<f32> = vec![0.0; 50];
-        let copy_result = buf.copy_to_host(&mut result);
-        assert!(copy_result.is_err());
+        // Smaller host buffer is OK (partial copy) — copies first 50 elements
+        let mut partial: Vec<f32> = vec![0.0; 50];
+        assert!(buf.copy_to_host(&mut partial).is_ok());
+
+        // Larger host buffer than device MUST fail
+        let mut too_large: Vec<f32> = vec![0.0; 200];
+        assert!(buf.copy_to_host(&mut too_large).is_err());
     }
 
     #[test]

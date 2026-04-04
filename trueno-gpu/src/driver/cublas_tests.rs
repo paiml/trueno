@@ -458,3 +458,154 @@ fn ptx_vs_cublas_gemm_f32() {
     eprintln!("Note: PTX kernels are pure Rust (no nvcc). cuBLAS is NVIDIA vendor-optimized.");
     eprintln!("PTX/cuBLAS ratio <2x = competitive, <5x = gap, >5x = needs work.");
 }
+
+/// WMMA Tensor Core FP16 PTX vs cuBLAS FP16 benchmark.
+///
+/// Tests trueno-gpu's pure-Rust WMMA 16×16×16 FP16 kernels against cuBLAS
+/// with tensor core FP16 accumulation. Both use hardware tensor cores.
+///
+/// Run: cargo test -p trueno-gpu --features cuda --lib --release -- wmma_vs_cublas --no-capture
+#[test]
+fn wmma_vs_cublas_fp16() {
+    use crate::driver::module::CudaModule;
+    use crate::driver::GemmOp;
+    use crate::kernels::{GemmKernel, Kernel};
+    use std::ffi::c_void;
+    use std::time::Instant;
+
+    let ctx = CudaContext::new(0).expect("CUDA context");
+    let stream = CudaStream::new(&ctx).expect("stream");
+    let handle = CublasHandle::new(&ctx).expect("cuBLAS handle");
+    handle.set_stream(&stream).expect("set_stream");
+
+    eprintln!();
+    eprintln!("=== WMMA Tensor Core (pure Rust PTX) vs cuBLAS — FP16 ===");
+    eprintln!(
+        "{:<10} {:>12} {:>12} {:>12} {:>10}",
+        "Size", "WMMA(µs)", "cuBLAS(µs)", "WMMA TFLOP/s", "Ratio"
+    );
+    eprintln!("{}", "-".repeat(60));
+
+    for &n in &[128_usize, 256, 512, 1024] {
+        let m = n;
+        let k = n;
+        let flops = 2.0 * m as f64 * n as f64 * k as f64;
+
+        // FP32 input (WMMA kernel converts to FP16 internally)
+        let a_data = vec![1.0f32; m * k];
+        let b_data = vec![1.0f32; k * n];
+        let c_data = vec![0.0f32; m * n];
+
+        let a_buf = GpuBuffer::from_host(&ctx, &a_data).expect("A");
+        let b_buf = GpuBuffer::from_host(&ctx, &b_data).expect("B");
+        let c_buf = GpuBuffer::from_host(&ctx, &c_data).expect("C");
+
+        // --- WMMA PTX kernel ---
+        let kernel = GemmKernel::tensor_core(m as u32, n as u32, k as u32);
+        let ptx = kernel.emit_ptx();
+        let mut module = match CudaModule::from_ptx(&ctx, &ptx) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("{:<10} WMMA PTX compile failed: {e}", format!("{n}x{n}"));
+                continue;
+            }
+        };
+
+        let grid_x = ((n + 15) / 16) as u32;
+        let grid_y = ((m + 15) / 16) as u32;
+        let config = LaunchConfig {
+            grid: (grid_x, grid_y, 1),
+            block: (32, 1, 1), // 1 warp per 16x16 tile
+            shared_mem: 0,
+        };
+
+        let mut a_ptr = a_buf.as_ptr();
+        let mut b_ptr = b_buf.as_ptr();
+        let mut c_ptr = c_buf.as_ptr();
+        let mut m_val = m as u32;
+        let mut n_val = n as u32;
+        let mut k_val = k as u32;
+
+        let mut args: Vec<*mut c_void> = vec![
+            &mut a_ptr as *mut _ as *mut c_void,
+            &mut b_ptr as *mut _ as *mut c_void,
+            &mut c_ptr as *mut _ as *mut c_void,
+            &mut m_val as *mut _ as *mut c_void,
+            &mut n_val as *mut _ as *mut c_void,
+            &mut k_val as *mut _ as *mut c_void,
+        ];
+
+        // Warmup WMMA
+        for _ in 0..5 {
+            unsafe {
+                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args).ok();
+            }
+        }
+        stream.synchronize().ok();
+
+        let iters = if n <= 256 { 100 } else { 50 };
+        let start = Instant::now();
+        for _ in 0..iters {
+            unsafe {
+                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args).ok();
+            }
+        }
+        stream.synchronize().ok();
+        let wmma_us = start.elapsed().as_micros() as f64 / iters as f64;
+        let wmma_tflops = flops / (wmma_us * 1e6);
+
+        // --- cuBLAS FP16 ---
+        let a16 = vec![0x3C00u16; m * k]; // 1.0 in FP16
+        let b16 = vec![0x3C00u16; k * n];
+        let c16 = vec![0u16; m * n];
+        let a16_buf = GpuBuffer::from_host(&ctx, &a16).expect("A16");
+        let b16_buf = GpuBuffer::from_host(&ctx, &b16).expect("B16");
+        let c16_buf = GpuBuffer::from_host(&ctx, &c16).expect("C16");
+
+        for _ in 0..5 {
+            handle
+                .gemm_f16_row_major(
+                    m as i32,
+                    n as i32,
+                    k as i32,
+                    1.0,
+                    a16_buf.as_ptr(),
+                    b16_buf.as_ptr(),
+                    0.0,
+                    c16_buf.as_ptr(),
+                )
+                .ok();
+        }
+        stream.synchronize().ok();
+
+        let start = Instant::now();
+        for _ in 0..iters {
+            handle
+                .gemm_f16_row_major(
+                    m as i32,
+                    n as i32,
+                    k as i32,
+                    1.0,
+                    a16_buf.as_ptr(),
+                    b16_buf.as_ptr(),
+                    0.0,
+                    c16_buf.as_ptr(),
+                )
+                .ok();
+        }
+        stream.synchronize().ok();
+        let cublas_us = start.elapsed().as_micros() as f64 / iters as f64;
+
+        let ratio = if cublas_us > 0.0 { wmma_us / cublas_us } else { 0.0 };
+
+        eprintln!(
+            "{:<10} {:>10.1}µs {:>10.1}µs {:>10.1} {:>8.1}x",
+            format!("{n}x{n}"),
+            wmma_us,
+            cublas_us,
+            wmma_tflops,
+            ratio,
+        );
+    }
+    eprintln!();
+}
