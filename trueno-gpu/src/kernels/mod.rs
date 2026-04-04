@@ -26,7 +26,7 @@ mod bias_activation;
 mod conv1d;
 mod elementwise;
 mod fused;
-mod gemm;
+pub(crate) mod gemm;
 mod gemv;
 mod layernorm;
 pub mod lz4;
@@ -103,16 +103,16 @@ pub use quantize::{
     ChunkedTiledQ4KGemvKernel, CoalescedQ4KGemvKernel, CoalescedQ6KGemvKernel, Dp4aQ4KGemmKernel,
     Dp4aQ4KGemvKernel, Dp4aQ6KGemvKernel, Fp16Q4KGemvKernel, FusedFp32Q4KGemvKernel,
     FusedGateUpQ4KGemvKernel, FusedGateUpSwigluHwDp4aQ4KGemvKernel, FusedNf4GateUpGemmKernel,
-    FusedRmsNormGateUpSwigluQ4KKernel, FusedRmsNormNf4GemvKernel, FusedRmsNormQ4KGemvKernel,
-    HalfWarpDp4aQ4KGemvKernel, HalfWarpDp4aQ6KGemvKernel, InlineQ8Dp4aQ4KGemvKernel,
-    InterleavedWmmaQ4KGemmKernel, MultiWarpQ6KGemvKernel, MultiWarpTensorCoreQ4KGemmKernel,
-    MultiWarpVectorizedQ4KGemvKernel, MwvDp4aQ4KGemvKernel, Nf4GemmKernel, Nf4GemmTransposeKernel,
-    Nf4Quantized, Nf4TensorCoreGemmKernel, PackedDp4aQ4KQ8Kernel, Q4KDequantFp16Kernel,
-    Q4KDequantKernel, Q4KGemvKernel, Q4KQ8DotKernel, Q4_0GemvKernel, Q4_1GemvKernel, Q5KGemvKernel,
-    Q5KKernel, Q5_0GemvKernel, Q6KDequantKernel, Q6KGemvKernel, Q6KKernel, Q8QuantizeKernel,
-    Q8_0GemvKernel, QuantizeKernel, TensorCoreQ4KGemmKernel, TiledQ4KGemvKernel,
-    TrueDp4aQ4KGemvKernel, VectorizedQ4KGemvKernel, W4a16WmmaQ4KGemmKernel, WideQ4KGemvKernel,
-    NF4_BLOCK_BYTES, NF4_BLOCK_SIZE, NF4_LUT,
+    FusedQKVHwDp4aQ4KGemvKernel, FusedRmsNormGateUpSwigluQ4KKernel, FusedRmsNormNf4GemvKernel,
+    FusedRmsNormQ4KGemvKernel, HalfWarpDp4aQ4KGemvKernel, HalfWarpDp4aQ6KGemvKernel,
+    InlineQ8Dp4aQ4KGemvKernel, InterleavedWmmaQ4KGemmKernel, MultiWarpQ6KGemvKernel,
+    MultiWarpTensorCoreQ4KGemmKernel, MultiWarpVectorizedQ4KGemvKernel, MwvDp4aQ4KGemvKernel,
+    Nf4GemmKernel, Nf4GemmTransposeKernel, Nf4Quantized, Nf4TensorCoreGemmKernel,
+    PackedDp4aQ4KQ8Kernel, Q4KDequantFp16Kernel, Q4KDequantKernel, Q4KGemvKernel, Q4KQ8DotKernel,
+    Q4_0GemvKernel, Q4_1GemvKernel, Q5KGemvKernel, Q5KKernel, Q5_0GemvKernel, Q6KDequantKernel,
+    Q6KGemvKernel, Q6KKernel, Q8QuantizeKernel, Q8_0GemvKernel, QuantizeKernel,
+    TensorCoreQ4KGemmKernel, TiledQ4KGemvKernel, TrueDp4aQ4KGemvKernel, VectorizedQ4KGemvKernel,
+    W4a16WmmaQ4KGemmKernel, WideQ4KGemvKernel, NF4_BLOCK_BYTES, NF4_BLOCK_SIZE, NF4_LUT,
 };
 pub use softmax::{LongRowSoftmaxKernel, SoftmaxKernel};
 

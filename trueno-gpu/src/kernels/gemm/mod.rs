@@ -6,7 +6,7 @@
 //! - **Batched**: 3D batched GEMM for independent matrix multiplications
 //! - **Batched4D**: 4D batched GEMM for multi-head attention
 
-mod basic;
+pub(crate) mod basic;
 mod batched;
 mod batched_4d;
 

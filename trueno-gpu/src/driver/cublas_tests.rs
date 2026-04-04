@@ -609,3 +609,136 @@ fn wmma_vs_cublas_fp16() {
     }
     eprintln!();
 }
+
+/// CTA-tiled WMMA (4 warps, 32×32 tiles) vs cuBLAS FP16.
+///
+/// Run: cargo test -p trueno-gpu --features cuda --lib --release -- cta_wmma_vs_cublas --no-capture
+#[test]
+fn cta_wmma_vs_cublas_fp16() {
+    use crate::driver::module::CudaModule;
+    use crate::kernels::gemm::basic::tensor_core::cta_wmma::build_cta_wmma_fp16;
+    use crate::ptx::PtxModule;
+    use std::ffi::c_void;
+    use std::time::Instant;
+
+    let ctx = CudaContext::new(0).expect("CUDA context");
+    let stream = CudaStream::new(&ctx).expect("stream");
+    let handle = CublasHandle::new(&ctx).expect("cuBLAS handle");
+    handle.set_stream(&stream).expect("set_stream");
+
+    eprintln!();
+    eprintln!("=== CTA WMMA (4-warp, 32x32) vs cuBLAS — FP16 ===");
+    eprintln!(
+        "{:<10} {:>12} {:>12} {:>12} {:>10}",
+        "Size", "CTA(us)", "cuBLAS(us)", "CTA TFLOP/s", "Ratio"
+    );
+    eprintln!("{}", "-".repeat(60));
+
+    for &n in &[128_usize, 256, 512] {
+        let m = n;
+        let k = n;
+        let flops = 2.0 * m as f64 * n as f64 * k as f64;
+
+        let a16 = vec![0x3C00u16; m * k];
+        let b16 = vec![0x3C00u16; k * n];
+        let c32 = vec![0.0f32; m * n];
+
+        let a_buf = GpuBuffer::from_host(&ctx, &a16).expect("A");
+        let b_buf = GpuBuffer::from_host(&ctx, &b16).expect("B");
+        let c_buf = GpuBuffer::from_host(&ctx, &c32).expect("C");
+
+        let kernel = build_cta_wmma_fp16(m as u32, n as u32, k as u32);
+        let ptx_str = PtxModule::new().add_kernel(kernel).emit();
+        let mut module = match CudaModule::from_ptx(&ctx, &ptx_str) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("{:<10} CTA compile failed: {e}", format!("{n}x{n}"));
+                continue;
+            }
+        };
+
+        let grid_x = ((n + 31) / 32) as u32;
+        let grid_y = ((m + 31) / 32) as u32;
+        let config =
+            LaunchConfig { grid: (grid_x, grid_y, 1), block: (128, 1, 1), shared_mem: 2048 };
+
+        let mut a_ptr = a_buf.as_ptr();
+        let mut b_ptr = b_buf.as_ptr();
+        let mut c_ptr = c_buf.as_ptr();
+        let mut m_v = m as u32;
+        let mut n_v = n as u32;
+        let mut k_v = k as u32;
+        let mut args: Vec<*mut c_void> = vec![
+            &mut a_ptr as *mut _ as *mut c_void,
+            &mut b_ptr as *mut _ as *mut c_void,
+            &mut c_ptr as *mut _ as *mut c_void,
+            &mut m_v as *mut _ as *mut c_void,
+            &mut n_v as *mut _ as *mut c_void,
+            &mut k_v as *mut _ as *mut c_void,
+        ];
+
+        for _ in 0..5 {
+            unsafe {
+                stream.launch_kernel(&mut module, "gemm_cta_wmma_fp16", &config, &mut args).ok();
+            }
+        }
+        stream.synchronize().ok();
+
+        let iters = 50;
+        let start = Instant::now();
+        for _ in 0..iters {
+            unsafe {
+                stream.launch_kernel(&mut module, "gemm_cta_wmma_fp16", &config, &mut args).ok();
+            }
+        }
+        stream.synchronize().ok();
+        let cta_us = start.elapsed().as_micros() as f64 / iters as f64;
+        let cta_tflops = flops / (cta_us * 1e6);
+
+        // cuBLAS
+        let c16_buf = GpuBuffer::from_host(&ctx, &vec![0u16; m * n]).expect("C16");
+        for _ in 0..5 {
+            handle
+                .gemm_f16_row_major(
+                    m as i32,
+                    n as i32,
+                    k as i32,
+                    1.0,
+                    a_buf.as_ptr(),
+                    b_buf.as_ptr(),
+                    0.0,
+                    c16_buf.as_ptr(),
+                )
+                .ok();
+        }
+        stream.synchronize().ok();
+        let start = Instant::now();
+        for _ in 0..iters {
+            handle
+                .gemm_f16_row_major(
+                    m as i32,
+                    n as i32,
+                    k as i32,
+                    1.0,
+                    a_buf.as_ptr(),
+                    b_buf.as_ptr(),
+                    0.0,
+                    c16_buf.as_ptr(),
+                )
+                .ok();
+        }
+        stream.synchronize().ok();
+        let cublas_us = start.elapsed().as_micros() as f64 / iters as f64;
+        let ratio = if cublas_us > 0.0 { cta_us / cublas_us } else { 0.0 };
+
+        eprintln!(
+            "{:<10} {:>10.1}us {:>10.1}us {:>10.1} {:>8.1}x",
+            format!("{n}x{n}"),
+            cta_us,
+            cublas_us,
+            cta_tflops,
+            ratio,
+        );
+    }
+    eprintln!();
+}

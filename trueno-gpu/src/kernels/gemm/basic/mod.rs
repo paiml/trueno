@@ -4,7 +4,7 @@
 
 #![allow(clippy::similar_names)]
 
-mod tensor_core;
+pub(crate) mod tensor_core;
 mod tiled_unrolled;
 
 #[cfg(test)]
