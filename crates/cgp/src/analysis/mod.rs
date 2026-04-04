@@ -1,3 +1,5 @@
+pub mod baseline;
+pub mod compete;
 pub mod contracts;
 pub mod diff;
 pub mod muda;

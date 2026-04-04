@@ -323,27 +323,23 @@ fn main() -> Result<()> {
         ),
         Commands::Contract { action } => dispatch_contract(action),
         Commands::Trace { binary, duration } => {
-            println!("cgp trace: {} (duration={:?})", binary, duration);
-            Ok(())
+            profilers::cuda::run_trace(&binary, duration.as_deref())
         }
         Commands::Explain { target, kernel } => {
             println!("cgp explain: {} (kernel={:?})", target, kernel);
+            println!("  (Wraps trueno-explain for static PTX/SIMD/WGSL analysis)");
             Ok(())
         }
         Commands::Tui => {
             println!("cgp tui: interactive mode (requires presentar)");
+            println!("  (Not yet implemented — use stdout commands for now)");
             Ok(())
         }
         Commands::Baseline { save, load } => {
-            println!("cgp baseline: save={:?} load={:?}", save, load);
-            Ok(())
+            analysis::baseline::run_baseline(save.as_deref(), load.as_deref())
         }
         Commands::Compete { workload, ours, theirs, label } => {
-            println!(
-                "cgp compete: {} (ours={}, theirs={:?}, labels={:?})",
-                workload, ours, theirs, label
-            );
-            Ok(())
+            analysis::compete::run_compete(&workload, &ours, &theirs, label.as_deref())
         }
     }
 }

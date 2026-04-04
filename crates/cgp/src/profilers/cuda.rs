@@ -676,6 +676,70 @@ pub fn profile_python(args: &[String]) -> Result<()> {
     Ok(())
 }
 
+/// Run `cgp trace` — system-wide timeline via nsys.
+pub fn run_trace(binary: &str, duration: Option<&str>) -> Result<()> {
+    println!("\n=== CGP System Trace: {binary} ===\n");
+
+    let profiler = match NsysProfiler::detect() {
+        Some(p) => p,
+        None => {
+            anyhow::bail!("nsys not found. Install NVIDIA Nsight Systems for timeline tracing.");
+        }
+    };
+
+    let report_path = format!("/tmp/cgp-trace-{}", std::process::id());
+
+    let mut cmd = Command::new(&profiler.nsys_path);
+    cmd.arg("profile")
+        .arg("--stats=true")
+        .arg("--force-overwrite=true")
+        .arg("--trace=cuda,nvtx,osrt")
+        .arg("-o")
+        .arg(&report_path);
+
+    if let Some(dur) = duration {
+        cmd.arg("--duration").arg(dur);
+    }
+
+    cmd.arg(binary);
+
+    eprintln!("Running nsys trace (this may take a while)...");
+    let output = cmd.output().with_context(|| "Failed to run nsys trace")?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Print stats summary
+    let combined = format!("{stdout}\n{stderr}");
+    let mut in_summary = false;
+    for line in combined.lines() {
+        if line.contains("CUDA API Statistics")
+            || line.contains("CUDA Kernel Statistics")
+            || line.contains("OS Runtime Statistics")
+        {
+            in_summary = true;
+            println!("  {line}");
+            continue;
+        }
+        if in_summary {
+            if line.trim().is_empty() {
+                in_summary = false;
+                println!();
+            } else {
+                println!("  {line}");
+            }
+        }
+    }
+
+    let report_file = format!("{report_path}.nsys-rep");
+    if std::path::Path::new(&report_file).exists() {
+        println!("  Report: {report_file}");
+        println!("  View: nsys-ui {report_file}");
+    }
+
+    println!();
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
