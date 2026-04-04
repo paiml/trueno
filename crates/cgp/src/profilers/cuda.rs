@@ -485,14 +485,99 @@ fn find_kernel_binary(_kernel_name: &str) -> Option<(String, Vec<String>)> {
 /// Profile cuBLAS operations.
 pub fn profile_cublas(op: &str, size: u32) -> Result<()> {
     println!("\n=== CGP cuBLAS Profile: {op} ({size}x{size}) ===\n");
-    if let Some(profiler) = NcuProfiler::detect() {
-        println!("  Backend: ncu at {}", profiler.ncu_path.display());
-        println!("  To profile cuBLAS, use:");
-        println!("    cgp profile binary ./your_cublas_bench --kernel-filter {op}");
-    } else {
-        println!("  ncu not found.");
+
+    let gpu_name = detect_gpu_name().unwrap_or_else(|| "Unknown GPU".to_string());
+    let driver = detect_driver_version().unwrap_or_else(|| "?".to_string());
+    println!("  GPU: {gpu_name} (Driver {driver})");
+
+    // Calculate expected performance from roofline
+    let flops = 2.0 * (size as f64).powi(3);
+    println!("  Operation: {op}");
+    println!("  Problem size: {size}x{size}x{size}");
+    println!("  FLOPs: {flops:.2e}");
+
+    // cuBLAS peak estimates for RTX 4090
+    let (peak_tflops, precision) = match op {
+        "gemm_f16" | "hgemm" => (330.0, "FP16 Tensor"),
+        "gemm_f32" | "sgemm" => (82.6, "FP32"),
+        "gemm_tf32" => (165.0, "TF32 Tensor"),
+        _ => (82.6, "FP32 (default)"),
+    };
+    println!("  Precision: {precision} (peak: {peak_tflops:.1} TFLOP/s)");
+
+    // Try to find a cuBLAS benchmark binary
+    let cublas_bin = find_cublas_binary();
+    match cublas_bin {
+        Some(bin) => {
+            println!("  Binary: {bin}");
+            if let Some(nsys) = NsysProfiler::detect() {
+                println!("  Profiling via nsys...");
+                match nsys.profile_binary(&bin, &[]) {
+                    Ok(stats) => {
+                        // Find cuBLAS kernels
+                        let cublas_kernels: Vec<_> = stats
+                            .iter()
+                            .filter(|s| {
+                                s.name.contains("gemm")
+                                    || s.name.contains("cublas")
+                                    || s.name.contains("Gemm")
+                            })
+                            .collect();
+                        if cublas_kernels.is_empty() {
+                            println!("  No cuBLAS kernels found in trace.");
+                        } else {
+                            println!("\n  cuBLAS Kernels:");
+                            for k in &cublas_kernels {
+                                let tflops = flops / (k.avg_us * 1e-6) / 1e12;
+                                let eff = tflops / peak_tflops * 100.0;
+                                println!(
+                                    "    {:50} avg={:.1}us  {:.1} TFLOP/s  ({:.1}% eff)",
+                                    k.name, k.avg_us, tflops, eff
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => println!("  nsys profiling failed: {e}"),
+                }
+            }
+        }
+        None => {
+            // Estimate from known measurements
+            let est_time_us = flops / (peak_tflops * 0.9 * 1e12) * 1e6; // 90% of peak
+            let est_tflops = flops / (est_time_us * 1e-6) / 1e12;
+            println!("\n  Estimated (no binary found):");
+            println!("    Time: ~{est_time_us:.1} us");
+            println!(
+                "    Throughput: ~{est_tflops:.1} TFLOP/s ({:.1}% of peak)",
+                est_tflops / peak_tflops * 100.0
+            );
+            println!("\n  To profile real cuBLAS:");
+            println!("    cgp profile binary ./your_cublas_bench --kernel-filter gemm");
+        }
     }
+
+    println!();
     Ok(())
+}
+
+/// Find a cuBLAS benchmark binary.
+fn find_cublas_binary() -> Option<String> {
+    let target_dir = std::env::var("CARGO_TARGET_DIR").unwrap_or_default();
+    let mut candidates: Vec<String> = Vec::new();
+    if !target_dir.is_empty() {
+        candidates.push(format!("{target_dir}/release/examples/bench_cublas_vs_ptx"));
+        candidates.push(format!("{target_dir}/release/examples/gpu_batch_demo"));
+    }
+    candidates.extend_from_slice(&[
+        "/mnt/nvme-raid0/targets/trueno/release/examples/bench_cublas_vs_ptx".to_string(),
+        "/mnt/nvme-raid0/targets/trueno/release/examples/gpu_batch_demo".to_string(),
+    ]);
+    for path in &candidates {
+        if std::path::Path::new(path).exists() {
+            return Some(path.clone());
+        }
+    }
+    None
 }
 
 // ── nsys integration ──
