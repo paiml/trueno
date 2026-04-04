@@ -168,6 +168,42 @@ impl RooflineModel {
             peak_bandwidth,
         }
     }
+
+    /// Create a CPU AVX-512 roofline model.
+    /// AVX-512: 2 FMA units * 16 floats * 2 (FMA) * freq * cores.
+    pub fn cpu_avx512(freq_ghz: f64, cores: usize, mem_bandwidth_gbps: f64) -> Self {
+        let fp32_peak = 2.0 * 16.0 * 2.0 * freq_ghz * 1e9 * cores as f64;
+
+        let mut peak_compute = HashMap::new();
+        peak_compute.insert(Precision::Fp32, fp32_peak);
+
+        let mut peak_bandwidth = HashMap::new();
+        peak_bandwidth.insert(MemoryLevel::Dram, mem_bandwidth_gbps * 1e9);
+
+        RooflineModel {
+            target: format!("CPU AVX-512+FMA ({cores} cores @ {freq_ghz} GHz)"),
+            peak_compute,
+            peak_bandwidth,
+        }
+    }
+
+    /// Create an ARM NEON roofline model.
+    /// NEON: 2 FMA units * 4 floats * 2 (FMA) * freq * cores (typical A76/A78).
+    pub fn cpu_neon(freq_ghz: f64, cores: usize, mem_bandwidth_gbps: f64) -> Self {
+        let fp32_peak = 2.0 * 4.0 * 2.0 * freq_ghz * 1e9 * cores as f64;
+
+        let mut peak_compute = HashMap::new();
+        peak_compute.insert(Precision::Fp32, fp32_peak);
+
+        let mut peak_bandwidth = HashMap::new();
+        peak_bandwidth.insert(MemoryLevel::Dram, mem_bandwidth_gbps * 1e9);
+
+        RooflineModel {
+            target: format!("CPU NEON ({cores} cores @ {freq_ghz} GHz)"),
+            peak_compute,
+            peak_bandwidth,
+        }
+    }
 }
 
 /// A kernel's position on the roofline chart.
@@ -198,8 +234,17 @@ pub fn run_roofline(
         "cuda" => RooflineModel::rtx_4090(),
         "avx2" => {
             let cores = num_cpus::get_physical();
-            RooflineModel::cpu_avx2(3.5, cores, 204.8) // Typical DDR4-3200 dual-channel
+            RooflineModel::cpu_avx2(3.5, cores, 204.8)
         }
+        "avx512" => {
+            let cores = num_cpus::get_physical();
+            RooflineModel::cpu_avx512(3.5, cores, 204.8)
+        }
+        "neon" => {
+            let cores = num_cpus::get_physical();
+            RooflineModel::cpu_neon(3.0, cores, 51.2)
+        }
+        "wgpu" => RooflineModel::rtx_4090(), // wgpu uses same GPU hardware
         other => anyhow::bail!(
             "Unknown roofline target: {other}. Supported: cuda, avx2, avx512, neon, wgpu"
         ),

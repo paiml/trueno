@@ -315,13 +315,12 @@ fn main() -> Result<()> {
             );
             Ok(())
         }
-        Commands::Diff { baseline, current, before, after } => {
-            println!(
-                "cgp diff: baseline={:?} current={:?} before={:?} after={:?}",
-                baseline, current, before, after
-            );
-            Ok(())
-        }
+        Commands::Diff { baseline, current, before, after } => analysis::diff::run_diff(
+            baseline.as_deref(),
+            current.as_deref(),
+            before.as_deref(),
+            after.as_deref(),
+        ),
         Commands::Contract { action } => dispatch_contract(action),
         Commands::Trace { binary, duration } => {
             println!("cgp trace: {} (duration={:?})", binary, duration);

@@ -1,7 +1,10 @@
 //! CUDA profiler: wraps ncu, nsys, and CUPTI.
 //! See spec sections 4.1.1 (ncu), 4.1.2 (nsys), 4.1.3 (CUPTI).
 
-use anyhow::Result;
+use crate::analysis::roofline::{Bound, MemoryLevel, Precision, RooflineModel};
+use crate::metrics::catalog::*;
+use anyhow::{Context, Result};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -14,7 +17,6 @@ pub enum NcuSection {
     Occupancy,
     Roofline,
     WarpState,
-    SourceLevel,
 }
 
 impl NcuSection {
@@ -26,7 +28,6 @@ impl NcuSection {
             NcuSection::Occupancy => "Occupancy",
             NcuSection::Roofline => "SpeedOfLight",
             NcuSection::WarpState => "WarpStateStats",
-            NcuSection::SourceLevel => "SourceCounters",
         }
     }
 }
@@ -41,30 +42,440 @@ impl NcuProfiler {
     pub fn detect() -> Option<Self> {
         which::which("ncu").ok().map(|path| Self {
             ncu_path: path,
-            sections: vec![NcuSection::LaunchStats, NcuSection::Roofline],
+            sections: vec![
+                NcuSection::LaunchStats,
+                NcuSection::Roofline,
+                NcuSection::ComputeThroughput,
+                NcuSection::MemoryThroughput,
+                NcuSection::Occupancy,
+            ],
         })
     }
 
-    /// Build ncu command line for profiling a kernel.
-    pub fn build_command(&self, binary: &str, binary_args: &[&str], kernel_regex: &str) -> Command {
+    /// Run ncu and collect metrics for a kernel.
+    pub fn profile(
+        &self,
+        binary: &str,
+        binary_args: &[&str],
+        kernel_regex: &str,
+    ) -> Result<HashMap<String, String>> {
         let mut cmd = Command::new(&self.ncu_path);
         cmd.arg("--target-processes").arg("all");
-        cmd.arg("--kernel-id").arg(format!("::regex:{kernel_regex}:"));
+        cmd.arg("--kernel-name-base").arg("demangled");
+
+        if !kernel_regex.is_empty() {
+            cmd.arg("--kernel-id").arg(format!("::regex:{kernel_regex}:"));
+        }
 
         for section in &self.sections {
             cmd.arg("--section").arg(section.as_ncu_arg());
         }
 
         cmd.arg("--csv");
+        cmd.arg("--log-file").arg("/dev/null");
         cmd.arg(binary);
         cmd.args(binary_args);
-        cmd
+
+        let output = cmd
+            .output()
+            .with_context(|| format!("Failed to run ncu: {}", self.ncu_path.display()))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // ncu often needs root — provide helpful message
+            if stderr.contains("permission") || stderr.contains("ERR_NVGPUCTRPERM") {
+                anyhow::bail!(
+                    "ncu requires elevated permissions. Run with:\n  \
+                     sudo cgp profile kernel ...\n  \
+                     or set: sudo sysctl kernel.perf_event_paranoid=2"
+                );
+            }
+            anyhow::bail!("ncu failed (exit {}): {}", output.status, stderr.trim());
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        parse_ncu_csv(&stdout)
     }
 }
+
+/// Parse ncu CSV output into a metric name → value map.
+/// ncu CSV format: "ID","Metric Name","Metric Unit","Metric Value"
+pub fn parse_ncu_csv(csv: &str) -> Result<HashMap<String, String>> {
+    let mut metrics = HashMap::new();
+    for line in csv.lines() {
+        // Skip header and non-data lines
+        if line.starts_with('"') && !line.starts_with("\"ID\"") {
+            let fields: Vec<&str> = line.split(',').collect();
+            if fields.len() >= 4 {
+                let name = fields[1].trim_matches('"').to_string();
+                let value = fields[3].trim_matches('"').to_string();
+                metrics.insert(name, value);
+            }
+        }
+    }
+    Ok(metrics)
+}
+
+/// Extract a float metric, returning 0.0 if not found.
+fn get_f64(metrics: &HashMap<String, String>, key: &str) -> f64 {
+    metrics.get(key).and_then(|v| v.replace(',', "").parse::<f64>().ok()).unwrap_or(0.0)
+}
+
+/// Extract a u64 metric.
+#[allow(dead_code)]
+fn get_u64(metrics: &HashMap<String, String>, key: &str) -> u64 {
+    metrics.get(key).and_then(|v| v.replace(',', "").parse::<u64>().ok()).unwrap_or(0)
+}
+
+/// Extract a u32 metric.
+fn get_u32(metrics: &HashMap<String, String>, key: &str) -> u32 {
+    metrics.get(key).and_then(|v| v.replace(',', "").parse::<u32>().ok()).unwrap_or(0)
+}
+
+/// Build a FullProfile from ncu metrics.
+#[allow(clippy::implicit_hasher)]
+pub fn ncu_metrics_to_profile(
+    metrics: &HashMap<String, String>,
+    kernel_name: &str,
+    size: u32,
+) -> FullProfile {
+    let duration_us = get_f64(metrics, "gpu__time_duration.sum") / 1000.0; // ns → us
+    let flops = 2.0 * (size as f64).powi(3); // GEMM: 2*M*N*K
+    let tflops = if duration_us > 0.0 { flops / (duration_us * 1e-6) / 1e12 } else { 0.0 };
+
+    let sm_pct = get_f64(metrics, "sm__throughput.avg.pct_of_peak_sustained_elapsed");
+    let dram_pct = get_f64(metrics, "dram__throughput.avg.pct_of_peak_sustained_elapsed");
+    let occupancy_pct = get_f64(metrics, "sm__warps_active.avg.pct_of_peak_sustained_elapsed");
+    let warp_eff = get_f64(metrics, "smsp__thread_inst_executed_per_inst_executed.pct");
+    let tc_pct =
+        get_f64(metrics, "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed");
+    let regs = get_u32(metrics, "launch__registers_per_thread");
+    let smem = get_u32(metrics, "launch__shared_mem_per_block_driver");
+    let l2_hit = get_f64(metrics, "lts__t_sector_hit_rate.pct");
+    let global_load_eff =
+        get_f64(metrics, "smsp__sass_average_data_bytes_per_sector_mem_global_op_ld.pct");
+
+    // Roofline analysis
+    let model = RooflineModel::rtx_4090();
+    let ai = if duration_us > 0.0 {
+        // Approximate: use dram throughput pct to estimate bytes
+        let dram_bw = 1008.0e9; // GB/s
+        let actual_bw = dram_bw * dram_pct / 100.0;
+        let bytes = actual_bw * duration_us * 1e-6;
+        if bytes > 0.0 {
+            flops / bytes
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+
+    let roofline =
+        model.classify(ai, tflops * 1e12, Precision::Fp16, MemoryLevel::Dram).map(|point| {
+            let bound_str = match &point.bound {
+                Bound::Memory { .. } => "memory".to_string(),
+                Bound::Compute { .. } => "compute".to_string(),
+            };
+            RooflineMetrics {
+                peak_compute_tflops: 330.0,
+                peak_bandwidth_gbps: 1008.0,
+                ridge_point: 327.4,
+                bound: bound_str,
+                efficiency_pct: point.efficiency,
+                distance_to_ridge: point.distance_to_ridge,
+            }
+        });
+
+    let timestamp = chrono::Utc::now().to_rfc3339();
+
+    FullProfile {
+        version: "2.0".to_string(),
+        timestamp,
+        hardware: HardwareInfo {
+            gpu: Some("NVIDIA GeForce RTX 4090".to_string()),
+            gpu_sm: Some("8.9".to_string()),
+            gpu_memory_gb: Some(24.0),
+            gpu_bandwidth_gbps: Some(1008.0),
+            ..Default::default()
+        },
+        kernel: Some(KernelInfo {
+            name: kernel_name.to_string(),
+            dimensions: vec![size, size, size],
+            shared_memory_bytes: Some(smem),
+            registers_per_thread: Some(regs),
+            ..Default::default()
+        }),
+        timing: TimingMetrics { wall_clock_time_us: duration_us, samples: 1, ..Default::default() },
+        throughput: ThroughputMetrics {
+            tflops,
+            bandwidth_gbps: 1008.0 * dram_pct / 100.0,
+            arithmetic_intensity: ai,
+            ..Default::default()
+        },
+        roofline,
+        gpu_compute: Some(GpuComputeMetrics {
+            sm_utilization_pct: sm_pct,
+            achieved_occupancy_pct: occupancy_pct,
+            warp_execution_efficiency_pct: warp_eff,
+            tensor_core_utilization_pct: tc_pct,
+            register_usage_per_thread: regs,
+            shared_memory_per_block: smem,
+            ..Default::default()
+        }),
+        gpu_memory: Some(GpuMemoryMetrics {
+            dram_throughput_pct: dram_pct,
+            l2_hit_rate_pct: l2_hit,
+            global_load_efficiency_pct: global_load_eff,
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
+
+/// Render the profile to stdout in the spec-mandated format.
+fn render_profile(profile: &FullProfile) {
+    let kernel = profile.kernel.as_ref().map_or("unknown", |k| &k.name);
+    let dims = profile
+        .kernel
+        .as_ref()
+        .map(|k| k.dimensions.iter().map(|d| d.to_string()).collect::<Vec<_>>().join("x"))
+        .unwrap_or_default();
+
+    let gpu_name = profile.hardware.gpu.as_deref().unwrap_or("Unknown GPU");
+    let sm = profile.hardware.gpu_sm.as_deref().unwrap_or("?");
+
+    println!("\n=== CGP Kernel Profile: {kernel} ({dims}) ===\n");
+    println!(
+        "Backend: CUDA ({gpu_name}, SM {sm}, Driver {})",
+        detect_driver_version().unwrap_or_else(|| "?".to_string())
+    );
+
+    let t = &profile.timing;
+    let tp = &profile.throughput;
+    let peak_pct = if tp.tflops > 0.0 { tp.tflops / 330.0 * 100.0 } else { 0.0 };
+    println!(
+        "Execution: {:.1} us  |  {:.1} TFLOP/s  |  {:.1}% of peak",
+        t.wall_clock_time_us, tp.tflops, peak_pct
+    );
+
+    // Roofline
+    if let Some(roof) = &profile.roofline {
+        println!("\n  Roofline Position:");
+        println!("    Arithmetic Intensity: {:.1} FLOP/byte", tp.arithmetic_intensity);
+        println!("    Ridge Point: {:.1} FLOP/byte", roof.ridge_point);
+        let status = if roof.bound == "memory" {
+            format!("MEMORY-BOUND ({:.1}x below ridge)", roof.distance_to_ridge)
+        } else {
+            format!("COMPUTE-BOUND ({:.1}% efficiency)", roof.efficiency_pct)
+        };
+        println!("    Status: {status}");
+    }
+
+    // Compute metrics
+    if let Some(gc) = &profile.gpu_compute {
+        println!("\n  Compute:");
+        if gc.tensor_core_utilization_pct > 0.0 {
+            println!(
+                "    Tensor core utilization: {:5.1}%   {}",
+                gc.tensor_core_utilization_pct,
+                quality_badge(gc.tensor_core_utilization_pct, 50.0)
+            );
+        }
+        println!(
+            "    Warp execution eff:     {:5.1}%   {}",
+            gc.warp_execution_efficiency_pct,
+            quality_badge(gc.warp_execution_efficiency_pct, 95.0)
+        );
+        println!("    SM utilization:         {:5.1}%", gc.sm_utilization_pct);
+        println!("    Achieved occupancy:     {:5.1}%", gc.achieved_occupancy_pct);
+        println!("    Register usage:          {:3}/255", gc.register_usage_per_thread);
+        if gc.shared_memory_per_block > 0 {
+            println!("    Shared memory/block:   {:5} bytes", gc.shared_memory_per_block);
+        }
+    }
+
+    // Memory metrics
+    if let Some(gm) = &profile.gpu_memory {
+        println!("\n  Memory:");
+        println!(
+            "    DRAM throughput:        {:5.1}% of peak ({:.1} GB/s)",
+            gm.dram_throughput_pct,
+            1008.0 * gm.dram_throughput_pct / 100.0
+        );
+        println!(
+            "    Global load coalescing: {:5.1}%   {}",
+            gm.global_load_efficiency_pct,
+            quality_badge(gm.global_load_efficiency_pct, 60.0)
+        );
+        println!(
+            "    L2 hit rate:            {:5.1}%   {}",
+            gm.l2_hit_rate_pct,
+            quality_badge(gm.l2_hit_rate_pct, 50.0)
+        );
+    }
+
+    println!();
+}
+
+fn quality_badge(value: f64, threshold: f64) -> &'static str {
+    if value >= threshold {
+        "[OK]"
+    } else {
+        "[WARN]"
+    }
+}
+
+/// Get driver version from nvidia-smi.
+fn detect_driver_version() -> Option<String> {
+    Command::new("nvidia-smi")
+        .args(["--query-gpu=driver_version", "--format=csv,noheader"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+}
+
+/// Detect GPU name from nvidia-smi.
+fn detect_gpu_name() -> Option<String> {
+    Command::new("nvidia-smi")
+        .args(["--query-gpu=name", "--format=csv,noheader"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+}
+
+// ── Public API: profile commands ──
+
+/// Profile a CUDA PTX kernel via ncu.
+pub fn profile_kernel(name: &str, size: u32, roofline: bool, _metrics: Option<&str>) -> Result<()> {
+    let profiler = match NcuProfiler::detect() {
+        Some(mut p) => {
+            if roofline {
+                // Ensure we have all sections needed for roofline
+                p.sections = vec![
+                    NcuSection::LaunchStats,
+                    NcuSection::Roofline,
+                    NcuSection::ComputeThroughput,
+                    NcuSection::MemoryThroughput,
+                    NcuSection::Occupancy,
+                ];
+            }
+            p
+        }
+        None => {
+            // Fallback: show static roofline data
+            println!("\n=== CGP Kernel Profile: {name} ({size}x{size}x{size}) ===\n");
+            println!("  ncu not found. Showing static analysis only.\n");
+            let model = RooflineModel::rtx_4090();
+            let flops = 2.0 * (size as f64).powi(3);
+            println!("  Expected FLOPs: {:.2e}", flops);
+            if let Some(ridge) = model.ridge_point(Precision::Fp16, MemoryLevel::Dram) {
+                println!("  FP16 ridge point: {:.1} FLOP/byte", ridge);
+            }
+            println!("  Install NVIDIA Nsight Compute for runtime profiling.");
+            return Ok(());
+        }
+    };
+
+    // Try to find a trueno benchmark binary that exercises this kernel
+    let binary = find_kernel_binary(name);
+
+    match binary {
+        Some((bin_path, bin_args)) => {
+            eprintln!("Profiling {name} via ncu (this may take a moment)...");
+            let metrics = profiler.profile(
+                &bin_path,
+                &bin_args.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+                name,
+            )?;
+            let profile = ncu_metrics_to_profile(&metrics, name, size);
+            render_profile(&profile);
+
+            // Export JSON alongside
+            let json_path = format!("/tmp/cgp-{name}-{size}.json");
+            let json = serde_json::to_string_pretty(&profile)?;
+            std::fs::write(&json_path, &json)?;
+            println!("  Profile exported: {json_path}");
+        }
+        None => {
+            // No binary found — run ncu with a placeholder message
+            println!("\n=== CGP Kernel Profile: {name} ({size}x{size}x{size}) ===\n");
+            println!("  Backend: CUDA (ncu at {})", profiler.ncu_path.display());
+            println!("  GPU: {}", detect_gpu_name().unwrap_or_else(|| "Unknown".to_string()));
+            println!(
+                "  Driver: {}",
+                detect_driver_version().unwrap_or_else(|| "Unknown".to_string())
+            );
+            println!("\n  No binary found for kernel '{name}'.");
+            println!("  To profile a specific binary, use:");
+            println!("    cgp profile binary ./your_binary --kernel-filter {name}");
+            println!();
+
+            // Still show roofline analysis
+            if roofline {
+                let model = RooflineModel::rtx_4090();
+                let flops = 2.0 * (size as f64).powi(3);
+                println!("  Roofline analysis (static):");
+                println!("    Problem FLOPs: {:.2e}", flops);
+                if let Some(ridge) = model.ridge_point(Precision::Fp16, MemoryLevel::Dram) {
+                    println!("    FP16 ridge: {:.1} FLOP/byte", ridge);
+                }
+                println!();
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Try to find a built CUDA binary that exercises a given kernel.
+fn find_kernel_binary(_kernel_name: &str) -> Option<(String, Vec<String>)> {
+    // Look for GPU-specific examples/benches
+    let candidates = [
+        "/mnt/nvme-raid0/targets/trueno/release/examples/gpu_batch_demo",
+        "./target/release/examples/gpu_batch_demo",
+        "/mnt/nvme-raid0/targets/trueno/release/examples/wgpu_backward_demo",
+        "./target/release/examples/wgpu_backward_demo",
+    ];
+    for path in &candidates {
+        if std::path::Path::new(path).exists() {
+            return Some((path.to_string(), vec![]));
+        }
+    }
+    None
+}
+
+/// Profile cuBLAS operations.
+pub fn profile_cublas(op: &str, size: u32) -> Result<()> {
+    println!("\n=== CGP cuBLAS Profile: {op} ({size}x{size}) ===\n");
+    if let Some(profiler) = NcuProfiler::detect() {
+        println!("  Backend: ncu at {}", profiler.ncu_path.display());
+        println!("  To profile cuBLAS, use:");
+        println!("    cgp profile binary ./your_cublas_bench --kernel-filter {op}");
+    } else {
+        println!("  ncu not found.");
+    }
+    Ok(())
+}
+
+// ── nsys integration ──
 
 /// Wraps `nsys` CLI for system-wide timeline profiling.
 pub struct NsysProfiler {
     pub nsys_path: PathBuf,
+}
+
+/// Parsed nsys stats output — one entry per kernel.
+#[derive(Debug, Clone)]
+pub struct NsysKernelStat {
+    pub name: String,
+    pub calls: u64,
+    pub total_us: f64,
+    pub avg_us: f64,
+    pub min_us: f64,
+    pub max_us: f64,
 }
 
 impl NsysProfiler {
@@ -72,84 +483,148 @@ impl NsysProfiler {
         which::which("nsys").ok().map(|path| Self { nsys_path: path })
     }
 
-    /// Build nsys command for tracing a binary.
-    pub fn build_trace_command(&self, binary: &str, binary_args: &[&str]) -> Command {
+    /// Run nsys profile and capture stats.
+    pub fn profile_binary(
+        &self,
+        binary: &str,
+        binary_args: &[&str],
+    ) -> Result<Vec<NsysKernelStat>> {
+        let report_path = format!("/tmp/cgp-nsys-{}", std::process::id());
+
         let mut cmd = Command::new(&self.nsys_path);
-        cmd.arg("profile");
-        cmd.arg("--stats=true");
-        cmd.arg("--force-overwrite=true");
-        cmd.arg("-o").arg("/tmp/cgp-nsys-report");
-        cmd.arg(binary);
-        cmd.args(binary_args);
-        cmd
+        cmd.arg("profile")
+            .arg("--stats=true")
+            .arg("--force-overwrite=true")
+            .arg("-o")
+            .arg(&report_path)
+            .arg(binary)
+            .args(binary_args);
+
+        let output = cmd.output().with_context(|| "Failed to run nsys")?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let combined = format!("{stdout}\n{stderr}");
+
+        let stats = parse_nsys_stats(&combined);
+
+        // Clean up report files
+        let _ = std::fs::remove_file(format!("{report_path}.nsys-rep"));
+        let _ = std::fs::remove_file(format!("{report_path}.sqlite"));
+
+        Ok(stats)
     }
 }
 
-/// Profile a CUDA PTX kernel via ncu.
-pub fn profile_kernel(name: &str, size: u32, roofline: bool, metrics: Option<&str>) -> Result<()> {
-    println!("\n=== CGP Kernel Profile: {name} ({size}x{size}x{size}) ===\n");
+/// Parse nsys stats output for CUDA kernel summary.
+fn parse_nsys_stats(output: &str) -> Vec<NsysKernelStat> {
+    let mut stats = Vec::new();
+    let mut in_kernel_section = false;
 
-    match NcuProfiler::detect() {
-        Some(profiler) => {
-            println!("  Backend: CUDA (ncu at {})", profiler.ncu_path.display());
-            println!(
-                "  Sections: {:?}",
-                profiler.sections.iter().map(|s| s.as_ncu_arg()).collect::<Vec<_>>()
-            );
-            if roofline {
-                println!("  Roofline: enabled");
-            }
-            if let Some(m) = metrics {
-                println!("  Extra metrics: {m}");
-            }
-            println!("\n  (Full ncu profiling requires running target binary with sudo/--target-processes)");
+    for line in output.lines() {
+        if line.contains("CUDA Kernel Statistics") || line.contains("cuda_gpu_kern_sum") {
+            in_kernel_section = true;
+            continue;
         }
-        None => {
-            println!("  ncu not found. Install NVIDIA Nsight Compute for CUDA kernel profiling.");
-            println!("  Falling back to trueno-explain static analysis...");
+        if in_kernel_section && line.trim().is_empty() {
+            in_kernel_section = false;
+            continue;
+        }
+        if in_kernel_section {
+            // nsys stats format varies; try to parse common patterns
+            // Typical: Time(%)  Total Time (ns)  Instances  Avg (ns)  Med (ns)  Min (ns)  Max (ns)  Name
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 8 {
+                if let (Ok(total_ns), Ok(instances)) = (
+                    parts[1].replace(',', "").parse::<f64>(),
+                    parts[2].replace(',', "").parse::<u64>(),
+                ) {
+                    let avg_ns = parts[3].replace(',', "").parse::<f64>().unwrap_or(0.0);
+                    let min_ns = parts[5].replace(',', "").parse::<f64>().unwrap_or(0.0);
+                    let max_ns = parts[6].replace(',', "").parse::<f64>().unwrap_or(0.0);
+                    let name = parts[7..].join(" ");
+                    stats.push(NsysKernelStat {
+                        name,
+                        calls: instances,
+                        total_us: total_ns / 1000.0,
+                        avg_us: avg_ns / 1000.0,
+                        min_us: min_ns / 1000.0,
+                        max_us: max_ns / 1000.0,
+                    });
+                }
+            }
         }
     }
-
-    println!();
-    Ok(())
-}
-
-/// Profile cuBLAS operations.
-pub fn profile_cublas(op: &str, size: u32) -> Result<()> {
-    println!("cgp profile cublas: op={op} size={size}");
-    println!("(Wraps ncu targeting cuBLAS library kernels)");
-    Ok(())
+    stats
 }
 
 /// Profile an arbitrary binary via nsys.
 pub fn profile_binary(
     path: &str,
     kernel_filter: Option<&str>,
-    trace: bool,
-    duration: Option<&str>,
+    _trace: bool,
+    _duration: Option<&str>,
 ) -> Result<()> {
     println!("\n=== CGP Binary Profile: {path} ===\n");
 
-    match NsysProfiler::detect() {
-        Some(profiler) => {
-            println!("  Backend: nsys at {}", profiler.nsys_path.display());
-            if let Some(filter) = kernel_filter {
-                println!("  Kernel filter: {filter}");
-            }
-            if trace {
-                println!("  System trace: enabled");
-            }
-            if let Some(dur) = duration {
-                println!("  Duration: {dur}");
-            }
-            println!("\n  (Run with appropriate permissions for full CUDA tracing)");
-        }
+    let profiler = match NsysProfiler::detect() {
+        Some(p) => p,
         None => {
-            println!("  nsys not found. Install NVIDIA Nsight Systems for binary profiling.");
-            println!("  Falling back to perf stat...");
+            println!("  nsys not found. Install NVIDIA Nsight Systems.");
+            println!("  Falling back to wall-clock timing...");
+
+            // Fallback: just run and time it
+            let start = std::time::Instant::now();
+            let status = Command::new(path).status()?;
+            let elapsed = start.elapsed();
+            println!(
+                "  Wall time: {:.2}ms (exit code: {})",
+                elapsed.as_secs_f64() * 1000.0,
+                status.code().unwrap_or(-1)
+            );
+            return Ok(());
         }
+    };
+
+    eprintln!("Running nsys profile (this may take a moment)...");
+    let stats = profiler.profile_binary(path, &[])?;
+
+    if stats.is_empty() {
+        println!("  No CUDA kernels detected. Binary may be CPU-only.");
+        println!("  For CPU profiling, use: cgp profile simd or cgp profile scalar");
+    } else {
+        println!(
+            "  {:40} {:>8} {:>12} {:>12} {:>12}",
+            "Kernel", "Calls", "Avg (us)", "Min (us)", "Max (us)"
+        );
+        println!("  {}", "-".repeat(88));
+
+        for stat in &stats {
+            let name = if let Some(filter) = kernel_filter {
+                if !stat.name.contains(filter) {
+                    continue;
+                }
+                &stat.name
+            } else {
+                &stat.name
+            };
+
+            let display_name =
+                if name.len() > 40 { format!("{}...", &name[..37]) } else { name.to_string() };
+
+            println!(
+                "  {:40} {:>8} {:>12.1} {:>12.1} {:>12.1}",
+                display_name, stat.calls, stat.avg_us, stat.min_us, stat.max_us
+            );
+        }
+        println!();
+        println!(
+            "  Total kernels: {}, Total CUDA time: {:.1} us",
+            stats.len(),
+            stats.iter().map(|s| s.total_us).sum::<f64>()
+        );
     }
 
+    println!();
     Ok(())
 }
 
@@ -159,13 +634,45 @@ pub fn profile_python(args: &[String]) -> Result<()> {
     println!("\n=== CGP Python Profile ===\n");
     println!("  Command: {cmd_str}");
 
-    if NsysProfiler::detect().is_some() {
-        println!("  Strategy: nsys profile for CUDA ops, perf stat for CPU ops");
+    if let Some(profiler) = NsysProfiler::detect() {
+        eprintln!("Running nsys profile on Python script...");
+        // Build the full command: uv run python <args>
+        let python_cmd = if args.is_empty() {
+            anyhow::bail!(
+                "No Python script specified. Usage: cgp profile python -- uv run python script.py"
+            );
+        } else {
+            args[0].clone()
+        };
+        let python_args: Vec<&str> = args[1..].iter().map(|s| s.as_str()).collect();
+        let stats = profiler.profile_binary(&python_cmd, &python_args)?;
+
+        if stats.is_empty() {
+            println!("  No CUDA kernels detected (CPU-only Python workload).");
+            println!("  Use perf stat for CPU profiling.");
+        } else {
+            println!("  CUDA kernels captured via nsys:");
+            for stat in &stats {
+                println!("    {} — {} calls, avg {:.1}us", stat.name, stat.calls, stat.avg_us);
+            }
+        }
     } else {
-        println!("  Strategy: perf stat only (no nsys available for CUDA tracing)");
+        println!("  nsys not found — cannot capture CUDA kernels.");
+        println!("  Falling back to wall-clock timing.");
+
+        if !args.is_empty() {
+            let start = std::time::Instant::now();
+            let status = Command::new(&args[0]).args(&args[1..]).status()?;
+            let elapsed = start.elapsed();
+            println!(
+                "  Wall time: {:.2}ms (exit code: {})",
+                elapsed.as_secs_f64() * 1000.0,
+                status.code().unwrap_or(-1)
+            );
+        }
     }
 
-    println!("  (Uses 'uv run python' for reproducible environment)");
+    println!();
     Ok(())
 }
 
@@ -183,11 +690,96 @@ mod tests {
     #[test]
     fn test_ncu_command_build() {
         if let Some(profiler) = NcuProfiler::detect() {
-            let cmd = profiler.build_command("./test_binary", &["--size", "512"], "gemm_*");
-            let program = cmd.get_program().to_str().unwrap();
-            assert!(program.contains("ncu"));
+            assert!(profiler.ncu_path.exists());
         }
     }
 
-    // FALSIFY-CGP-077 (Metal not available on Linux) tested via `cgp profile metal` CLI.
+    #[test]
+    fn test_parse_ncu_csv_empty() {
+        let metrics = parse_ncu_csv("").unwrap();
+        assert!(metrics.is_empty());
+    }
+
+    #[test]
+    fn test_parse_ncu_csv_sample() {
+        let csv = r#""ID","Metric Name","Metric Unit","Metric Value"
+"0","sm__throughput.avg.pct_of_peak_sustained_elapsed","%","42.3"
+"0","dram__throughput.avg.pct_of_peak_sustained_elapsed","%","7.8"
+"0","launch__registers_per_thread","register/thread","48"
+"0","gpu__time_duration.sum","nsecond","23200"
+"#;
+        let metrics = parse_ncu_csv(csv).unwrap();
+        assert_eq!(get_f64(&metrics, "sm__throughput.avg.pct_of_peak_sustained_elapsed"), 42.3);
+        assert_eq!(get_u32(&metrics, "launch__registers_per_thread"), 48);
+        assert_eq!(get_f64(&metrics, "gpu__time_duration.sum"), 23200.0);
+    }
+
+    #[test]
+    fn test_ncu_metrics_to_profile() {
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "gpu__time_duration.sum".to_string(),
+            "23200".to_string(), // 23.2 us
+        );
+        metrics.insert(
+            "sm__throughput.avg.pct_of_peak_sustained_elapsed".to_string(),
+            "42.3".to_string(),
+        );
+        metrics.insert(
+            "dram__throughput.avg.pct_of_peak_sustained_elapsed".to_string(),
+            "7.8".to_string(),
+        );
+        metrics.insert("launch__registers_per_thread".to_string(), "48".to_string());
+        metrics.insert(
+            "smsp__thread_inst_executed_per_inst_executed.pct".to_string(),
+            "100.0".to_string(),
+        );
+
+        let profile = ncu_metrics_to_profile(&metrics, "gemm_cta_wmma_fp16", 512);
+        assert_eq!(profile.kernel.as_ref().unwrap().name, "gemm_cta_wmma_fp16");
+        assert!(profile.timing.wall_clock_time_us > 0.0);
+        assert!(profile.throughput.tflops > 0.0);
+        assert!(profile.gpu_compute.is_some());
+    }
+
+    #[test]
+    fn test_parse_nsys_stats_empty() {
+        let stats = parse_nsys_stats("");
+        assert!(stats.is_empty());
+    }
+
+    #[test]
+    fn test_render_profile_no_panic() {
+        let profile = FullProfile {
+            version: "2.0".to_string(),
+            hardware: HardwareInfo {
+                gpu: Some("Test GPU".to_string()),
+                gpu_sm: Some("8.9".to_string()),
+                ..Default::default()
+            },
+            kernel: Some(KernelInfo {
+                name: "test_kernel".to_string(),
+                dimensions: vec![256, 256, 256],
+                ..Default::default()
+            }),
+            timing: TimingMetrics { wall_clock_time_us: 10.0, samples: 1, ..Default::default() },
+            throughput: ThroughputMetrics { tflops: 5.0, ..Default::default() },
+            gpu_compute: Some(GpuComputeMetrics {
+                sm_utilization_pct: 40.0,
+                warp_execution_efficiency_pct: 100.0,
+                achieved_occupancy_pct: 33.0,
+                register_usage_per_thread: 48,
+                ..Default::default()
+            }),
+            gpu_memory: Some(GpuMemoryMetrics {
+                dram_throughput_pct: 7.8,
+                l2_hit_rate_pct: 87.0,
+                global_load_efficiency_pct: 72.0,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        // Should not panic
+        render_profile(&profile);
+    }
 }
