@@ -169,6 +169,44 @@ fn bench_fused_add_relu(c: &mut Criterion) {
     g.finish();
 }
 
+fn bench_gemm_bias_relu(c: &mut Criterion) {
+    let mut g = c.benchmark_group("gemm_bias_relu");
+    g.sample_size(20);
+    for &n in &[64, 128] {
+        let a = gen(n * n);
+        let b = gen(n * n);
+        let bias = gen(n);
+        // Trueno: fused GEMM+bias+relu
+        g.bench_with_input(BenchmarkId::new("trueno_fused", n), &n, |bench, &n| {
+            let mut c = vec![0.0f32; n * n];
+            bench.iter(|| {
+                trueno::blis::gemm_bias_relu(
+                    n,
+                    n,
+                    n,
+                    black_box(&a),
+                    black_box(&b),
+                    black_box(&bias),
+                    black_box(&mut c),
+                )
+                .unwrap()
+            });
+        });
+        // ndarray: separate GEMM + bias + relu (3 passes)
+        g.bench_with_input(BenchmarkId::new("ndarray_unfused", n), &n, |bench, &n| {
+            let a = ndarray::Array2::from_shape_vec((n, n), a.clone()).unwrap();
+            let b = ndarray::Array2::from_shape_vec((n, n), b.clone()).unwrap();
+            let bias = ndarray::Array1::from_vec(bias.clone());
+            bench.iter(|| {
+                let mut c = black_box(&a).dot(black_box(&b));
+                c += &bias;
+                black_box(c.mapv(|x: f32| x.max(0.0)))
+            });
+        });
+    }
+    g.finish();
+}
+
 criterion_group!(
     benches,
     bench_transpose,
@@ -177,6 +215,7 @@ criterion_group!(
     bench_add,
     bench_relu,
     bench_softmax,
-    bench_fused_add_relu
+    bench_fused_add_relu,
+    bench_gemm_bias_relu
 );
 criterion_main!(benches);

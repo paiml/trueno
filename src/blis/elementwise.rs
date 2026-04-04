@@ -738,6 +738,67 @@ pub fn fused_scale_bias_relu(
 }
 
 // ============================================================================
+// In-Place Operations
+// ============================================================================
+// In-place ops eliminate the output buffer entirely, reducing memory traffic
+// from 2 reads + 1 write to 1 read + 1 write (33% reduction for unary ops).
+
+/// In-place ReLU: data_i = max(0, data_i)
+///
+/// 1 read + 1 write = 8 bytes/element (vs 12 for out-of-place).
+#[inline]
+pub fn relu_inplace(data: &mut [f32]) {
+    for x in data.iter_mut() {
+        *x = x.max(0.0);
+    }
+}
+
+/// In-place add: a_i += b_i
+///
+/// 2 reads + 1 write = 12 bytes/element (same as out-of-place but no alloc).
+pub fn add_inplace(a: &mut [f32], b: &[f32]) -> Result<(), TruenoError> {
+    if a.len() != b.len() {
+        return Err(TruenoError::InvalidInput(format!(
+            "add_inplace size mismatch: a[{}], b[{}]",
+            a.len(),
+            b.len()
+        )));
+    }
+    for i in 0..a.len() {
+        a[i] += b[i];
+    }
+    Ok(())
+}
+
+/// In-place scale: data_i *= scalar
+///
+/// 1 read + 1 write = 8 bytes/element.
+#[inline]
+pub fn scale_inplace(data: &mut [f32], scalar: f32) {
+    for x in data.iter_mut() {
+        *x *= scalar;
+    }
+}
+
+/// In-place fused add + ReLU: a_i = max(0, a_i + b_i)
+///
+/// 2 reads + 1 write = 12 bytes/element. Unfused in-place (add then relu)
+/// would be 2×(read+write) = 16 bytes. 25% reduction.
+pub fn fused_add_relu_inplace(a: &mut [f32], b: &[f32]) -> Result<(), TruenoError> {
+    if a.len() != b.len() {
+        return Err(TruenoError::InvalidInput(format!(
+            "fused_add_relu_inplace size mismatch: a[{}], b[{}]",
+            a.len(),
+            b.len()
+        )));
+    }
+    for i in 0..a.len() {
+        a[i] = (a[i] + b[i]).max(0.0);
+    }
+    Ok(())
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
