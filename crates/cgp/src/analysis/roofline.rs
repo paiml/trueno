@@ -229,6 +229,7 @@ pub fn run_roofline(
     _kernels: Option<&str>,
     export: Option<&str>,
     _empirical: bool,
+    json: bool,
 ) -> Result<()> {
     let model = match target {
         "cuda" => RooflineModel::rtx_4090(),
@@ -249,6 +250,12 @@ pub fn run_roofline(
             "Unknown roofline target: {other}. Supported: cuda, avx2, avx512, neon, wgpu"
         ),
     };
+
+    if json {
+        let json_str = serde_json::to_string_pretty(&model)?;
+        println!("{json_str}");
+        return Ok(());
+    }
 
     println!("\n=== cgp Roofline: {} ===\n", model.target);
 
@@ -279,8 +286,8 @@ pub fn run_roofline(
     }
 
     if let Some(path) = export {
-        let json = serde_json::to_string_pretty(&model)?;
-        std::fs::write(path, json)?;
+        let json_str = serde_json::to_string_pretty(&model)?;
+        std::fs::write(path, json_str)?;
         println!("\n  Exported to: {path}");
     }
 

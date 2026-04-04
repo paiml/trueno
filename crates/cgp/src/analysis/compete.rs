@@ -3,11 +3,12 @@
 //! compute TFLOP/s, and produce a comparison table.
 
 use anyhow::Result;
+use serde::Serialize;
 use std::process::Command;
 use std::time::Instant;
 
 /// Result of running one competitor.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct CompetitorResult {
     pub label: String,
     pub command: String,
@@ -46,6 +47,7 @@ pub fn run_compete(
     ours: &str,
     theirs: &[String],
     label: Option<&str>,
+    json: bool,
 ) -> Result<()> {
     let labels: Vec<String> = match label {
         Some(l) => l.split(',').map(String::from).collect(),
@@ -111,6 +113,11 @@ pub fn run_compete(
         .filter(|r| r.wall_time_ms.is_finite())
         .map(|r| r.wall_time_ms)
         .fold(f64::INFINITY, f64::min);
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&results)?);
+        return Ok(());
+    }
 
     // Print table
     println!();

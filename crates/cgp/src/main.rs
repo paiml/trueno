@@ -300,9 +300,10 @@ enum ContractAction {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    let json = cli.json;
 
     match cli.command {
-        Commands::Doctor => doctor::run_doctor(),
+        Commands::Doctor => doctor::run_doctor(json),
         Commands::Profile { target } => dispatch_profile(target),
         Commands::Roofline { target, kernels, export, empirical } => {
             analysis::roofline::run_roofline(
@@ -310,20 +311,24 @@ fn main() -> Result<()> {
                 kernels.as_deref(),
                 export.as_deref(),
                 empirical,
+                json,
             )
         }
         Commands::Bench { bench, counters, check_regression, threshold, roofline } => {
-            println!(
-                "cgp bench: {} (counters={:?}, regression={}, threshold={}%, roofline={})",
-                bench, counters, check_regression, threshold, roofline
-            );
-            Ok(())
+            analysis::bench::run_bench(
+                &bench,
+                counters.as_deref(),
+                check_regression,
+                threshold,
+                roofline,
+            )
         }
         Commands::Diff { baseline, current, before, after } => analysis::diff::run_diff(
             baseline.as_deref(),
             current.as_deref(),
             before.as_deref(),
             after.as_deref(),
+            json,
         ),
         Commands::Contract { action } => dispatch_contract(action),
         Commands::Trace { binary, duration } => {
@@ -343,7 +348,7 @@ fn main() -> Result<()> {
             analysis::baseline::run_baseline(save.as_deref(), load.as_deref())
         }
         Commands::Compete { workload, ours, theirs, label } => {
-            analysis::compete::run_compete(&workload, &ours, &theirs, label.as_deref())
+            analysis::compete::run_compete(&workload, &ours, &theirs, label.as_deref(), json)
         }
     }
 }

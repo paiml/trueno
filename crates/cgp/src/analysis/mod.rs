@@ -1,4 +1,5 @@
 pub mod baseline;
+pub mod bench;
 pub mod compare;
 pub mod compete;
 pub mod contracts;

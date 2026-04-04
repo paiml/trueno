@@ -6,11 +6,12 @@
 //! Must degrade gracefully when tools are missing (FALSIFY-CGP-012).
 
 use anyhow::Result;
+use serde::Serialize;
 use std::process::Command;
 use std::time::Instant;
 
 /// Result of checking a single tool or capability.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ToolCheck {
     pub name: String,
     pub version: Option<String>,
@@ -18,12 +19,22 @@ pub struct ToolCheck {
     pub path: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum ToolStatus {
     Ok,
     Missing,
     VersionMismatch { expected: String, found: String },
     Error(String),
+}
+
+/// Full doctor report for JSON output.
+#[derive(Debug, Serialize)]
+pub struct DoctorReport {
+    pub checks: Vec<ToolCheck>,
+    pub ok_count: usize,
+    pub total_required: usize,
+    pub operational: bool,
+    pub elapsed_ms: f64,
 }
 
 impl std::fmt::Display for ToolStatus {
@@ -205,12 +216,9 @@ fn check_perf_paranoid() -> Option<i32> {
         .and_then(|s| s.trim().parse().ok())
 }
 
-/// Run all doctor checks and print results.
-pub fn run_doctor() -> Result<()> {
-    let start = Instant::now();
-    println!("\n=== cgp System Check ===\n");
-
-    let checks = vec![
+/// Collect all doctor checks (pure data, no I/O to stdout).
+pub fn collect_checks() -> Vec<ToolCheck> {
+    vec![
         check_binary("nvidia-smi", &["--query-gpu=driver_version", "--format=csv,noheader"], |s| {
             Some(s.trim().to_string())
         }),
@@ -257,34 +265,68 @@ pub fn run_doctor() -> Result<()> {
         check_binary("trueno-explain", &["--version"], parse_generic_version),
         detect_gpu(),
         detect_cpu(),
-    ];
+    ]
+}
 
+/// Build a full doctor report.
+pub fn build_report() -> DoctorReport {
+    let start = Instant::now();
+    let checks = collect_checks();
+
+    let optional_tools = ["renacer", "trueno-explain", "CUPTI"];
     let mut ok_count = 0;
     let mut total = checks.len();
-    // Don't count optional tools as failures
-    let optional_tools = ["renacer", "trueno-explain", "CUPTI"];
 
     for check in &checks {
-        let version_str = check.version.as_deref().unwrap_or("");
-        let pad_name = format!("{:18}", format!("{}:", check.name));
-        let pad_version = format!("{:30}", version_str);
-        println!("  {pad_name}{pad_version}{}", check.status);
         if check.status == ToolStatus::Ok {
             ok_count += 1;
         } else if optional_tools.contains(&check.name.as_str()) {
-            total -= 1; // Don't count optional tools
+            total -= 1;
         }
     }
 
     let elapsed = start.elapsed();
-    println!();
-    if ok_count >= total {
-        println!("  All {ok_count} required components available. cgp is fully operational.");
-    } else {
-        let missing = total - ok_count;
-        println!("  {ok_count}/{total} components available. {missing} missing — cgp will operate in degraded mode.");
+    DoctorReport {
+        checks,
+        ok_count,
+        total_required: total,
+        operational: ok_count >= total,
+        elapsed_ms: elapsed.as_secs_f64() * 1000.0,
     }
-    println!("  Completed in {:.0}ms", elapsed.as_secs_f64() * 1000.0);
+}
+
+/// Run all doctor checks and print results.
+pub fn run_doctor(json: bool) -> Result<()> {
+    let report = build_report();
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        return Ok(());
+    }
+
+    println!("\n=== cgp System Check ===\n");
+
+    for check in &report.checks {
+        let version_str = check.version.as_deref().unwrap_or("");
+        let pad_name = format!("{:18}", format!("{}:", check.name));
+        let pad_version = format!("{:30}", version_str);
+        println!("  {pad_name}{pad_version}{}", check.status);
+    }
+
+    println!();
+    if report.operational {
+        println!(
+            "  All {} required components available. cgp is fully operational.",
+            report.ok_count
+        );
+    } else {
+        let missing = report.total_required - report.ok_count;
+        println!(
+            "  {}/{} components available. {missing} missing — cgp will operate in degraded mode.",
+            report.ok_count, report.total_required
+        );
+    }
+    println!("  Completed in {:.0}ms", report.elapsed_ms);
     println!();
 
     Ok(())

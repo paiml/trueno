@@ -6,10 +6,11 @@ use crate::analysis::regression::RegressionDetector;
 use crate::metrics::catalog::FullProfile;
 use crate::metrics::export;
 use anyhow::Result;
+use serde::Serialize;
 use std::path::Path;
 
 /// Diff result for a single metric.
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct MetricDiff {
     pub name: String,
     pub baseline: f64,
@@ -156,6 +157,7 @@ pub fn run_diff(
     current: Option<&str>,
     _before: Option<&str>,
     _after: Option<&str>,
+    json: bool,
 ) -> Result<()> {
     let (baseline_path, current_path) = match (baseline, current) {
         (Some(b), Some(c)) => (b, c),
@@ -173,20 +175,48 @@ pub fn run_diff(
     let current_profile = export::load_json(Path::new(current_path))?;
 
     let diffs = diff_profiles(&baseline_profile, &current_profile);
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&diffs)?);
+        return Ok(());
+    }
+
     render_diff(&diffs, baseline_path, current_path);
 
-    // Also do statistical regression if we have timing samples
-    if baseline_profile.timing.wall_clock_time_us > 0.0
-        && current_profile.timing.wall_clock_time_us > 0.0
-    {
+    // Statistical regression only if we have real multi-sample data
+    if baseline_profile.timing.samples > 1 && current_profile.timing.samples > 1 {
         let detector = RegressionDetector::new();
-        let b_samples = vec![baseline_profile.timing.wall_clock_time_us; 30];
-        let c_samples = vec![current_profile.timing.wall_clock_time_us; 30];
+        // Synthesize samples with realistic variance (stddev)
+        let b_mean = baseline_profile.timing.wall_clock_time_us;
+        let b_std = baseline_profile.timing.stddev_us.max(b_mean * 0.01);
+        let c_mean = current_profile.timing.wall_clock_time_us;
+        let c_std = current_profile.timing.stddev_us.max(c_mean * 0.01);
+
+        let b_samples: Vec<f64> =
+            (0..30).map(|i| b_mean + b_std * ((i as f64 - 15.0) / 15.0)).collect();
+        let c_samples: Vec<f64> =
+            (0..30).map(|i| c_mean + c_std * ((i as f64 - 15.0) / 15.0)).collect();
+
         let result = detector.compare(&b_samples, &c_samples);
         println!(
             "  Statistical: {} (change {:.1}%, Cohen's d = {:.2})",
             result.verdict, result.change_pct, result.effect_size_cohens_d
         );
+    } else {
+        // Single-sample comparison — just show the change direction
+        let b = baseline_profile.timing.wall_clock_time_us;
+        let c = current_profile.timing.wall_clock_time_us;
+        if b > 0.0 && c > 0.0 {
+            let change = (c - b) / b * 100.0;
+            let verdict = if change < -5.0 {
+                "IMPROVED"
+            } else if change > 5.0 {
+                "REGRESSED"
+            } else {
+                "NO_CHANGE"
+            };
+            println!("  Statistical: {verdict} (change {change:.1}%, single-sample)");
+        }
     }
 
     let elapsed = start.elapsed();
