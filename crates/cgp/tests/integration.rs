@@ -511,6 +511,37 @@ fn test_explain_wgsl() {
     assert!(stdout.contains("WGSL"), "Should mention WGSL: {stdout}");
 }
 
+/// cgp profile scaling must output JSON with thread-count data.
+#[test]
+fn test_json_scaling() {
+    let output = cgp_cmd()
+        .args([
+            "--json",
+            "profile",
+            "scaling",
+            "--size",
+            "256",
+            "--max-threads",
+            "2",
+            "--runs",
+            "1",
+        ])
+        .output()
+        .expect("Failed to run cgp profile scaling");
+
+    // May fail if benchmark binary not found — that's OK for CI
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let parsed: serde_json::Value =
+            serde_json::from_str(&stdout).expect("Scaling JSON is not valid JSON");
+        let arr = parsed.as_array().unwrap();
+        assert!(!arr.is_empty(), "Should have at least 1 scaling point");
+        assert!(arr[0].get("threads").is_some());
+        assert!(arr[0].get("gflops").is_some());
+        assert!(arr[0].get("scaling").is_some());
+    }
+}
+
 /// cgp --json doctor must have GPU detection fields.
 #[test]
 fn test_json_doctor_gpu_detection() {

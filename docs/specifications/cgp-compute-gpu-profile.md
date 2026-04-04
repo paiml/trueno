@@ -1978,15 +1978,26 @@ Best single-thread efficiency: 64%. Best parallel efficiency: 19%.
 | Threads | 1024x1024 GFLOPS | Scaling | Notes |
 |---------|-----------------|---------|-------|
 | 1 | 105 | 1.0x | baseline |
-| 2 | 193 | 1.8x | near-linear |
-| 4 | 334 | 3.2x | |
-| 8 | 485 | 4.6x | single CCD L3 (32MB) |
-| 12 | 449 | 4.2x | cache-aware cap prevents regression |
-| 16 | 541 | 5.1x | **peak** |
-| 24 | 552 | 5.2x | cross-CCD but still scaling |
+| 2 | 188 | 1.8x | near-linear |
+| 4 | 348 | 3.3x | |
+| 8 | 499 | 4.8x | **peak** — single CCD L3 (32MB) |
+| 12 | 452 | 4.3x | cross-CCD L3 contention |
+| 16 | 488 | 4.7x | partial recovery with more cores |
+| 24 | 466 | 4.5x | diminishing returns |
 
-**Optimization applied:** Thread count capped at 8 for medium problems (<512M FLOPs)
-to stay within single CCD L3 boundary. Result: 12T improved from 447→449 GFLOP/s (noise-level).
+**512x512 scaling (`cgp profile scaling --size 512 --runs 5`):**
+
+| Threads | 512x512 GFLOPS | Scaling | Notes |
+|---------|---------------|---------|-------|
+| 1 | 84 | 1.0x | baseline |
+| 4 | 176 | 2.1x | **peak** — L2-bound, cap at 4 |
+| 8 | 173 | 2.1x | capped at 4 internally |
+| 12 | 187 | 2.2x | slight improvement from Rayon scheduling |
+
+**Optimization applied (Phase 3):** Thread caps recalibrated from cgp profile scaling:
+- 256³ FLOPs: cap reduced 4→2 (peak at 2T, no benefit beyond)
+- 512³ FLOPs: cap reduced 8→4 (peak at 4T, 8T regresses from L3 contention)
+- 1024³+ FLOPs: all physical cores (unchanged)
 
 **Negative result (documented):** Pre-packing B via `gemm_blis_with_prepacked_b`
 regressed from 548→256 GFLOP/s. Root cause: unpacked `gemm_blis` inner loop
@@ -2012,7 +2023,7 @@ amortized across K iterations within each thread.
 - CPU BLIS at 1024 (8T): 485 GFLOPS / 896 peak (8-core) = 54% — CCD-local efficiency is solid
 - GPU CTA WMMA: 11.6 TFLOP/s / 330 peak = 3.5% → larger tiles + double-buffering needed
 
-**Implementation status** (2026-04-04): cgp binary fully functional in `crates/cgp/` with 111 unit + 10 falsify + 28 integration = 149 tests.
+**Implementation status** (2026-04-04): cgp binary fully functional in `crates/cgp/` with 111 unit + 10 falsify + 29 integration = 150 tests.
 
 All 17 CLI subcommands implemented and dogfooded on RTX 4090 + Threadripper 7960X:
 
@@ -2057,7 +2068,7 @@ New in Phase 3 (PMAT-037):
 - **Scaling command**: Thread-count sweep with GEMM output parsing, JSON support
 - **Dogfooding**: All measurements regenerated via `cgp profile scaling` (see Appendix A.2)
 
-FALSIFY tests implemented (111 unit + 10 falsify + 28 integration = 149):
+FALSIFY tests implemented (111 unit + 10 falsify + 29 integration = 150):
 - FALSIFY-CGP-010/011/012: Doctor tool detection (doctor.rs + integration)
 - FALSIFY-CGP-020/021: Roofline ridge points, all 4 precisions (analysis/roofline.rs + integration)
 - FALSIFY-CGP-030/031/032: Regression detection — bootstrap CI (analysis/regression.rs)
