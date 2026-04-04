@@ -824,7 +824,7 @@ dependencies = [
  "batuta-common",
  "chrono",
  "clap",
- "crossterm",
+ "crossterm 0.28.1",
  "dirs",
  "jugar-probar 1.0.1",
  "libc",
@@ -864,6 +864,25 @@ name = "cfg_aliases"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
+
+[[package]]
+name = "cgp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "colored 3.1.1",
+ "comfy-table",
+ "num_cpus",
+ "proptest",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
+ "tempfile",
+ "thiserror 2.0.17",
+ "which",
+]
 
 [[package]]
 name = "chrono"
@@ -996,6 +1015,26 @@ checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "colored"
+version = "3.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
+dependencies = [
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "comfy-table"
+version = "7.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "958c5d6ecf1f214b4c2bbbbf6ab9523a864bd136dcf71a7e8904799acfe1ad47"
+dependencies = [
+ "crossterm 0.29.0",
+ "unicode-segmentation",
+ "unicode-width 0.2.0",
 ]
 
 [[package]]
@@ -1229,6 +1268,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossterm"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d8b9f2e4c67f833b660cdb0a3523065869fb35570177239812ed4c905aeff87b"
+dependencies = [
+ "bitflags 2.10.0",
+ "crossterm_winapi",
+ "document-features",
+ "parking_lot",
+ "rustix 1.1.3",
+ "winapi",
+]
+
+[[package]]
 name = "crossterm_winapi"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1444,6 +1497,12 @@ name = "endian-type"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c34f04666d835ff5d62e058c3995147c06f42fe86ff053337632bca83e42702d"
+
+[[package]]
+name = "env_home"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7f84e12ccf0a7ddc17a6c41c93326024c42920d7ee630d04950e6926645c0fe"
 
 [[package]]
 name = "equator"
@@ -2606,7 +2665,7 @@ checksum = "042e9d8eecc242657b7ccacead9795c9d5e854cbf5cefaa0057cf5b6d69175bb"
 dependencies = [
  "base64",
  "chrono",
- "crossterm",
+ "crossterm 0.28.1",
  "gif 0.13.3",
  "image",
  "js-sys",
@@ -2636,7 +2695,7 @@ dependencies = [
  "base64",
  "bincode",
  "chrono",
- "crossterm",
+ "crossterm 0.28.1",
  "gif 0.13.3",
  "image",
  "js-sys",
@@ -3816,7 +3875,7 @@ checksum = "e157826c23b6f8db29b6ffe46de22494213b22dd7b666253efb9aae0b4cd89c3"
 dependencies = [
  "bitvec",
  "compact_str",
- "crossterm",
+ "crossterm 0.28.1",
  "presentar-core",
  "thiserror 2.0.17",
  "unicode-segmentation",
@@ -4105,7 +4164,7 @@ dependencies = [
  "bitflags 2.10.0",
  "cassowary",
  "compact_str",
- "crossterm",
+ "crossterm 0.28.1",
  "indoc",
  "instability",
  "itertools 0.13.0",
@@ -4303,7 +4362,7 @@ dependencies = [
  "backtrace",
  "clap",
  "crossbeam",
- "crossterm",
+ "crossterm 0.28.1",
  "dashmap",
  "fnv",
  "gimli",
@@ -5505,7 +5564,7 @@ dependencies = [
  "bytemuck",
  "chrono",
  "criterion",
- "crossterm",
+ "crossterm 0.28.1",
  "dhat",
  "dirs",
  "futures-intrusive",
@@ -5591,8 +5650,8 @@ name = "trueno-explain"
 version = "0.2.2"
 dependencies = [
  "clap",
- "colored",
- "crossterm",
+ "colored 2.2.0",
+ "crossterm 0.28.1",
  "presentar-core",
  "presentar-terminal",
  "pretty_assertions",
@@ -5620,7 +5679,7 @@ dependencies = [
  "batuta-common",
  "bytemuck",
  "criterion",
- "crossterm",
+ "crossterm 0.28.1",
  "jugar-probar 0.4.0",
  "libloading",
  "manzana",
@@ -5741,7 +5800,7 @@ checksum = "ac5b643c0c2924c22d708015dc3393877c992b39e6e67a42b2a26fa301d71b66"
 dependencies = [
  "base64",
  "batuta-common",
- "crossterm",
+ "crossterm 0.28.1",
  "dirs",
  "libc",
  "png 0.17.16",
@@ -6331,6 +6390,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "which"
+version = "7.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24d643ce3fd3e5b54854602a080f34fb10ab75e0b813ee32d00ca2b44fa74762"
+dependencies = [
+ "either",
+ "env_home",
+ "rustix 1.1.3",
+ "winsafe",
+]
+
+[[package]]
 name = "wide"
 version = "0.7.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6788,6 +6859,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "winsafe"
+version = "0.0.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
+
+[[package]]
 name = "wit-bindgen"
 version = "0.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6830,7 +6907,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bashrs",
- "colored",
+ "colored 2.2.0",
  "regex",
  "serial_test",
  "tempfile",
