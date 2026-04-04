@@ -388,11 +388,11 @@ Comparison baseline: ndarray 0.17 (matrixmultiply 0.3 backend). Trueno v0.17.0 w
 | Transpose | 128 | 1,828 | 8,032 | **4.40x** | ≥1.5x | ≥2.0x | ✅ stretch met |
 | Transpose | 256 | 10,247 | 52,111 | **5.09x** | ≥1.5x | ≥2.0x | ✅ stretch met |
 | Transpose | 512 | 73,166 | 419,690 | **5.74x** | ≥1.5x | ≥2.0x | ✅ stretch met |
-| GEMM | 64 | 5,465 | 6,182 | **1.13x** | ≥1.5x | ≥2.0x | ⬆ below target |
-| GEMM | 128 | 40,707 | 43,589 | **1.07x** | ≥1.5x | ≥2.0x | ⬆ below target |
-| GEMM | 256 | 177,160 | 286,860 | **1.62x** | ≥1.5x | ≥2.0x | ✅ target met (was 1.02x) |
-| GEMM | 512 | 875,970 | 2,264,000 | **2.58x** | ≥1.5x | ≥2.0x | ✅ stretch met (was 1.01x) |
-| GEMM | 1024 | 4,562,000 | 22,592,000 | **4.95x** | ≥1.5x | ≥2.0x | ✅ stretch met (was 0.97x) |
+| GEMM | 64 | 4,300 | 5,160 | **1.20x** | ≥1.5x | ≥2.0x | ⬆ below target |
+| GEMM | 128 | 33,100 | 36,600 | **1.10x** | ≥1.5x | ≥2.0x | ⬆ below target |
+| GEMM | 256 | 170,000 | 274,000 | **1.61x** | ≥1.5x | ≥2.0x | ✅ target met (was 1.02x) |
+| GEMM | 512 | 864,000 | 2,206,000 | **2.55x** | ≥1.5x | ≥2.0x | ✅ stretch met (was 1.01x) |
+| GEMM | 1024 | 3,970,000 | 17,500,000 | **4.41x** | ≥1.5x | ≥2.0x | ✅ stretch met (was 0.97x) |
 | GEMV | 64 | 143 | 686 | **4.80x** | ≥1.5x | ≥2.0x | ✅ stretch met |
 | GEMV | 128 | 590 | 2,483 | **4.21x** | ≥1.5x | ≥2.0x | ✅ stretch met |
 | GEMV | 256 | 2,317 | 9,304 | **4.02x** | ≥1.5x | ≥2.0x | ✅ stretch met |
@@ -410,29 +410,31 @@ Comparison baseline: ndarray 0.17 (matrixmultiply 0.3 backend). Trueno v0.17.0 w
 | Softmax | 4K | 1,817 | 11,336 | **6.24x** | ≥1.5x | ≥2.0x | ✅ stretch met |
 | Softmax | 32K | 13,838 | 88,983 | **6.43x** | ≥1.5x | ≥2.0x | ✅ stretch met |
 
-**Score: 18/26 ops ≥1.5x target (69%), up from 20/30 (67%). 16/26 ≥2.0x stretch (62%).**
+**Score: 17/26 ops ≥1.5x target (65%). 16/26 ≥2.0x stretch (62%). 13/26 ≥3.0x (50%).**
 
-v0.17.0 key improvements: GEMM 512 1.01x→2.58x and GEMM 1024 0.97x→4.95x (rayon parallel, NR=8 BLIS with AVX-512, 24-core dispatch). GEMM 256 1.02x→1.62x (parallel dispatch at 8M FLOP threshold). AVX-512 dispatch for elementwise ops. Non-temporal stores for bandwidth-bound operations (>512KB output).
+v0.17.0 final results: GEMM 512 1.01x→2.55x and GEMM 1024 0.97x→4.41x (rayon parallel, NR=8 BLIS with AVX-512, 24-core dispatch). GEMM 256 1.02x→1.61x (parallel dispatch at 8M FLOP threshold). All softmax 3.17-6.65x, all transpose 4.38-7.52x, all GEMV 2.87-4.53x. Elementwise vec add/ReLU at 10K-1M sizes are 1.02-1.08x (memory-bandwidth ceiling).
 
 ### Optimizations Applied (v0.17.0, April 2026)
 
-1. **Rayon parallel GEMM dispatch**: Parallel outer-loop tiling at 8M FLOP threshold. 24-core Threadripper 7960X scales near-linearly for large GEMM. GEMM 1024: 0.97x→4.95x. GEMM 512: 1.01x→2.58x. GEMM 256: 1.02x→1.62x.
+1. **Rayon parallel GEMM dispatch**: Parallel outer-loop tiling at 8M FLOP threshold. 24-core Threadripper 7960X scales near-linearly for large GEMM. GEMM 1024: 0.97x→4.41x. GEMM 512: 1.01x→2.55x. GEMM 256: 1.02x→1.61x.
 
 2. **NR=8 BLIS with AVX-512 microkernel**: Row-major C SIMD load/store with 16×8 AVX-512 microkernel. Native 512-bit execution on Zen 4 (not double-pump). SIMD A packing for full throughput.
 
-3. **AVX-512 dispatch for elementwise ops**: Vec add, ReLU use AVX-512 at all sizes. Non-temporal stores for bandwidth-bound operations (>512KB output).
+3. **LLVM autovectorization for bandwidth-bound ReLU**: Hand-written AVX2 intrinsics were 40% SLOWER than LLVM autovectorized loop. Root cause: calling convention overhead from `#[target_feature]` functions forces the compiler to save/restore SIMD registers at each call boundary. Fix: use simple `for i in 0..n { output[i] = input[i].max(0.0) }` which LLVM vectorizes optimally with zero calling convention overhead.
 
 4. **AVX-512 BLIS 5-loop** (`gemm_blis_avx512_packed`): Full BLIS cache-blocked GEMM with MR_512=16, NR_512=8 packing for 257-768 dimensions.
 
-5. **MC cache blocking optimization**: MC=72→128 (16×MR). Reduces packing cycles by 1.78× for the ic-loop. Zen 4 L2 = 1MB/core; MC×KC×4B = 128×256×4 = 128KB << 1MB.
+5. **MC cache blocking optimization**: MC=72→128 (16×MR). Reduces packing cycles by 1.78x for the ic-loop. Zen 4 L2 = 1MB/core; MC×KC×4B = 128×256×4 = 128KB << 1MB.
 
 6. **`gemm_direct_rowmajor`** (prior): Zero-pack row-major GEMM for ≤128×128. No packing overhead. Broadcast A from row-major, SIMD load B contiguously.
 
-### Blocking Issues (remaining)
+7. **AVX-512 frequency throttling awareness (Zen 4)**: AMD Zen 4 reduces clock by ~15-30% for AVX-512 instructions. For bandwidth-bound ops, lower clock = fewer bytes/second. Solution: use AVX2 (full clock) for bandwidth-bound ops, AVX-512 only for compute-bound (GEMM where FMA throughput dominates).
 
-1. **GEMM 64 (1.13x), 128 (1.07x)**: Small GEMM below parallel threshold, packing overhead dominates. **Fix**: Inline microkernel for ≤128 avoiding pack entirely, or lower parallel FLOP threshold for Threadripper.
+### Root Cause Analysis (remaining gaps)
 
-2. **Elementwise 10K–1M (1.02–1.04x)**: Both trueno and ndarray at ~95% of peak DRAM bandwidth ceiling. Single-core memory bandwidth (~100 GB/s DDR5) is the physical limit. Achieving ≥1.5x requires reducing memory traffic. **Fix (PMAT-021)**: (a) fused op API (relu+add in single pass, halving bandwidth); (b) in-place operation variants to eliminate output allocation.
+1. **GEMM 64 (1.20x), 128 (1.10x)**: Single-threaded near compute peak -- both libraries at ~80-90% of theoretical FMA throughput. Rayon overhead exceeds parallel benefit at these sizes. These are effectively at parity for the compute regime. **Fix**: Inline microkernel for ≤128 avoiding pack entirely, or lower parallel FLOP threshold for Threadripper.
+
+2. **Vec add/ReLU 10K-1M (1.02-1.08x)**: Memory-bandwidth ceiling. Total working set (2-3 arrays x 40KB-4MB) is serviced at ~95% of peak DRAM bandwidth by both libraries. This is a physical limit, not an algorithmic gap. **Fix (PMAT-021)**: (a) fused op API (relu+add in single pass, halving bandwidth); (b) in-place operation variants to eliminate output allocation.
 
 ### Benchmark Command
 

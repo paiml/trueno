@@ -70,6 +70,7 @@ fn bench_add(c: &mut Criterion) {
     for &n in &[1000, 10_000, 100_000, 1_000_000] {
         let a = gen(n);
         let b = gen(n);
+        // Pre-allocated output for compute-only comparison.
         g.bench_with_input(BenchmarkId::new("trueno", n), &n, |bench, &n| {
             let mut o = vec![0.0f32; n];
             bench.iter(|| {
@@ -77,10 +78,17 @@ fn bench_add(c: &mut Criterion) {
                     .unwrap()
             });
         });
-        g.bench_with_input(BenchmarkId::new("ndarray", n), &n, |bench, &_n| {
+        // ndarray also pre-allocated for fair compute comparison.
+        g.bench_with_input(BenchmarkId::new("ndarray", n), &n, |bench, &n| {
             let a = ndarray::Array1::from_vec(a.clone());
             let b = ndarray::Array1::from_vec(b.clone());
-            bench.iter(|| black_box(black_box(&a) + black_box(&b)));
+            let mut o = ndarray::Array1::zeros(n);
+            bench.iter(|| {
+                ndarray::Zip::from(black_box(&a))
+                    .and(black_box(&b))
+                    .and(black_box(&mut o))
+                    .for_each(|&a, &b, o| *o = a + b);
+            });
         });
     }
     g.finish();
@@ -90,15 +98,22 @@ fn bench_relu(c: &mut Criterion) {
     let mut g = c.benchmark_group("relu");
     for &n in &[1000, 10_000, 100_000, 1_000_000] {
         let d: Vec<f32> = (0..n).map(|i| (i as f32 - n as f32 / 2.0) / 100.0).collect();
+        // Pre-allocated output for compute-only comparison.
         g.bench_with_input(BenchmarkId::new("trueno", n), &n, |bench, &n| {
             let mut o = vec![0.0f32; n];
             bench.iter(|| {
                 trueno::blis::elementwise::relu(black_box(&d), black_box(&mut o)).unwrap()
             });
         });
-        g.bench_with_input(BenchmarkId::new("ndarray", n), &n, |bench, &_n| {
+        // ndarray also pre-allocated for fair compute comparison.
+        g.bench_with_input(BenchmarkId::new("ndarray", n), &n, |bench, &n| {
             let a = ndarray::Array1::from_vec(d.clone());
-            bench.iter(|| black_box(black_box(&a).mapv(|x: f32| x.max(0.0))));
+            let mut o = ndarray::Array1::zeros(n);
+            bench.iter(|| {
+                ndarray::Zip::from(black_box(&a))
+                    .and(black_box(&mut o))
+                    .for_each(|&a, o| *o = a.max(0.0));
+            });
         });
     }
     g.finish();

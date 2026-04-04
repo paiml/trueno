@@ -36,33 +36,19 @@ pub fn relu(input: &[f32], output: &mut [f32]) -> Result<(), TruenoError> {
         )));
     }
 
-    // Parallel for very large bandwidth-bound arrays (≥16M elements).
-    // Below 16M: single-core saturates channel, rayon overhead hurts.
-    #[cfg(feature = "parallel")]
-    if n >= 16_000_000 {
-        use rayon::prelude::*;
-        let threads = 4.min(rayon::current_num_threads());
-        let chunk = (((n + threads - 1) / threads) + 15) & !15;
-        input.par_chunks(chunk).zip(output.par_chunks_mut(chunk)).for_each(|(inp, out)| {
-            #[cfg(target_arch = "x86_64")]
-            if is_x86_feature_detected!("avx2") {
-                unsafe { relu_avx2(inp, out) };
-                return;
-            }
-            for i in 0..inp.len() {
-                out[i] = inp[i].max(0.0);
-            }
-        });
-        return Ok(());
-    }
-
     #[cfg(target_arch = "x86_64")]
     {
         // For bandwidth-bound elementwise ops, AVX2 at full clock beats
         // AVX-512 at throttled clock (Zen 4: ~30% frequency reduction).
-        // Use AVX-512 only for small arrays that fit in L1/L2 where
-        // compute throughput matters more than bandwidth.
-        if is_x86_feature_detected!("avx512f") && n <= 4096 {
+        // For bandwidth-bound sizes (>4K), let LLVM auto-vectorize.
+        // LLVM -O3 with target-cpu=native produces optimal SIMD code
+        // that matches or beats hand-written intrinsics for simple ops,
+        // with better register allocation and loop fusion.
+        if n > 4096 {
+            relu_autovec(input, output);
+            return Ok(());
+        }
+        if is_x86_feature_detected!("avx512f") {
             unsafe {
                 relu_avx512(input, output);
             }
@@ -76,10 +62,19 @@ pub fn relu(input: &[f32], output: &mut [f32]) -> Result<(), TruenoError> {
         }
     }
 
-    for i in 0..n {
+    relu_autovec(input, output);
+    Ok(())
+}
+
+/// ReLU via simple loop — LLVM auto-vectorizes this to optimal SIMD.
+/// For bandwidth-bound workloads (>4K elements), LLVM's autovectorizer
+/// with -O3 -C target-cpu=native produces code that matches hand-written
+/// intrinsics, with better register scheduling and no calling overhead.
+#[inline]
+fn relu_autovec(input: &[f32], output: &mut [f32]) {
+    for i in 0..input.len() {
         output[i] = input[i].max(0.0);
     }
-    Ok(())
 }
 
 /// AVX-512 ReLU with NT stores for large arrays.
@@ -169,10 +164,11 @@ unsafe fn relu_avx2(input: &[f32], output: &mut [f32]) {
     let n = input.len();
     let data_bytes = n * 4;
 
-    // For large arrays (>L3-stream threshold), use non-temporal stores.
-    // NT stores bypass cache write-allocate: eliminates RFO (Read-For-Ownership)
-    // traffic, achieving ~88% of peak DRAM bandwidth (arXiv:1008.2849).
-    if data_bytes > NT_STORE_THRESHOLD_BYTES {
+    // For large arrays (>L3-stream threshold), use non-temporal stores
+    // ONLY if output is 32-byte aligned (required by _mm256_stream_ps).
+    // NT stores bypass cache write-allocate, eliminating RFO traffic.
+    let out_aligned = (output.as_ptr() as usize) % 32 == 0;
+    if data_bytes > NT_STORE_THRESHOLD_BYTES && out_aligned {
         unsafe { relu_avx2_nt(input, output) }
         return;
     }
@@ -298,35 +294,16 @@ pub fn add(a: &[f32], b: &[f32], output: &mut [f32]) -> Result<(), TruenoError> 
         )));
     }
 
-    // Parallel for very large bandwidth-bound arrays (≥16M elements = 64MB).
-    // At 16M, total working set (3×64MB = 192MB) exceeds L3 (128MB on Zen 4).
-    // Multi-core issues concurrent DRAM requests across memory channels.
-    // Below 16M: single-core saturates its channel, rayon overhead hurts.
-    #[cfg(feature = "parallel")]
-    if n >= 16_000_000 {
-        use rayon::prelude::*;
-        let threads = 4.min(rayon::current_num_threads());
-        let chunk = (((n + threads - 1) / threads) + 15) & !15;
-        a.par_chunks(chunk).zip(b.par_chunks(chunk)).zip(output.par_chunks_mut(chunk)).for_each(
-            |((ac, bc), oc)| {
-                #[cfg(target_arch = "x86_64")]
-                if is_x86_feature_detected!("avx2") {
-                    unsafe { add_avx2(ac, bc, oc) };
-                    return;
-                }
-                for i in 0..ac.len() {
-                    oc[i] = ac[i] + bc[i];
-                }
-            },
-        );
-        return Ok(());
-    }
-
     #[cfg(target_arch = "x86_64")]
     {
-        // Bandwidth-bound: prefer AVX2 at full clock over AVX-512 at
-        // throttled clock for large arrays. AVX-512 only for L1/L2-resident.
-        if is_x86_feature_detected!("avx512f") && n <= 4096 {
+        // For bandwidth-bound sizes (>4K), let LLVM auto-vectorize.
+        // LLVM -O3 with target-cpu=native matches hand-written intrinsics
+        // without #[target_feature] calling convention overhead.
+        if n > 4096 {
+            add_autovec(a, b, output);
+            return Ok(());
+        }
+        if is_x86_feature_detected!("avx512f") {
             unsafe {
                 add_avx512(a, b, output);
             }
@@ -340,10 +317,16 @@ pub fn add(a: &[f32], b: &[f32], output: &mut [f32]) -> Result<(), TruenoError> 
         }
     }
 
-    for i in 0..n {
+    add_autovec(a, b, output);
+    Ok(())
+}
+
+/// Add via simple loop — LLVM auto-vectorizes optimally.
+#[inline]
+fn add_autovec(a: &[f32], b: &[f32], output: &mut [f32]) {
+    for i in 0..a.len() {
         output[i] = a[i] + b[i];
     }
-    Ok(())
 }
 
 /// AVX-512 add with NT stores for large arrays.
@@ -435,7 +418,9 @@ unsafe fn add_avx2(a: &[f32], b: &[f32], output: &mut [f32]) {
     let data_bytes = n * 4;
 
     // Large arrays: NT stores (bypass cache for DRAM-bound writes)
-    if data_bytes > NT_STORE_THRESHOLD_BYTES {
+    // Only if output is 32-byte aligned (required by _mm256_stream_ps).
+    let out_aligned = (output.as_ptr() as usize) % 32 == 0;
+    if data_bytes > NT_STORE_THRESHOLD_BYTES && out_aligned {
         unsafe { add_avx2_nt(a, b, output) }
         return;
     }
