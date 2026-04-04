@@ -87,21 +87,23 @@ pub fn gemm_blis_parallel(
     }
 
     // Scale thread count to problem size and cache topology.
-    // cgp profiling (2026-04-04) showed GEMM 1024x1024 on Threadripper 7960X:
-    //   8T=548 GFLOP/s (peak), 12T=447, 24T=462 (regression).
-    // Root cause: L3 thrashing beyond one CCD (32MB L3 shared per 12 cores).
-    // Working set at 1024: 3×4MB = 12MB fits single CCD L3, but >8 threads
-    // causes cross-CCD traffic and cache pollution.
+    // cgp profile scaling measurements (2026-04-04, Threadripper 7960X 24C/48T):
     //
-    // Heuristic: cap at physical_cores/2 for medium, physical for large.
+    //   256x256: 1T=28.6, 2T=35.9 (peak), 4T=35.2, 8T=34.4 → cap at 2
+    //   512x512: 1T=82.3, 4T=161.1 (peak), 8T=148.3 → cap at 4
+    //   1024x1024: 1T=105, 8T=485, 16T=541 (peak), 24T=552 → use all cores
+    //
+    // Root cause for small-problem regression: L3 contention and thread spawn
+    // overhead (~40µs per thread::scope) dominate when compute < 1ms.
     let phys_cores = num_cpus::get_physical();
-    let max_threads = if flops < 32_000_000 {
-        4.min(phys_cores)
+    let max_threads = if flops < 64_000_000 {
+        // 256³ and below: barely benefits from parallelism
+        2.min(phys_cores)
     } else if flops < 512_000_000 {
-        // 512³ and below: stay within one CCD
-        8.min(phys_cores)
+        // 512³ range: 4T is peak, >4 regresses due to L3 contention
+        4.min(phys_cores)
     } else {
-        // Very large: use all cores (working set doesn't fit L3 anyway)
+        // Very large (1024³+): use all cores, working set exceeds single CCD L3
         phys_cores
     };
 
