@@ -80,6 +80,21 @@ pub fn run_baseline(save: Option<&str>, load: Option<&str>) -> Result<()> {
             if let Some(k) = &profile.kernel {
                 println!("  Kernel: {}", k.name);
             }
+            if let Some(gpu) = &profile.hardware.gpu {
+                println!("  GPU: {gpu}");
+            }
+            if let Some(health) = &profile.system_health {
+                println!(
+                    "  System: {:.0}°C, {:.0}W, {:.0} MHz",
+                    health.gpu_temperature_celsius, health.gpu_power_watts, health.gpu_clock_mhz
+                );
+            }
+            if let Some(vram) = &profile.vram {
+                println!(
+                    "  VRAM: {:.0}/{:.0} MB ({:.1}%)",
+                    vram.vram_used_mb, vram.vram_total_mb, vram.vram_utilization_pct
+                );
+            }
             println!("  Timestamp: {}", profile.timestamp);
         }
         (None, None) => {

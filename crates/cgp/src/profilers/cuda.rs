@@ -320,6 +320,36 @@ fn render_profile(profile: &FullProfile) {
         );
     }
 
+    // VRAM metrics
+    if let Some(vram) = &profile.vram {
+        println!("\n  VRAM:");
+        println!(
+            "    Used: {:.0} / {:.0} MB ({:.1}%)",
+            vram.vram_used_mb, vram.vram_total_mb, vram.vram_utilization_pct
+        );
+    }
+
+    // System health
+    if let Some(health) = &profile.system_health {
+        println!("\n  System Health:");
+        println!("    GPU temp:  {:.0}°C", health.gpu_temperature_celsius);
+        println!("    GPU power: {:.0} W", health.gpu_power_watts);
+        println!(
+            "    GPU clock: {:.0} MHz (mem: {:.0} MHz)",
+            health.gpu_clock_mhz, health.gpu_memory_clock_mhz
+        );
+        if health.cpu_frequency_mhz > 0.0 {
+            println!("    CPU freq:  {:.0} MHz", health.cpu_frequency_mhz);
+        }
+    }
+
+    // Energy efficiency
+    if let Some(energy) = &profile.energy {
+        println!("\n  Energy:");
+        println!("    Efficiency: {:.4} TFLOP/s per watt", energy.tflops_per_watt);
+        println!("    Energy:     {:.6} J per inference", energy.joules_per_inference);
+    }
+
     println!();
 }
 

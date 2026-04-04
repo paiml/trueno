@@ -335,9 +335,7 @@ fn main() -> Result<()> {
             profilers::cuda::run_trace(&binary, duration.as_deref())
         }
         Commands::Explain { target, kernel } => {
-            println!("cgp explain: {} (kernel={:?})", target, kernel);
-            println!("  (Wraps trueno-explain for static PTX/SIMD/WGSL analysis)");
-            Ok(())
+            analysis::explain::run_explain(&target, kernel.as_deref())
         }
         Commands::Tui => {
             println!("cgp tui: interactive mode (requires presentar)");
