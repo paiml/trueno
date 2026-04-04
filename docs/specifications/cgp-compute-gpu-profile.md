@@ -300,7 +300,7 @@ cgp diff --before abc1234 --after def5678
 cgp diff --left "cuda:gemm_512" --right "cublas:gemm_512"
 ```
 
-### 2.6 Contract Command (CI/CD Gate)
+### 2.7 Contract Command (CI/CD Gate)
 
 ```bash
 # Verify all performance contracts
@@ -313,7 +313,7 @@ cgp contract verify --contract contracts/gemm-kernel-v1.yaml
 cgp contract generate --kernel gemm_cta_wmma_fp16 --size 512 --tolerance 10%
 ```
 
-### 2.7 Doctor Command
+### 2.8 Doctor Command
 
 ```bash
 cgp doctor
@@ -1117,7 +1117,7 @@ FALSIFY-CGP-047: Must not crash on competitor binary that segfaults
   Falsified by: profiling a binary that segfaults after 1 kernel launch
 ```
 
-### 8.5 Muda Detection
+### 8.6 Muda Detection
 
 ```
 FALSIFY-CGP-050: Must detect register spills
@@ -1147,7 +1147,7 @@ FALSIFY-CGP-053: Must detect uncoalesced global memory access
   row access; B-tile is well-coalesced (~90%). Fully uncoalesced = <25%.
 ```
 
-### 8.6 Performance (Meta)
+### 8.7 Performance (Meta)
 
 ```
 FALSIFY-CGP-060: cgp profile must complete in < 30 seconds for single kernel
@@ -1273,7 +1273,7 @@ FALSIFY-CGP-082: Must measure thread spawn overhead
 
 ---
 
-## 9. Metrics Catalog (158 metrics, 23 categories)
+## 9. Metrics Catalog (150 typed fields, 28 categories)
 
 Every metric cgp captures, organized by collection source.
 
@@ -1719,7 +1719,7 @@ Every task in the implementation plan requires a contract FIRST:
 | `cgp-quant-profiler-v1.yaml` | Q4K/Q6K CPU | superblock throughput = elements / 256 / time |
 | `cgp-rayon-profiler-v1.yaml` | Rayon parallel | heijunka_score = variance(per_thread_work) |
 | `cgp-neon-profiler-v1.yaml` | ARM NEON | ASE_SPEC counter, QEMU fallback |
-| `cgp-json-export-v1.yaml` | JSON schema v2.0 | Schema validation, all 158 metrics typed |
+| `cgp-json-export-v1.yaml` | JSON schema v2.0 | Schema validation, all 150 typed metric fields |
 | `cgp-tui-v1.yaml` | Presentar TUI | Roofline chart, timeline, keyboard controls |
 | `cgp-contract-verify-v1.yaml` | Contract CI gate | YAML parse, bound evaluation, exit code semantics |
 | `cgp-vram-v1.yaml` | GPU VRAM tracking | cuMemGetInfo correctness, peak tracking, fragmentation |
@@ -1937,14 +1937,19 @@ Tested on: RTX 4090, Driver 570.207, ncu 2025.1.1.0, nsys 2025.3.2.367, perf 6.8
 
 **Summary**: 14 tests executed, 12 PASS, 2 FIXED (arithmetic intensity and coalescing threshold corrected).
 
-**Remaining untested** (require cgp implementation, target hardware, or root access):
-- FALSIFY-CGP-030/031: Statistical regression detection (needs bootstrap CI implementation)
-- FALSIFY-CGP-041: SIMD vs scalar comparison (needs perf stat integration)
+**Implementation status** (2026-04-04): cgp crate scaffolded in `crates/cgp/` with 50 unit tests covering:
+- FALSIFY-CGP-010/011/012: Doctor tool detection — implemented + tested (doctor.rs)
+- FALSIFY-CGP-020/021: Roofline ridge points — implemented + tested (analysis/roofline.rs)
+- FALSIFY-CGP-030/031/032: Regression detection — bootstrap CI implemented + tested (analysis/regression.rs)
+- FALSIFY-CGP-062: JSON load speed — implemented + tested (metrics/export.rs)
+- FALSIFY-CGP-074/075: Q4K superblock math — implemented + tested (profilers/quant.rs)
+- FALSIFY-CGP-081: Heijunka load balance — implemented + tested (profilers/rayon_parallel.rs)
+
+**Remaining untested** (require target hardware, runtime profiling, or root access):
+- FALSIFY-CGP-041: SIMD vs scalar comparison (needs perf stat runtime integration)
 - FALSIFY-CGP-052: Bank conflict detection (needs ncu shared memory metrics)
-- FALSIFY-CGP-062: Diff without re-profiling (needs JSON export implementation)
 - FALSIFY-CGP-070/071: NEON profiling (needs ARM host or QEMU cross-profile)
 - FALSIFY-CGP-072/073: WASM SIMD128 (needs wasmtime integration)
-- FALSIFY-CGP-074/075: Quantized kernel profiling (needs Q4K benchmark harness)
 - FALSIFY-CGP-076/077: Metal native (needs macOS host)
 - FALSIFY-CGP-078/079: WebGPU browser (needs headless Chrome + CDP)
-- FALSIFY-CGP-080/081/082: Rayon parallel (needs per-thread perf counter collection)
+- FALSIFY-CGP-080/082: Rayon thread spawn overhead (needs per-thread perf counter collection)
