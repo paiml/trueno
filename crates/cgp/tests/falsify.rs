@@ -424,3 +424,78 @@ fn falsify_cgp_021_ridge_point_math() {
     let text = String::from_utf8_lossy(&text_output.stdout);
     assert!(text.contains("327"), "FALSIFY-CGP-021: Ridge point 327.x not in output.\n{text}");
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// FALSIFY-CGP-060: cgp profile must complete in < 30 seconds
+// Given: GEMM 512x512 kernel
+// When: cgp profile compare --kernel gemm --size 512
+// Then: total wall time < 30 seconds
+// ══════════════════════════════════════════════════════════════════════
+#[test]
+fn falsify_cgp_060_profile_speed() {
+    // Warm up (first run may compile)
+    let _ = cgp_cmd()
+        .args([
+            "profile",
+            "compare",
+            "--kernel",
+            "gemm",
+            "--size",
+            "512",
+            "--backends",
+            "scalar,avx2",
+        ])
+        .output();
+
+    let start = Instant::now();
+    let output = cgp_cmd()
+        .args([
+            "profile",
+            "compare",
+            "--kernel",
+            "gemm",
+            "--size",
+            "512",
+            "--backends",
+            "scalar,avx2",
+        ])
+        .output()
+        .expect("Failed to run cgp profile compare");
+    let elapsed = start.elapsed();
+
+    assert!(output.status.success());
+    // 30s spec limit + 500ms subprocess overhead
+    assert!(
+        elapsed.as_secs() < 31,
+        "FALSIFY-CGP-060 FAILED: profile took {}s (limit: 30s)",
+        elapsed.as_secs()
+    );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// FALSIFY-CGP-020: Roofline peak bandwidth must match spec (1008 GB/s)
+// Given: RTX 4090 with GDDR6X
+// When: cgp roofline --target cuda --json
+// Then: DRAM bandwidth = 1008 GB/s (384-bit × 21 Gbps)
+// ══════════════════════════════════════════════════════════════════════
+#[test]
+fn falsify_cgp_020_bandwidth_spec() {
+    let output = cgp_cmd()
+        .args(["--json", "roofline", "--target", "cuda"])
+        .output()
+        .expect("Failed to run cgp roofline");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+
+    let dram_bw = parsed["peak_bandwidth"]["Dram"].as_f64().unwrap_or(0.0);
+    let expected_bw = 1_008_000_000_000.0_f64; // 1008 GB/s in bytes/s
+    let tolerance = expected_bw * 0.05; // 5% tolerance
+    assert!(
+        (dram_bw - expected_bw).abs() < tolerance,
+        "FALSIFY-CGP-020 FAILED: DRAM bandwidth {:.0} GB/s vs expected {:.0} GB/s",
+        dram_bw / 1e9,
+        expected_bw / 1e9
+    );
+}

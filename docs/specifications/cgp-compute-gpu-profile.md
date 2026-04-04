@@ -2023,7 +2023,7 @@ amortized across K iterations within each thread.
 - CPU BLIS at 1024 (8T): 485 GFLOPS / 896 peak (8-core) = 54% — CCD-local efficiency is solid
 - GPU CTA WMMA: 11.6 TFLOP/s / 330 peak = 3.5% → larger tiles + double-buffering needed
 
-**Implementation status** (2026-04-04): cgp binary fully functional in `crates/cgp/` with 111 unit + 10 falsify + 29 integration = 150 tests.
+**Implementation status** (2026-04-04): cgp binary fully functional in `crates/cgp/` with 111 unit + 12 falsify + 29 integration = 152 tests.
 
 All 17 CLI subcommands implemented and dogfooded on RTX 4090 + Threadripper 7960X:
 
@@ -2068,7 +2068,7 @@ New in Phase 3 (PMAT-037):
 - **Scaling command**: Thread-count sweep with GEMM output parsing, JSON support
 - **Dogfooding**: All measurements regenerated via `cgp profile scaling` (see Appendix A.2)
 
-FALSIFY tests implemented (111 unit + 10 falsify + 29 integration = 150):
+FALSIFY tests implemented (111 unit + 12 falsify + 29 integration = 152):
 - FALSIFY-CGP-010/011/012: Doctor tool detection (doctor.rs + integration)
 - FALSIFY-CGP-020/021: Roofline ridge points, all 4 precisions (analysis/roofline.rs + integration)
 - FALSIFY-CGP-030/031/032: Regression detection — bootstrap CI (analysis/regression.rs)
