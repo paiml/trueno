@@ -210,7 +210,66 @@ cgp roofline --target cuda --kernels gemm_cta_wmma,softmax,layernorm
 cgp roofline --target cuda --export roofline.json
 ```
 
-### 2.5 Diff Command
+### 2.5 Competitor Profiling (External Binaries)
+
+Profile **any** binary, library, or script — not just trueno code. This is the "prove it" mode for head-to-head comparison against PyTorch, NumPy, ndarray, vllm, cuBLAS, CUTLASS, or any GPU/CPU workload.
+
+```bash
+# Profile an arbitrary CUDA binary (wraps nsys + ncu)
+cgp profile binary ./pytorch_gemm_bench --kernel-filter "ampere_*gemm*"
+cgp profile binary ./vllm_server --trace --duration 10s
+
+# Profile a Python script (NumPy, PyTorch, JAX, etc.)
+cgp profile python -- python3 benchmarks/numpy_matmul.py --size 4096
+cgp profile python -- python3 -c "import torch; a=torch.randn(4096,4096,device='cuda'); torch.mm(a,a)"
+
+# Profile a Rust binary (ndarray, nalgebra, faer, etc.)
+cgp profile binary ./target/release/ndarray_gemm_bench
+
+# Head-to-head comparison: trueno vs competitor
+cgp compete gemm \
+  --ours    "cargo bench -p trueno --bench gemm_comparison -- gemm_avx2/4096" \
+  --theirs  "python3 benchmarks/numpy_matmul.py --size 4096" \
+  --theirs  "python3 benchmarks/pytorch_matmul.py --size 4096 --device cuda" \
+  --theirs  "./target/release/ndarray_bench --size 4096" \
+  --label   "trueno AVX2,NumPy MKL,PyTorch cuBLAS,ndarray BLIS"
+
+# Profile CUDA shared library directly
+cgp profile library --so /usr/lib/libcublas.so.12 --symbol cublasGemmEx \
+  --args "m=4096,n=4096,k=4096,type=fp16"
+```
+
+**Example `cgp compete` Output:**
+
+```
+=== CGP Head-to-Head: GEMM 4096x4096 ===
+
+Library         | Backend   | Time (ms) | TFLOP/s | Efficiency | vs Best
+----------------|-----------|-----------|---------|------------|--------
+PyTorch 2.6     | cuBLAS    |      0.42 |   327.1 |     99.1%  | 1.00x
+trueno CTA WMMA | Pure PTX  |      1.85 |    74.3 |     22.5%  | 0.23x
+NumPy 2.2       | MKL AVX2  |     28.40 |     4.8 |     19.3%  | 0.01x
+ndarray 0.17    | BLIS AVX2 |     31.20 |     4.4 |     17.6%  | 0.01x
+trueno GEMV     | AVX2+FMA  |     12.10 |    11.4 |     45.5%  | 0.03x
+
+Winner: PyTorch (cuBLAS FP16 tensor cores)
+trueno gap: 4.4x (compute-bound, need larger tiles)
+CPU gap: 68x (expected — GPU >> CPU for large GEMM)
+
+Roofline: all kernels plotted at roofline.svg
+```
+
+**How It Works:**
+
+1. **Arbitrary binary**: `nsys profile --stats=true <binary>` captures all CUDA kernel launches, memory copies, and CPU activity. `cgp` parses the SQLite export to extract kernel timings and compute TFLOP/s.
+
+2. **Python scripts**: `nsys profile python3 <script>` captures PyTorch/JAX CUDA ops transparently. NumPy uses MKL on CPU — `perf stat` captures hardware counters.
+
+3. **Library profiling**: `LD_PRELOAD`-based interception or CUPTI callback API to profile specific shared library functions without modifying the binary.
+
+4. **Apples-to-apples**: `cgp compete` normalizes results by problem size (FLOPs), reports throughput (TFLOP/s), and computes efficiency vs hardware peak. No unfair comparisons — same matrix size, same precision, same hardware.
+
+### 2.6 Diff Command
 
 ```bash
 # Compare current vs baseline
@@ -845,6 +904,40 @@ FALSIFY-CGP-042: cuBLAS must be faster than pure-Rust PTX for large GEMM
   When: cgp profile compare --kernel gemm --backends cublas,cta_wmma --size 4096
   Then: cuBLAS TFLOP/s > CTA WMMA TFLOP/s
   Falsified by: measuring both at 4096, comparing TFLOP/s
+```
+
+### 8.5 Competitor Profiling
+
+```
+FALSIFY-CGP-043: Must profile arbitrary CUDA binary via nsys
+  Given: any CUDA binary (e.g., PyTorch benchmark script)
+  When: cgp profile binary ./cuda_binary
+  Then: extracts kernel names, launch configs, and wall-clock timings
+  Falsified by: running on PyTorch matmul, checking kernel list matches nsys output
+
+FALSIFY-CGP-044: Must profile Python scripts with GPU workloads
+  Given: python3 script that calls torch.mm() on CUDA tensors
+  When: cgp profile python -- python3 torch_bench.py
+  Then: captures CUDA kernel launches, reports TFLOP/s
+  Falsified by: comparing cgp output with manual nsys profile of same script
+
+FALSIFY-CGP-045: cgp compete must produce normalized comparison table
+  Given: two commands producing GEMM results at same size
+  When: cgp compete gemm --ours "cmd1" --theirs "cmd2" --label "A,B"
+  Then: table shows time, TFLOP/s, efficiency, and relative ratio for both
+  Falsified by: running with known inputs, verifying TFLOP/s = 2*M*N*K/time
+
+FALSIFY-CGP-046: Must handle competitor that has no CUDA (CPU-only)
+  Given: NumPy matmul using MKL on CPU
+  When: cgp profile python -- python3 numpy_bench.py
+  Then: falls back to perf stat for CPU profiling, reports GFLOP/s
+  Falsified by: running on NumPy without CUDA, verifying perf counters collected
+
+FALSIFY-CGP-047: Must not crash on competitor binary that segfaults
+  Given: a binary that crashes during profiling
+  When: cgp profile binary ./crashing_binary
+  Then: reports error with partial results (kernels profiled before crash)
+  Falsified by: profiling a binary that segfaults after 1 kernel launch
 ```
 
 ### 8.5 Muda Detection
