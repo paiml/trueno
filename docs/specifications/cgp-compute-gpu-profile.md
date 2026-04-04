@@ -220,8 +220,8 @@ cgp profile binary ./pytorch_gemm_bench --kernel-filter "ampere_*gemm*"
 cgp profile binary ./vllm_server --trace --duration 10s
 
 # Profile a Python script (NumPy, PyTorch, JAX, etc.)
-cgp profile python -- python3 benchmarks/numpy_matmul.py --size 4096
-cgp profile python -- python3 -c "import torch; a=torch.randn(4096,4096,device='cuda'); torch.mm(a,a)"
+cgp profile python -- uv run python benchmarks/numpy_matmul.py --size 4096
+cgp profile python -- uv run python -c "import torch; a=torch.randn(4096,4096,device='cuda'); torch.mm(a,a)"
 
 # Profile a Rust binary (ndarray, nalgebra, faer, etc.)
 cgp profile binary ./target/release/ndarray_gemm_bench
@@ -229,8 +229,8 @@ cgp profile binary ./target/release/ndarray_gemm_bench
 # Head-to-head comparison: trueno vs competitor
 cgp compete gemm \
   --ours    "cargo bench -p trueno --bench gemm_comparison -- gemm_avx2/4096" \
-  --theirs  "python3 benchmarks/numpy_matmul.py --size 4096" \
-  --theirs  "python3 benchmarks/pytorch_matmul.py --size 4096 --device cuda" \
+  --theirs  "uv run python benchmarks/numpy_matmul.py --size 4096" \
+  --theirs  "uv run python benchmarks/pytorch_matmul.py --size 4096 --device cuda" \
   --theirs  "./target/release/ndarray_bench --size 4096" \
   --label   "trueno AVX2,NumPy MKL,PyTorch cuBLAS,ndarray BLIS"
 
@@ -263,7 +263,7 @@ Roofline: all kernels plotted at roofline.svg
 
 1. **Arbitrary binary**: `nsys profile --stats=true <binary>` captures all CUDA kernel launches, memory copies, and CPU activity. `cgp` parses the SQLite export to extract kernel timings and compute TFLOP/s.
 
-2. **Python scripts**: `nsys profile python3 <script>` captures PyTorch/JAX CUDA ops transparently. NumPy uses MKL on CPU — `perf stat` captures hardware counters.
+2. **Python scripts**: `nsys profile uv run python <script>` captures PyTorch/JAX CUDA ops transparently. NumPy uses MKL on CPU — `perf stat` captures hardware counters.
 
 3. **Library profiling**: `LD_PRELOAD`-based interception or CUPTI callback API to profile specific shared library functions without modifying the binary.
 
@@ -916,8 +916,8 @@ FALSIFY-CGP-043: Must profile arbitrary CUDA binary via nsys
   Falsified by: running on PyTorch matmul, checking kernel list matches nsys output
 
 FALSIFY-CGP-044: Must profile Python scripts with GPU workloads
-  Given: python3 script that calls torch.mm() on CUDA tensors
-  When: cgp profile python -- python3 torch_bench.py
+  Given: Python script that calls torch.mm() on CUDA tensors
+  When: cgp profile python -- uv run python torch_bench.py
   Then: captures CUDA kernel launches, reports TFLOP/s
   Falsified by: comparing cgp output with manual nsys profile of same script
 
@@ -929,7 +929,7 @@ FALSIFY-CGP-045: cgp compete must produce normalized comparison table
 
 FALSIFY-CGP-046: Must handle competitor that has no CUDA (CPU-only)
   Given: NumPy matmul using MKL on CPU
-  When: cgp profile python -- python3 numpy_bench.py
+  When: cgp profile python -- uv run python numpy_bench.py
   Then: falls back to perf stat for CPU profiling, reports GFLOP/s
   Falsified by: running on NumPy without CUDA, verifying perf counters collected
 
