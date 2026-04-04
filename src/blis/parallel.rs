@@ -86,13 +86,23 @@ pub fn gemm_blis_parallel(
         return gemm_blis(m, n, k, a, b, c, None);
     }
 
-    // Scale thread count to problem size to avoid excessive partitioning.
+    // Scale thread count to problem size and cache topology.
+    // cgp profiling (2026-04-04) showed GEMM 1024x1024 on Threadripper 7960X:
+    //   8T=548 GFLOP/s (peak), 12T=447, 24T=462 (regression).
+    // Root cause: L3 thrashing beyond one CCD (32MB L3 shared per 12 cores).
+    // Working set at 1024: 3×4MB = 12MB fits single CCD L3, but >8 threads
+    // causes cross-CCD traffic and cache pollution.
+    //
+    // Heuristic: cap at physical_cores/2 for medium, physical for large.
+    let phys_cores = num_cpus::get_physical();
     let max_threads = if flops < 32_000_000 {
-        4
-    } else if flops < 128_000_000 {
-        8
+        4.min(phys_cores)
+    } else if flops < 512_000_000 {
+        // 512³ and below: stay within one CCD
+        8.min(phys_cores)
     } else {
-        rayon::current_num_threads()
+        // Very large: use all cores (working set doesn't fit L3 anyway)
+        phys_cores
     };
 
     let mut scheduler = HeijunkaScheduler::default();
@@ -100,30 +110,28 @@ pub fn gemm_blis_parallel(
     let ps = if m <= MC { MR.max(m / scheduler.num_threads) } else { MC };
     let partitions = scheduler.partition_m(m, ps);
 
-    // KAIZEN-042: Removed dead packed_b allocation that was never used.
-    // Each thread packs B internally via gemm_blis. Sharing packed B across
-    // threads would require refactoring gemm_blis to accept pre-packed input.
+    // Each thread packs B independently via gemm_blis.
+    // NOTE: Pre-packing B and using gemm_blis_with_prepacked_b was tested
+    // (2026-04-04 via cgp profiling) but regressed performance from 548→256
+    // GFLOPS at 1024x1024x8T. The unpacked inner loop in gemm_blis is more
+    // optimized (uses the ASM microkernel path more effectively). The B packing
+    // cost per thread is amortized across K iterations.
 
-    // Parallel over M partitions
     let c_ptr = c.as_mut_ptr() as usize;
 
     partitions.into_par_iter().for_each(|m_range| {
         let m_local = m_range.len();
         let m_start = m_range.start;
 
-        // Local A slice
         let a_local = &a[m_start * k..(m_start + m_local) * k];
 
-        // Local C slice (unsafe but safe due to non-overlapping partitions)
-        // SAFETY: preconditions verified by caller
+        // SAFETY: Each thread accesses a disjoint row range of C.
+        // Partitions are non-overlapping by construction in HeijunkaScheduler::partition_m.
         let c_local = unsafe {
-            // SAFETY: Each thread accesses a disjoint row range of C.
-            // Partitions are non-overlapping by construction in HeijunkaScheduler::partition_m.
             let ptr = c_ptr as *mut f32;
             std::slice::from_raw_parts_mut(ptr.add(m_start * n), m_local * n)
         };
 
-        // Run local GEMM
         let _ = gemm_blis(m_local, n, k, a_local, b, c_local, None);
     });
 
