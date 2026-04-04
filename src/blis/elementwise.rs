@@ -643,6 +643,101 @@ pub fn mul_scalar_alloc(input: &[f32], scalar: f32) -> Vec<f32> {
 }
 
 // ============================================================================
+// Fused Operations (PMAT-021)
+// ============================================================================
+// Fused ops reduce DRAM traffic by combining multiple element-wise operations
+// into a single pass. For bandwidth-bound workloads (>4K elements), this is
+// the only way to beat the DRAM bandwidth ceiling that limits individual ops
+// to ~1.0x vs ndarray. Reference: XLA compiler fusion (arXiv:1802.04730).
+
+/// Fused add + ReLU: output_i = max(0, a_i + b_i)
+///
+/// Single pass over data: 2 reads + 1 write = 12 bytes/element.
+/// Unfused equivalent (add then relu) would be 2+1+1+1 = 20 bytes/element.
+/// 40% bandwidth reduction.
+///
+/// # Errors
+///
+/// Returns `Err` if a, b, and output lengths don't match.
+pub fn fused_add_relu(a: &[f32], b: &[f32], output: &mut [f32]) -> Result<(), TruenoError> {
+    let n = a.len();
+    if n != b.len() || n != output.len() {
+        return Err(TruenoError::InvalidInput(format!(
+            "fused_add_relu size mismatch: a[{}], b[{}], output[{}]",
+            n,
+            b.len(),
+            output.len()
+        )));
+    }
+    // LLVM auto-vectorizes this optimally with -O3 -C target-cpu=native.
+    for i in 0..n {
+        output[i] = (a[i] + b[i]).max(0.0);
+    }
+    Ok(())
+}
+
+/// Fused multiply-add: output_i = a_i * b_i + c_i
+///
+/// Single pass: 3 reads + 1 write = 16 bytes/element.
+/// Unfused equivalent (mul then add) = 24 bytes/element.
+/// 33% bandwidth reduction. Maps directly to FMA SIMD instruction.
+///
+/// # Errors
+///
+/// Returns `Err` if a, b, c, and output lengths don't match.
+pub fn fused_mul_add(
+    a: &[f32],
+    b: &[f32],
+    c: &[f32],
+    output: &mut [f32],
+) -> Result<(), TruenoError> {
+    let n = a.len();
+    if n != b.len() || n != c.len() || n != output.len() {
+        return Err(TruenoError::InvalidInput(format!(
+            "fused_mul_add size mismatch: a[{}], b[{}], c[{}], output[{}]",
+            n,
+            b.len(),
+            c.len(),
+            output.len()
+        )));
+    }
+    for i in 0..n {
+        output[i] = a[i].mul_add(b[i], c[i]);
+    }
+    Ok(())
+}
+
+/// Fused scale + bias + ReLU: output_i = max(0, input_i * scale + bias)
+///
+/// Common in neural network inference (linear layer + activation).
+/// Single pass: 1 read + 1 write = 8 bytes/element.
+/// Unfused (scale, add bias, relu) = 24 bytes/element.
+/// 67% bandwidth reduction.
+///
+/// # Errors
+///
+/// Returns `Err` if input and output lengths don't match.
+pub fn fused_scale_bias_relu(
+    input: &[f32],
+    scale: f32,
+    bias: f32,
+    output: &mut [f32],
+) -> Result<(), TruenoError> {
+    let n = input.len();
+    if n != output.len() {
+        return Err(TruenoError::InvalidInput(format!(
+            "fused_scale_bias_relu size mismatch: input[{}], output[{}]",
+            n,
+            output.len()
+        )));
+    }
+    for i in 0..n {
+        output[i] = input[i].mul_add(scale, bias).max(0.0);
+    }
+    Ok(())
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
@@ -782,5 +877,49 @@ mod tests {
         let input = vec![1.0f32; 4];
         let mut output = vec![0.0f32; 3];
         assert!(mul_scalar(&input, 1.0, &mut output).is_err());
+    }
+
+    // ── Fused ops tests (PMAT-021) ──────────────────────────────────────
+
+    #[test]
+    fn test_fused_add_relu_basic() {
+        let a = vec![-2.0, -1.0, 0.0, 1.0, 2.0, -0.5, 0.5, 3.0];
+        let b = vec![1.0, 0.5, -1.0, -2.0, 0.0, 1.0, -1.0, -4.0];
+        let mut out = vec![0.0f32; 8];
+        fused_add_relu(&a, &b, &mut out).unwrap();
+        let expected: Vec<f32> = a.iter().zip(&b).map(|(a, b)| (a + b).max(0.0)).collect();
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn test_fused_add_relu_large() {
+        let n = 10_000;
+        let a: Vec<f32> = (0..n).map(|i| (i as f32 - 5000.0) / 100.0).collect();
+        let b: Vec<f32> = (0..n).map(|i| (i as f32 * 0.3) - 1500.0).collect();
+        let mut out = vec![0.0f32; n];
+        fused_add_relu(&a, &b, &mut out).unwrap();
+        for i in 0..n {
+            assert_eq!(out[i], (a[i] + b[i]).max(0.0), "mismatch at {i}");
+        }
+    }
+
+    #[test]
+    fn test_fused_mul_add_basic() {
+        let a = vec![1.0, 2.0, 3.0, 4.0];
+        let b = vec![2.0, 3.0, 4.0, 5.0];
+        let c = vec![0.5, 0.5, 0.5, 0.5];
+        let mut out = vec![0.0f32; 4];
+        fused_mul_add(&a, &b, &c, &mut out).unwrap();
+        let expected: Vec<f32> = (0..4).map(|i| a[i].mul_add(b[i], c[i])).collect();
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn test_fused_scale_bias_relu_basic() {
+        let input = vec![-2.0, -1.0, 0.0, 1.0, 2.0];
+        let mut out = vec![0.0f32; 5];
+        fused_scale_bias_relu(&input, 2.0, 1.0, &mut out).unwrap();
+        // 2*x + 1, then relu: [-3,0] [-1,0] [1] [3] [5]
+        assert_eq!(out, vec![0.0, 0.0, 1.0, 3.0, 5.0]);
     }
 }

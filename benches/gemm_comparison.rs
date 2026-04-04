@@ -139,6 +139,36 @@ fn bench_softmax(c: &mut Criterion) {
     g.finish();
 }
 
+fn bench_fused_add_relu(c: &mut Criterion) {
+    let mut g = c.benchmark_group("fused_add_relu");
+    for &n in &[1000, 10_000, 100_000, 1_000_000] {
+        let a = gen(n);
+        let b = gen(n);
+        // Trueno: single-pass fused add+relu
+        g.bench_with_input(BenchmarkId::new("trueno_fused", n), &n, |bench, &n| {
+            let mut o = vec![0.0f32; n];
+            bench.iter(|| {
+                trueno::blis::elementwise::fused_add_relu(
+                    black_box(&a),
+                    black_box(&b),
+                    black_box(&mut o),
+                )
+                .unwrap()
+            });
+        });
+        // ndarray: unfused add then relu (2 passes)
+        g.bench_with_input(BenchmarkId::new("ndarray_unfused", n), &n, |bench, &_n| {
+            let a = ndarray::Array1::from_vec(a.clone());
+            let b = ndarray::Array1::from_vec(b.clone());
+            bench.iter(|| {
+                let sum = black_box(&a) + black_box(&b);
+                black_box(sum.mapv(|x: f32| x.max(0.0)))
+            });
+        });
+    }
+    g.finish();
+}
+
 criterion_group!(
     benches,
     bench_transpose,
@@ -146,6 +176,7 @@ criterion_group!(
     bench_gemv,
     bench_add,
     bench_relu,
-    bench_softmax
+    bench_softmax,
+    bench_fused_add_relu
 );
 criterion_main!(benches);
