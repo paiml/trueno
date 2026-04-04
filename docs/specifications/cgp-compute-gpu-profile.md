@@ -195,6 +195,10 @@ cgp profile parallel --function gemm_heijunka --size 4096 --threads auto
 # ── Cross-backend comparison (any combination) ──
 cgp profile compare --kernel gemm --size 512 \
   --backends scalar,avx2,avx512,neon,cuda,cublas,wgpu
+
+# ── Parallel scaling sweep ──
+cgp profile scaling --size 1024 --max-threads 24 --runs 5       # Thread count sweep
+cgp profile scaling --size 1024 --json                           # JSON output for spec updates
 ```
 
 ### 2.3 Bench Command (Enhanced Criterion)
@@ -1969,18 +1973,20 @@ Measured on: Threadripper 7960X (24C/48T, AVX2+FMA+AVX-512) + RTX 4090
 Per-core peak (AVX2+FMA @ 3.5GHz): 112 GFLOPS. Multi-core peak: 2688 GFLOPS.
 Best single-thread efficiency: 64%. Best parallel efficiency: 19%.
 
-**Parallel scaling analysis (cgp-driven, 2026-04-04):**
+**Parallel scaling analysis (`cgp profile scaling --size 1024 --runs 5`, 2026-04-04):**
 
 | Threads | 1024x1024 GFLOPS | Scaling | Notes |
 |---------|-----------------|---------|-------|
-| 1 | 110 | 1.0x | baseline |
-| 4 | 340 | 3.1x | near-linear |
-| 8 | 548 | 5.0x | **peak** — single CCD L3 (32MB) |
-| 12 | 529 | 4.8x | cache-aware cap prevents regression |
-| 24 | 437 | 4.0x | cross-CCD L3 thrashing |
+| 1 | 105 | 1.0x | baseline |
+| 2 | 193 | 1.8x | near-linear |
+| 4 | 334 | 3.2x | |
+| 8 | 485 | 4.6x | single CCD L3 (32MB) |
+| 12 | 449 | 4.2x | cache-aware cap prevents regression |
+| 16 | 541 | 5.1x | **peak** |
+| 24 | 552 | 5.2x | cross-CCD but still scaling |
 
 **Optimization applied:** Thread count capped at 8 for medium problems (<512M FLOPs)
-to stay within single CCD L3 boundary. Result: 12T improved from 447→529 GFLOP/s (+18.4%).
+to stay within single CCD L3 boundary. Result: 12T improved from 447→449 GFLOP/s (noise-level).
 
 **Negative result (documented):** Pre-packing B via `gemm_blis_with_prepacked_b`
 regressed from 548→256 GFLOP/s. Root cause: unpacked `gemm_blis` inner loop
@@ -2002,23 +2008,25 @@ amortized across K iterations within each thread.
 | NumPy 2.x (MKL) | 388.3 ms | 2.10x |
 
 **Roofline gap analysis:**
-- CPU BLIS at 1024: 511 GFLOPS / 2688 peak = 19% → M-dimension parallelism + NUMA locality needed
+- CPU BLIS at 1024 (24T): 552 GFLOPS / 2688 peak = 20.5% → NUMA locality + larger tile sizes needed
+- CPU BLIS at 1024 (8T): 485 GFLOPS / 896 peak (8-core) = 54% — CCD-local efficiency is solid
 - GPU CTA WMMA: 11.6 TFLOP/s / 330 peak = 3.5% → larger tiles + double-buffering needed
 
-**Implementation status** (2026-04-04): cgp binary fully functional in `crates/cgp/` with 109 unit + 10 falsify + 28 integration = 147 tests.
+**Implementation status** (2026-04-04): cgp binary fully functional in `crates/cgp/` with 111 unit + 10 falsify + 28 integration = 149 tests.
 
-All 16 CLI subcommands implemented and dogfooded on RTX 4090 + Threadripper 7960X:
+All 17 CLI subcommands implemented and dogfooded on RTX 4090 + Threadripper 7960X:
 
 | Command | Status | Key capability |
 |---------|--------|----------------|
-| `cgp doctor` | **DONE** | Detects ncu, nsys, CUPTI, perf, GPU, CPU in <250ms |
+| `cgp doctor` | **DONE** | Detects ncu, nsys, CUPTI, perf, GPU, CPU in <250ms; warns on perf_event_paranoid>2 |
 | `cgp profile kernel` | **DONE** | Runs ncu, parses CSV metrics, computes roofline, system health, VRAM, energy |
 | `cgp profile binary` | **DONE** | Runs nsys, extracts kernel stats table |
 | `cgp profile python` | **DONE** | Wraps nsys for Python CUDA workloads |
 | `cgp profile simd` | **DONE** | Runs perf stat, computes IPC/SIMD utilization/cache miss rate |
 | `cgp profile compare` | **DONE** | Cross-backend table with TFLOP/s + `--json` structured output |
 | `cgp profile scalar` | **DONE** | Scalar baseline with perf stat hardware counters |
-| `cgp profile parallel` | **DONE** | Real timing with RAYON_NUM_THREADS, speedup, Amdahl's law analysis |
+| `cgp profile parallel` | **DONE** | Min-of-3 timing with RAYON_NUM_THREADS, speedup, Amdahl's law analysis |
+| `cgp profile scaling` | **DONE** | Thread-count sweep with GEMM parsing, JSON output, min-of-N timing |
 | `cgp profile wasm` | **DONE** | wasmtime detection, SIMD128 detection, fuel metering |
 | `cgp profile wgpu` | **DONE** | Shader validation, workgroup_size extraction, backend detection |
 | `cgp roofline` | **DONE** | cuda, avx2, avx512, neon, wgpu targets with JSON export |
@@ -2043,7 +2051,13 @@ New in Phase 2 (PMAT-019):
 - **Scalar profiler**: perf stat hardware counter integration
 - **Bench command**: perf stat overlay with --counters flag
 
-FALSIFY tests implemented (109 unit + 10 falsify + 28 integration = 147):
+New in Phase 3 (PMAT-037):
+- **Doctor**: perf_event_paranoid detection with actionable fix instructions
+- **Parallel profiler**: Min-of-3 timing for stable measurements
+- **Scaling command**: Thread-count sweep with GEMM output parsing, JSON support
+- **Dogfooding**: All measurements regenerated via `cgp profile scaling` (see Appendix A.2)
+
+FALSIFY tests implemented (111 unit + 10 falsify + 28 integration = 149):
 - FALSIFY-CGP-010/011/012: Doctor tool detection (doctor.rs + integration)
 - FALSIFY-CGP-020/021: Roofline ridge points, all 4 precisions (analysis/roofline.rs + integration)
 - FALSIFY-CGP-030/031/032: Regression detection — bootstrap CI (analysis/regression.rs)
