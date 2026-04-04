@@ -212,3 +212,90 @@ fn test_cublas_all_training_shapes() {
         );
     }
 }
+
+/// cuBLAS GEMM throughput benchmark (ALB-075).
+///
+/// Run: cargo test -p trueno-gpu --features cuda --lib --release -- cublas_bench --no-capture
+#[test]
+fn cublas_bench_gemm_fp16_throughput() {
+    use std::time::Instant;
+
+    let ctx = CudaContext::new(0).expect("CUDA context");
+    let stream = CudaStream::new(&ctx).expect("stream");
+    let handle = CublasHandle::new(&ctx).expect("cuBLAS handle");
+    handle.set_stream(&stream).expect("set_stream");
+
+    eprintln!();
+    eprintln!("=== cuBLAS FP16 GEMM Throughput (RTX 4090) ===");
+    eprintln!("{:<10} {:>12} {:>12} {:>10}", "Size", "Time(µs)", "TFLOP/s", "Efficiency");
+    eprintln!("{}", "-".repeat(48));
+
+    for &n in &[256_usize, 512, 1024, 2048, 4096] {
+        let m = n;
+        let k = n;
+        let flops = 2.0 * m as f64 * n as f64 * k as f64;
+
+        let a_data = vec![0x3C00u16; m * k]; // 1.0 in FP16
+        let b_data = vec![0x3C00u16; k * n];
+
+        let a_buf = GpuBuffer::from_host(&ctx, &a_data).expect("A");
+        let b_buf = GpuBuffer::from_host(&ctx, &b_data).expect("B");
+        let c_buf = GpuBuffer::from_host(&ctx, &vec![0u16; m * n]).expect("C");
+
+        // Warmup
+        for _ in 0..5 {
+            handle
+                .gemm_f16_row_major(
+                    m as i32,
+                    n as i32,
+                    k as i32,
+                    1.0,
+                    a_buf.as_ptr(),
+                    b_buf.as_ptr(),
+                    0.0,
+                    c_buf.as_ptr(),
+                )
+                .ok();
+        }
+        stream.synchronize().ok();
+
+        let iters: u32 = if n <= 512 {
+            200
+        } else if n <= 1024 {
+            100
+        } else {
+            30
+        };
+        let start = Instant::now();
+        for _ in 0..iters {
+            handle
+                .gemm_f16_row_major(
+                    m as i32,
+                    n as i32,
+                    k as i32,
+                    1.0,
+                    a_buf.as_ptr(),
+                    b_buf.as_ptr(),
+                    0.0,
+                    c_buf.as_ptr(),
+                )
+                .ok();
+        }
+        stream.synchronize().ok();
+        let elapsed = start.elapsed();
+
+        let per_call_us = elapsed.as_micros() as f64 / iters as f64;
+        let tflops = flops / (per_call_us * 1e6);
+        // RTX 4090 FP16 tensor core peak: ~330 TFLOP/s
+        let eff = tflops / 330.0 * 100.0;
+
+        eprintln!(
+            "{:<10} {:>10.1}µs {:>10.1} {:>8.1}%",
+            format!("{n}x{n}"),
+            per_call_us,
+            tflops,
+            eff,
+        );
+    }
+    eprintln!();
+}

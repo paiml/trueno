@@ -90,4 +90,4 @@ crate-type = ["cdylib", "rlib"]
 name = "ptx_gen"
 harness = false
 
-# Examples were removed in a prior cleanup; see git history for originals.
+# cuBLAS benchmark: cargo test -p trueno-gpu --features cuda --lib -- cublas_bench --no-capture --release
