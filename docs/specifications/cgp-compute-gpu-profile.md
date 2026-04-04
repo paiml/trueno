@@ -1960,7 +1960,7 @@ Measured on: Threadripper 7960X (24C/48T, AVX2+FMA+AVX-512) + RTX 4090
 
 **CPU GEMM (trueno BLIS, `benchmark_matrix_suite --features parallel`):**
 
-| Size | Single-Thread | GFLOPS | Parallel (24C) | GFLOPS | Per-Core Eff |
+| Size | Single-Thread | GFLOPS | Parallel (8T) | GFLOPS | Per-Core Eff |
 |------|--------------|--------|----------------|--------|-------------|
 | 256 | 0.57 ms | 59.0 | 0.22 ms | 154.9 | 53% |
 | 512 | 3.75 ms | 71.6 | 0.87 ms | 309.2 | 64% |
@@ -1968,6 +1968,24 @@ Measured on: Threadripper 7960X (24C/48T, AVX2+FMA+AVX-512) + RTX 4090
 
 Per-core peak (AVX2+FMA @ 3.5GHz): 112 GFLOPS. Multi-core peak: 2688 GFLOPS.
 Best single-thread efficiency: 64%. Best parallel efficiency: 19%.
+
+**Parallel scaling analysis (cgp-driven, 2026-04-04):**
+
+| Threads | 1024x1024 GFLOPS | Scaling | Notes |
+|---------|-----------------|---------|-------|
+| 1 | 110 | 1.0x | baseline |
+| 4 | 340 | 3.1x | near-linear |
+| 8 | 548 | 5.0x | **peak** — single CCD L3 (32MB) |
+| 12 | 529 | 4.8x | cache-aware cap prevents regression |
+| 24 | 437 | 4.0x | cross-CCD L3 thrashing |
+
+**Optimization applied:** Thread count capped at 8 for medium problems (<512M FLOPs)
+to stay within single CCD L3 boundary. Result: 12T improved from 447→529 GFLOP/s (+18.4%).
+
+**Negative result (documented):** Pre-packing B via `gemm_blis_with_prepacked_b`
+regressed from 548→256 GFLOP/s. Root cause: unpacked `gemm_blis` inner loop
+dispatches to optimized ASM microkernel more effectively. B packing cost is
+amortized across K iterations within each thread.
 
 **GPU GEMM (trueno CTA WMMA + cuBLAS, RTX 4090):**
 
