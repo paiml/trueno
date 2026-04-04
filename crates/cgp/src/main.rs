@@ -10,6 +10,10 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(name = "cgp", version, about, long_about = None)]
 struct Cli {
+    /// Output JSON instead of human-readable text
+    #[arg(long, global = true)]
+    json: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -377,8 +381,7 @@ fn dispatch_profile(target: ProfileTarget) -> Result<()> {
             profilers::rayon_parallel::profile_parallel(&function, size, threads.as_deref())
         }
         ProfileTarget::Compare { kernel, size, backends } => {
-            println!("cgp profile compare: kernel={kernel} size={size} backends={backends}");
-            Ok(())
+            analysis::compare::run_compare(&kernel, size, &backends)
         }
         ProfileTarget::Binary { path, kernel_filter, trace, duration } => {
             profilers::cuda::profile_binary(
@@ -407,8 +410,7 @@ fn dispatch_contract(action: ContractAction) -> Result<()> {
             )
         }
         ContractAction::Generate { kernel, size, tolerance } => {
-            println!("cgp contract generate: kernel={kernel}, size={size}, tolerance={tolerance}%");
-            Ok(())
+            analysis::contracts::run_generate(&kernel, size, tolerance)
         }
     }
 }
