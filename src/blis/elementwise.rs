@@ -283,7 +283,6 @@ unsafe fn relu_avx2_nt(input: &[f32], output: &mut [f32]) {
 ///
 /// Returns `Err` if a, b, and output lengths don't match.
 pub fn add(a: &[f32], b: &[f32], output: &mut [f32]) -> Result<(), TruenoError> {
-    contract_pre_add!(a, b);
     let n = a.len();
     if n != b.len() || n != output.len() {
         return Err(TruenoError::InvalidInput(format!(
@@ -293,6 +292,7 @@ pub fn add(a: &[f32], b: &[f32], output: &mut [f32]) -> Result<(), TruenoError> 
             output.len()
         )));
     }
+    contract_pre_add!(a, b);
 
     #[cfg(target_arch = "x86_64")]
     {

@@ -414,6 +414,38 @@ Comparison baseline: ndarray 0.17 (matrixmultiply 0.3 backend). Trueno v0.17.0 w
 
 v0.17.0 final results: GEMM 512 1.01x→2.55x and GEMM 1024 0.97x→4.41x (rayon parallel, NR=8 BLIS with AVX-512, 24-core dispatch). GEMM 256 1.02x→1.61x (parallel dispatch at 8M FLOP threshold). All softmax 3.17-6.65x, all transpose 4.38-7.52x, all GEMV 2.87-4.53x. Elementwise vec add/ReLU at 10K-1M sizes are 1.02-1.08x (memory-bandwidth ceiling).
 
+### GPU Performance (RTX 4090, CUDA 12.8)
+
+**cuBLAS FP16 GEMM throughput** (vendor-optimized baseline):
+
+| Size | Time (µs) | TFLOP/s | Efficiency (of 330T peak) |
+|------|-----------|---------|--------------------------|
+| 256×256 | 4.2 | 8.1 | 2.4% |
+| 512×512 | 9.0 | 29.9 | 9.1% |
+| 1024×1024 | 25.8 | 83.3 | 25.2% |
+| 2048×2048 | 247 | 69.4 | 21.0% |
+| 4096×4096 | 1,362 | 100.9 | 30.6% |
+
+Peak: 100.9 TFLOP/s at 4096×4096 (30.6% of theoretical 330 TFLOP/s FP16 tensor core peak).
+
+**PTX GEMM (pure Rust, no nvcc) vs cuBLAS — FP32:**
+
+| Size | PTX (µs) | cuBLAS (µs) | Ratio | Verdict |
+|------|----------|-------------|-------|---------|
+| 32×32 | 3.7 | 7.6 | **PTX 2.0× faster** | ✅ |
+| 64×64 | 5.3 | 9.4 | **PTX 1.8× faster** | ✅ |
+| 128×128 | 8.6 | 5.7 | cuBLAS 1.5× faster | competitive |
+| 256×256 | 15.9 | 11.8 | cuBLAS 1.3× faster | competitive |
+
+Key finding: trueno-gpu's pure-Rust PTX GEMM kernels **beat cuBLAS** at small matrix sizes (≤64) due to lower kernel launch overhead. cuBLAS wins at 128+ where its vendor-optimized tiling dominates. All sizes within 2× — competitive with NVIDIA's own library.
+
+**PTX generation performance** (pure Rust → PTX string):
+- Module emit: 272ns
+- Kernel build: 84ns
+- Module build: 16.5ns
+
+1,047/1,047 kernel PTX generation tests pass.
+
 ### Optimizations Applied (v0.17.0, April 2026)
 
 1. **Rayon parallel GEMM dispatch**: Parallel outer-loop tiling at 8M FLOP threshold. 24-core Threadripper 7960X scales near-linearly for large GEMM. GEMM 1024: 0.97x→4.41x. GEMM 512: 1.01x→2.55x. GEMM 256: 1.02x→1.61x.
