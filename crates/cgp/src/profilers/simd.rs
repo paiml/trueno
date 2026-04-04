@@ -283,17 +283,47 @@ fn format_count(n: u64) -> String {
 }
 
 /// Find a trueno benchmark binary.
+/// Checks CARGO_TARGET_DIR, standard locations, and glob for bench deps.
 fn find_bench_binary() -> Option<String> {
-    let candidates = [
-        "/mnt/nvme-raid0/targets/trueno/release/examples/benchmark_matrix_suite",
-        "./target/release/examples/benchmark_matrix_suite",
-        "/mnt/nvme-raid0/targets/trueno/release/deps/vector_ops-*",
-    ];
+    // Check CARGO_TARGET_DIR first (user's zsh function sets this)
+    let target_dir = std::env::var("CARGO_TARGET_DIR").unwrap_or_default();
+
+    let mut candidates: Vec<String> = Vec::new();
+    if !target_dir.is_empty() {
+        candidates.push(format!("{target_dir}/release/examples/benchmark_matrix_suite"));
+    }
+    candidates.extend_from_slice(&[
+        "/mnt/nvme-raid0/targets/trueno/release/examples/benchmark_matrix_suite".to_string(),
+        "./target/release/examples/benchmark_matrix_suite".to_string(),
+    ]);
+
     for path in &candidates {
-        if !path.contains('*') && std::path::Path::new(path).exists() {
-            return Some(path.to_string());
+        if std::path::Path::new(path).exists() {
+            return Some(path.clone());
         }
     }
+
+    // Try glob for bench binaries
+    let glob_dirs = if !target_dir.is_empty() {
+        vec![format!("{target_dir}/release/deps")]
+    } else {
+        vec![
+            "/mnt/nvme-raid0/targets/trueno/release/deps".to_string(),
+            "./target/release/deps".to_string(),
+        ]
+    };
+    for dir in &glob_dirs {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+                if name_str.starts_with("vector_ops-") && !name_str.contains('.') {
+                    return Some(entry.path().display().to_string());
+                }
+            }
+        }
+    }
+
     None
 }
 

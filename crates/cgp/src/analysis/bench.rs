@@ -16,7 +16,6 @@ pub fn run_bench(
     println!("\n=== CGP Bench: {bench_name} ===\n");
 
     // Build the cargo bench command
-    // Detect if we're in a workspace — use -p trueno for the main crate benches
     let mut cmd = Command::new("cargo");
     cmd.arg("bench");
 
@@ -27,8 +26,13 @@ pub fn run_bench(
         cmd.arg("--bench").arg(bench_name);
     }
 
-    // Don't fail on benchmark errors (some may not compile without features)
     cmd.arg("--no-fail-fast");
+
+    // If perf stat overlay requested and perf is available, wrap with perf stat
+    let use_perf = counters.is_some() && which::which("perf").is_ok();
+    if use_perf {
+        println!("  Hardware counter overlay: enabled");
+    }
 
     println!("  Running: cargo bench --bench {bench_name}");
     if let Some(c) = counters {
@@ -45,12 +49,10 @@ pub fn run_bench(
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     if !output.status.success() {
-        // Check if the benchmark doesn't exist
         if stderr.contains("no bench target") || stderr.contains("can't find") {
             println!("  Benchmark '{bench_name}' not found.");
             println!("  Available benchmarks:");
 
-            // List available benches
             let list_output = Command::new("cargo")
                 .args(["bench", "--bench", "nonexistent_xyz_123", "--", "--list"])
                 .output();
@@ -69,21 +71,20 @@ pub fn run_bench(
     }
 
     // Parse criterion output for timing results
-    let mut results: Vec<(String, String)> = Vec::new();
+    let mut results: Vec<BenchResult> = Vec::new();
     for line in stdout.lines() {
-        // Criterion format: "test_name    time:   [low est high]"
         if line.contains("time:") {
             let parts: Vec<&str> = line.splitn(2, "time:").collect();
             if parts.len() == 2 {
                 let name = parts[0].trim().to_string();
                 let timing = parts[1].trim().to_string();
-                results.push((name, timing));
+                let change = extract_change(line);
+                results.push(BenchResult { name, timing, change });
             }
         }
     }
 
     if results.is_empty() {
-        // Show raw output
         println!("  Criterion output:");
         for line in stdout.lines().take(30) {
             if !line.trim().is_empty() {
@@ -92,12 +93,27 @@ pub fn run_bench(
         }
     } else {
         println!("  Results:");
-        for (name, timing) in &results {
-            println!("    {name:40} {timing}");
+        for r in &results {
+            let change_str = match &r.change {
+                Some(c) => format!("  ({c})"),
+                None => String::new(),
+            };
+            println!("    {:40} {}{}", r.name, r.timing, change_str);
         }
     }
 
-    // Check regression if requested
+    // Run perf stat overlay if requested
+    if let Some(counter_list) = counters {
+        if which::which("perf").is_ok() {
+            println!("\n  --- perf stat overlay ---");
+            run_perf_overlay(bench_name, counter_list);
+        } else {
+            println!("\n  perf not available — skipping hardware counter overlay.");
+            println!("  Install linux-tools-common for hardware counter support.");
+        }
+    }
+
+    // Check regression
     if check_regression {
         println!("\n  Regression check (threshold={threshold}%):");
         let mut regressions = 0;
@@ -120,11 +136,92 @@ pub fn run_bench(
     Ok(())
 }
 
+/// Benchmark result parsed from criterion output.
+struct BenchResult {
+    name: String,
+    timing: String,
+    change: Option<String>,
+}
+
+/// Extract performance change annotation from criterion line.
+fn extract_change(line: &str) -> Option<String> {
+    if line.contains("change:") {
+        line.split("change:").nth(1).map(|s| s.trim().to_string())
+    } else {
+        None
+    }
+}
+
+/// Run perf stat with specified counters alongside the benchmark.
+fn run_perf_overlay(bench_name: &str, counters: &str) {
+    let events = counters.replace(' ', "");
+
+    // Build the perf stat command wrapping cargo bench
+    let mut cmd = Command::new("perf");
+    cmd.arg("stat")
+        .arg("-e")
+        .arg(&events)
+        .arg("-x")
+        .arg(",")
+        .arg("cargo")
+        .arg("bench")
+        .arg("--bench")
+        .arg(bench_name)
+        .arg("--")
+        .arg("--quick"); // Use quick mode for perf overlay
+
+    match cmd.output() {
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+
+            // Parse perf stat CSV output from stderr
+            for line in stderr.lines() {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with('#') || line.starts_with("Performance") {
+                    continue;
+                }
+                if line.contains("seconds time elapsed") {
+                    println!("    Wall time: {}", line.trim());
+                    continue;
+                }
+
+                let fields: Vec<&str> = line.split(',').collect();
+                if fields.len() >= 3 {
+                    let value = fields[0].trim();
+                    let event = fields[2].trim();
+                    if !value.is_empty() && !event.is_empty() {
+                        println!("    {event:40} {value:>14}");
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            println!("    perf stat failed: {e}");
+            println!("    Try: sudo sysctl kernel.perf_event_paranoid=2");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
-    fn test_bench_module_exists() {
-        // Bench module compiles and is importable
-        assert!(true);
+    fn test_extract_change_none() {
+        assert!(extract_change("some time: [1.0 ns 2.0 ns]").is_none());
+    }
+
+    #[test]
+    fn test_extract_change_present() {
+        let change = extract_change("some time: [1.0 ns] change: +5.2%");
+        assert!(change.is_some());
+        assert!(change.unwrap().contains("+5.2%"));
+    }
+
+    #[test]
+    fn test_bench_result_struct() {
+        let r =
+            BenchResult { name: "test".to_string(), timing: "1.0 ns".to_string(), change: None };
+        assert_eq!(r.name, "test");
     }
 }

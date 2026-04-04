@@ -7,5 +7,6 @@ pub mod quant;
 pub mod rayon_parallel;
 pub mod scalar;
 pub mod simd;
+pub mod system;
 pub mod wasm;
 pub mod wgpu_profiler;

@@ -3,6 +3,7 @@
 
 use crate::analysis::roofline::{Bound, MemoryLevel, Precision, RooflineModel};
 use crate::metrics::catalog::*;
+use crate::profilers::system;
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -229,6 +230,10 @@ pub fn ncu_metrics_to_profile(
             global_load_efficiency_pct: global_load_eff,
             ..Default::default()
         }),
+        system_health: system::collect_system_health(),
+        vram: system::collect_vram(),
+        energy: system::collect_system_health()
+            .and_then(|h| system::compute_energy(h.gpu_power_watts, tflops, duration_us)),
         ..Default::default()
     }
 }
