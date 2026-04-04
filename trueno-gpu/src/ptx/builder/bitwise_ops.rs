@@ -149,6 +149,26 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
+    /// Select u64 based on predicate: dst = pred ? true_val : false_val
+    ///
+    /// PTX format: selp.b64 d, a, b, p
+    pub fn selp_u64(
+        &mut self,
+        pred: VirtualReg,
+        true_val: VirtualReg,
+        false_val: VirtualReg,
+    ) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::B64);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Selp, PtxType::B64)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(true_val))
+                .src(Operand::Reg(false_val))
+                .src(Operand::Reg(pred)),
+        );
+        dst
+    }
+
     // setp_gt_f32 is provided by PtxComparison trait (comparison.rs)
 
     /// AND two predicates: dst = a AND b
