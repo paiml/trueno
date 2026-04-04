@@ -313,7 +313,17 @@ pub fn run_doctor(json: bool) -> Result<()> {
         println!("  {pad_name}{pad_version}{}", check.status);
     }
 
-    println!();
+    // Check for perf_event_paranoid issues
+    if let Some(paranoid) = check_perf_paranoid() {
+        if paranoid > 2 {
+            println!(
+                "  \x1b[33m[WARN]\x1b[0m perf_event_paranoid={paranoid} — hardware counters blocked for non-root users."
+            );
+            println!("         Fix: sudo sysctl kernel.perf_event_paranoid=2");
+            println!("         Or run cgp with sudo for perf stat features.\n");
+        }
+    }
+
     if report.operational {
         println!(
             "  All {} required components available. cgp is fully operational.",

@@ -55,9 +55,12 @@ impl RayonProfile {
     }
 }
 
+/// Number of runs to take min of for stable timing.
+const TIMING_RUNS: usize = 3;
+
 /// Profile a parallel function.
 /// Runs the benchmark binary with RAYON_NUM_THREADS=1 and RAYON_NUM_THREADS=N,
-/// then computes parallel metrics.
+/// using min-of-3 timing for stability. Computes parallel metrics.
 pub fn profile_parallel(function: &str, size: u32, threads: Option<&str>) -> Result<()> {
     let thread_count = match threads {
         Some("auto") | None => num_cpus::get(),
@@ -75,11 +78,12 @@ pub fn profile_parallel(function: &str, size: u32, threads: Option<&str>) -> Res
     match binary {
         Some(bin) => {
             println!("  Binary: {bin}");
+            println!("  Timing: min of {TIMING_RUNS} runs");
 
-            // Run single-threaded
-            let single_time = time_binary_with_threads(&bin, 1);
-            // Run multi-threaded
-            let parallel_time = time_binary_with_threads(&bin, thread_count);
+            // Run single-threaded (min of N runs)
+            let single_time = time_binary_min_of_n(&bin, 1, TIMING_RUNS);
+            // Run multi-threaded (min of N runs)
+            let parallel_time = time_binary_min_of_n(&bin, thread_count, TIMING_RUNS);
 
             match (single_time, parallel_time) {
                 (Some(st), Some(pt)) => {
@@ -137,18 +141,23 @@ fn amdahl(parallel_fraction: f64, threads: usize) -> f64 {
     1.0 / ((1.0 - parallel_fraction) + parallel_fraction / threads as f64)
 }
 
-/// Time a binary with a given number of threads.
-fn time_binary_with_threads(binary: &str, threads: usize) -> Option<f64> {
-    let start = std::time::Instant::now();
-    let output = std::process::Command::new(binary)
-        .env("RAYON_NUM_THREADS", threads.to_string())
-        .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
+/// Time a binary with a given number of threads, returning min of N runs
+/// for stable measurements (reduces noise from OS scheduling, cache state).
+fn time_binary_min_of_n(binary: &str, threads: usize, runs: usize) -> Option<f64> {
+    let mut best: Option<f64> = None;
+    for _ in 0..runs {
+        let start = std::time::Instant::now();
+        let output = std::process::Command::new(binary)
+            .env("RAYON_NUM_THREADS", threads.to_string())
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let elapsed = start.elapsed().as_secs_f64() * 1e6;
+        best = Some(best.map_or(elapsed, |b: f64| b.min(elapsed)));
     }
-    Some(start.elapsed().as_secs_f64() * 1e6) // Convert to microseconds
+    best
 }
 
 /// Find a parallel benchmark binary.
