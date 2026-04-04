@@ -304,7 +304,7 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Doctor => doctor::run_doctor(json),
-        Commands::Profile { target } => dispatch_profile(target),
+        Commands::Profile { target } => dispatch_profile(target, json),
         Commands::Roofline { target, kernels, export, empirical } => {
             analysis::roofline::run_roofline(
                 &target,
@@ -351,7 +351,7 @@ fn main() -> Result<()> {
     }
 }
 
-fn dispatch_profile(target: ProfileTarget) -> Result<()> {
+fn dispatch_profile(target: ProfileTarget, json: bool) -> Result<()> {
     match target {
         ProfileTarget::Kernel { name, size, roofline, metrics } => {
             profilers::cuda::profile_kernel(&name, size, roofline, metrics.as_deref())
@@ -384,7 +384,7 @@ fn dispatch_profile(target: ProfileTarget) -> Result<()> {
             profilers::rayon_parallel::profile_parallel(&function, size, threads.as_deref())
         }
         ProfileTarget::Compare { kernel, size, backends } => {
-            analysis::compare::run_compare(&kernel, size, &backends)
+            analysis::compare::run_compare(&kernel, size, &backends, json)
         }
         ProfileTarget::Binary { path, kernel_filter, trace, duration } => {
             profilers::cuda::profile_binary(

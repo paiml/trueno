@@ -459,3 +459,72 @@ fn test_contract_verify_missing_dir() {
     // Should succeed with 0 contracts (not crash)
     assert!(output.status.success());
 }
+
+/// cgp --json profile compare must output valid JSON array.
+#[test]
+fn test_json_profile_compare() {
+    let output = cgp_cmd()
+        .args([
+            "--json",
+            "profile",
+            "compare",
+            "--kernel",
+            "gemm",
+            "--size",
+            "256",
+            "--backends",
+            "scalar,avx2",
+        ])
+        .output()
+        .expect("Failed to run cgp --json profile compare");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("Compare JSON is not valid JSON");
+    assert!(parsed.is_array(), "Compare output should be an array");
+    let arr = parsed.as_array().unwrap();
+    assert!(!arr.is_empty(), "Should have backend results");
+    assert!(arr[0].get("name").is_some(), "Each result should have a name");
+    assert!(arr[0].get("tflops").is_some(), "Each result should have tflops");
+}
+
+/// cgp explain ptx must not crash and mention PTX.
+#[test]
+fn test_explain_ptx() {
+    let output =
+        cgp_cmd().args(["explain", "ptx"]).output().expect("Failed to run cgp explain ptx");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("PTX"), "Should mention PTX: {stdout}");
+}
+
+/// cgp explain wgsl must not crash.
+#[test]
+fn test_explain_wgsl() {
+    let output =
+        cgp_cmd().args(["explain", "wgsl"]).output().expect("Failed to run cgp explain wgsl");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("WGSL"), "Should mention WGSL: {stdout}");
+}
+
+/// cgp --json doctor must have GPU detection fields.
+#[test]
+fn test_json_doctor_gpu_detection() {
+    let output =
+        cgp_cmd().args(["--json", "doctor"]).output().expect("Failed to run cgp --json doctor");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("Doctor JSON is not valid JSON");
+
+    let checks = parsed["checks"].as_array().unwrap();
+    let gpu_check = checks.iter().find(|c| c["name"] == "GPU");
+    if let Some(gc) = gpu_check {
+        assert_eq!(gc["status"], "Ok", "GPU should be detected");
+    }
+}

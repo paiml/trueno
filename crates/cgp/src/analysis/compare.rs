@@ -4,9 +4,10 @@
 
 use crate::analysis::roofline::{Precision, RooflineModel};
 use anyhow::Result;
+use serde::Serialize;
 
 /// Supported backends for comparison.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct BackendResult {
     pub name: String,
     pub wall_time_us: f64,
@@ -56,10 +57,12 @@ fn estimate_cublas_time_us(size: u32) -> f64 {
 }
 
 /// Run cross-backend comparison.
-pub fn run_compare(kernel: &str, size: u32, backends_str: &str) -> Result<()> {
+pub fn run_compare(kernel: &str, size: u32, backends_str: &str, json: bool) -> Result<()> {
     let backends: Vec<&str> = backends_str.split(',').map(|s| s.trim()).collect();
 
-    println!("\n=== CGP Cross-Backend Comparison: {kernel} ({size}x{size}x{size}) ===\n");
+    if !json {
+        println!("\n=== CGP Cross-Backend Comparison: {kernel} ({size}x{size}x{size}) ===\n");
+    }
 
     let mut results: Vec<BackendResult> = Vec::new();
 
@@ -118,6 +121,11 @@ pub fn run_compare(kernel: &str, size: u32, backends_str: &str) -> Result<()> {
     results.sort_by(|a, b| {
         a.wall_time_us.partial_cmp(&b.wall_time_us).unwrap_or(std::cmp::Ordering::Equal)
     });
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&results)?);
+        return Ok(());
+    }
 
     let best_time = results.first().map(|r| r.wall_time_us).unwrap_or(1.0);
 
@@ -238,7 +246,13 @@ mod tests {
 
     #[test]
     fn test_run_compare_basic() {
-        let result = run_compare("gemm", 256, "scalar,avx2");
+        let result = run_compare("gemm", 256, "scalar,avx2", false);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_compare_json() {
+        let result = run_compare("gemm", 256, "scalar,avx2", true);
         assert!(result.is_ok());
     }
 }
