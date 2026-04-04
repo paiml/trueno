@@ -87,8 +87,9 @@ fn test_kernel_type_to_index() {
     assert_eq!(KernelType::RmsNorm.to_index(), 10);
     assert_eq!(KernelType::VectorizedRmsNorm.to_index(), 11);
     assert_eq!(KernelType::BatchedRmsNorm.to_index(), 12);
-    assert_eq!(KernelType::Generic.to_index(), 13);
-    assert_eq!(KernelType::Unknown.to_index(), 14);
+    assert_eq!(KernelType::FusedQKVHwDp4aQ4KGemv.to_index(), 13);
+    assert_eq!(KernelType::Generic.to_index(), 14);
+    assert_eq!(KernelType::Unknown.to_index(), 15);
 }
 
 #[test]
