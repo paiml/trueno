@@ -233,6 +233,18 @@ enum ProfileTarget {
         #[arg(long)]
         backends: String,
     },
+    /// Parallel scaling sweep (thread count vs throughput)
+    Scaling {
+        /// Problem size
+        #[arg(long)]
+        size: u32,
+        /// Max threads to test (default: num_cpus)
+        #[arg(long)]
+        max_threads: Option<usize>,
+        /// Runs per thread count for min-of-N timing
+        #[arg(long, default_value = "3")]
+        runs: usize,
+    },
     /// Profile an arbitrary binary
     Binary {
         /// Binary path
@@ -385,6 +397,9 @@ fn dispatch_profile(target: ProfileTarget, json: bool) -> Result<()> {
         }
         ProfileTarget::Compare { kernel, size, backends } => {
             analysis::compare::run_compare(&kernel, size, &backends, json)
+        }
+        ProfileTarget::Scaling { size, max_threads, runs } => {
+            profilers::rayon_parallel::profile_scaling(size, max_threads, runs, json)
         }
         ProfileTarget::Binary { path, kernel_filter, trace, duration } => {
             profilers::cuda::profile_binary(

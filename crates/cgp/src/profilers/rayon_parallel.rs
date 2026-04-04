@@ -136,6 +136,115 @@ pub fn profile_parallel(function: &str, size: u32, threads: Option<&str>) -> Res
     Ok(())
 }
 
+/// Parallel scaling sweep — measure throughput at each thread count.
+/// Produces the scaling table used in spec Appendix A.2.
+pub fn profile_scaling(
+    size: u32,
+    max_threads: Option<usize>,
+    runs: usize,
+    json: bool,
+) -> anyhow::Result<()> {
+    let max_t = max_threads.unwrap_or_else(num_cpus::get);
+    let binary = find_parallel_binary();
+    let bin = match &binary {
+        Some(b) => b.as_str(),
+        None => {
+            anyhow::bail!(
+                "No benchmark binary found. Build with: cargo build --release --example benchmark_matrix_suite --features parallel"
+            )
+        }
+    };
+
+    // Thread counts to test: 1, 2, 4, 8, 12, 16, 24, ... up to max
+    let mut thread_counts: Vec<usize> = vec![1, 2, 4, 8, 12, 16, 24, 32, 48, 64];
+    thread_counts.retain(|&t| t <= max_t);
+    if !thread_counts.contains(&max_t) {
+        thread_counts.push(max_t);
+    }
+
+    // First: measure single-thread baseline by parsing benchmark output
+    let (baseline_ms, baseline_gflops) = parse_gemm_time(bin, size, 1, runs)
+        .ok_or_else(|| anyhow::anyhow!(
+            "Failed to parse GEMM {size}x{size} from benchmark output (1 thread). \
+             Ensure the binary outputs 'Matrix Multiplication ({size}x{size}x{size})... X.XX ms (Y.YY GFLOPS)'"
+        ))?;
+
+    let mut results: Vec<ScalingPoint> = Vec::new();
+
+    if !json {
+        println!("\n=== CGP Parallel Scaling: GEMM {size}x{size}, min-of-{runs} runs ===\n");
+        println!(
+            "  {:>8} | {:>10} | {:>10} | {:>8} | {:>6}",
+            "Threads", "Time (ms)", "GFLOPS", "Scaling", "Notes"
+        );
+        println!("  {}", "-".repeat(60));
+    }
+
+    for &t in &thread_counts {
+        match parse_gemm_time(bin, size, t, runs) {
+            Some((time_ms, gflops)) => {
+                let scaling = baseline_ms / time_ms;
+
+                let notes = if t == 1 {
+                    "baseline".to_string()
+                } else if scaling >= (t as f64) * 0.9 {
+                    "near-linear".to_string()
+                } else {
+                    String::new()
+                };
+
+                if !json {
+                    println!(
+                        "  {:>8} | {:>9.2} | {:>10.1} | {:>7.1}x | {notes}",
+                        t, time_ms, gflops, scaling
+                    );
+                }
+                results.push(ScalingPoint {
+                    threads: t,
+                    time_us: time_ms * 1000.0,
+                    gflops,
+                    scaling,
+                });
+            }
+            None => {
+                if !json {
+                    println!("  {:>8} | {:>10} | {:>10} | {:>8} |", t, "FAILED", "-", "-");
+                }
+            }
+        }
+    }
+
+    // Find peak
+    if let Some(peak) = results.iter().max_by(|a, b| a.gflops.partial_cmp(&b.gflops).unwrap()) {
+        if !json {
+            println!(
+                "\n  Peak: {:.1} GFLOPS at {}T ({:.1}x scaling)",
+                peak.gflops, peak.threads, peak.scaling
+            );
+            let theoretical_peak = baseline_gflops * peak.threads as f64;
+            let efficiency = peak.gflops / theoretical_peak * 100.0;
+            println!("  Efficiency: {efficiency:.1}% vs linear scaling");
+        }
+    }
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&results)?);
+    } else {
+        println!();
+    }
+
+    Ok(())
+}
+
+/// A single point in a parallel scaling curve.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ScalingPoint {
+    pub threads: usize,
+    pub time_us: f64,
+    pub gflops: f64,
+    pub scaling: f64,
+}
+
 /// Amdahl's law: speedup = 1 / ((1 - p) + p/n)
 fn amdahl(parallel_fraction: f64, threads: usize) -> f64 {
     1.0 / ((1.0 - parallel_fraction) + parallel_fraction / threads as f64)
@@ -158,6 +267,58 @@ fn time_binary_min_of_n(binary: &str, threads: usize, runs: usize) -> Option<f64
         best = Some(best.map_or(elapsed, |b: f64| b.min(elapsed)));
     }
     best
+}
+
+/// Run benchmark binary and parse the GEMM time for a specific size.
+/// Parses lines like: "Matrix Multiplication (1024x1024x1024)...     6.04 ms  (355.35 GFLOPS)"
+/// Returns (time_ms, gflops) for the best of N runs.
+fn parse_gemm_time(binary: &str, size: u32, threads: usize, runs: usize) -> Option<(f64, f64)> {
+    let pattern = format!("{size}x{size}x{size}");
+    let mut best_time_ms: Option<f64> = None;
+    let mut best_gflops: Option<f64> = None;
+
+    for _ in 0..runs {
+        let output = std::process::Command::new(binary)
+            .env("RAYON_NUM_THREADS", threads.to_string())
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            if line.contains("Matrix Multiplication") && line.contains(&pattern) {
+                // Parse "... X.XX ms  (Y.YY GFLOPS)"
+                if let Some(ms_str) = extract_between(line, "...", " ms") {
+                    if let Ok(ms) = ms_str.trim().parse::<f64>() {
+                        if best_time_ms.is_none() || ms < best_time_ms.unwrap() {
+                            best_time_ms = Some(ms);
+                            // Parse GFLOPS
+                            if let Some(gf_str) = extract_between(line, "(", " GFLOPS)") {
+                                if let Ok(gf) = gf_str.trim().parse::<f64>() {
+                                    best_gflops = Some(gf);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    match (best_time_ms, best_gflops) {
+        (Some(ms), Some(gf)) => Some((ms, gf)),
+        _ => None,
+    }
+}
+
+/// Extract text between two markers in a string.
+/// Finds the last occurrence of `start` before `end`.
+fn extract_between<'a>(s: &'a str, start: &str, end: &str) -> Option<&'a str> {
+    let end_idx = s.find(end)?;
+    let prefix = &s[..end_idx];
+    let start_idx = prefix.rfind(start)? + start.len();
+    Some(&s[start_idx..end_idx])
 }
 
 /// Find a parallel benchmark binary.
@@ -248,5 +409,25 @@ mod tests {
     fn test_profile_parallel_auto_threads() {
         let result = profile_parallel("gemm_heijunka", 4096, Some("auto"));
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_extract_between() {
+        let line = "  Matrix Multiplication (1024x1024x1024)...     6.04 ms  (355.35 GFLOPS)";
+        assert_eq!(extract_between(line, "...", " ms"), Some("     6.04"));
+        // Uses rfind, so finds the LAST ( before " GFLOPS)"
+        assert_eq!(extract_between(line, "(", " GFLOPS)"), Some("355.35"));
+        assert_eq!(extract_between(line, "missing", " end"), None);
+    }
+
+    #[test]
+    fn test_scaling_point_serialization() {
+        let point = ScalingPoint { threads: 8, time_us: 5000.0, gflops: 420.0, scaling: 5.1 };
+        let json = serde_json::to_string(&point).unwrap();
+        assert!(json.contains("\"threads\":8"));
+        assert!(json.contains("\"gflops\":420.0"));
+        let decoded: ScalingPoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.threads, 8);
+        assert!((decoded.scaling - 5.1).abs() < 0.01);
     }
 }
