@@ -1273,21 +1273,319 @@ FALSIFY-CGP-082: Must measure thread spawn overhead
 
 ---
 
-## 9. Output Formats
+## 9. Metrics Catalog (158 metrics, 23 categories)
 
-### 9.1 JSON Export Schema
+Every metric cgp captures, organized by collection source.
+
+### 9.1 Timing (5) — all backends
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `wall_clock_time_us` | f64 | Execution time |
+| `samples` | u32 | Measurement sample count |
+| `stddev_us` | f64 | Standard deviation |
+| `ci_95_low_us` | f64 | 95% CI lower bound |
+| `ci_95_high_us` | f64 | 95% CI upper bound |
+
+### 9.2 Throughput (4) — all backends
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `tflops` | f64 | Tera floating-point ops/sec |
+| `gflops` | f64 | Giga floating-point ops/sec (CPU) |
+| `bandwidth_gbps` | f64 | Memory bandwidth achieved |
+| `arithmetic_intensity` | f64 | FLOPs per byte transferred |
+
+### 9.3 Roofline (6) — all backends
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `peak_compute_tflops` | f64 | Hardware peak per precision |
+| `peak_bandwidth_gbps` | f64 | Per memory level (L1/L2/DRAM/PCIe) |
+| `ridge_point` | f64 | peak_compute / peak_bandwidth |
+| `bound` | enum | `Memory` or `Compute` |
+| `efficiency_pct` | f64 | Achieved / peak throughput |
+| `distance_to_ridge` | f64 | Gap from optimal point |
+
+### 9.4 GPU Compute (12) — ncu / CUPTI
+
+| Metric | CUPTI Name | Description |
+|--------|-----------|-------------|
+| `sm_utilization_pct` | `sm__throughput.avg.pct_of_peak_sustained_elapsed` | SM throughput % of peak |
+| `achieved_occupancy_pct` | `sm__warps_active.avg.pct_of_peak_sustained_elapsed` | Active warps % |
+| `warp_execution_efficiency_pct` | `smsp__thread_inst_executed_per_inst_executed.pct` | Non-divergent % |
+| `branch_efficiency_pct` | `smsp__sass_average_branch_targets_threads_uniform.pct` | Uniform branches % |
+| `tensor_core_utilization_pct` | `sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed` | TC pipe active |
+| `ipc` | computed | Instructions per cycle |
+| `flop16_ops` | `smsp__sass_thread_inst_executed_op_hfma2_pred_on.sum` | FP16 op count |
+| `flop32_ops` | `smsp__sass_thread_inst_executed_op_ffma_pred_on.sum` | FP32 op count |
+| `register_usage_per_thread` | `launch__registers_per_thread` | Registers allocated |
+| `shared_memory_per_block` | `launch__shared_mem_per_block_driver` | Shared memory bytes |
+| `grid_dimensions` | `launch__grid_size` | Grid (x,y,z) |
+| `block_dimensions` | `launch__block_size` | Block (x,y,z) |
+
+### 9.5 GPU Memory (8) — ncu / CUPTI
+
+| Metric | CUPTI Name | Description |
+|--------|-----------|-------------|
+| `dram_throughput_pct` | `dram__throughput.avg.pct_of_peak_sustained_elapsed` | DRAM BW % of peak |
+| `l1_hit_rate_pct` | `l1tex__t_sector_hit_rate.pct` | L1 cache hit rate |
+| `l2_hit_rate_pct` | `lts__t_sector_hit_rate.pct` | L2 cache hit rate |
+| `global_load_efficiency_pct` | `smsp__sass_average_data_bytes_per_sector_mem_global_op_ld.pct` | Load coalescing |
+| `global_store_efficiency_pct` | `smsp__sass_average_data_bytes_per_sector_mem_global_op_st.pct` | Store coalescing |
+| `shared_load_efficiency_pct` | shared memory load eff | Shared load eff |
+| `shared_store_efficiency_pct` | shared memory store eff | Shared store eff |
+| `shared_bank_conflicts` | `l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld.sum` | Bank conflict count |
+
+### 9.6 GPU Stalls (4) — ncu warp state
+
+| Metric | Description |
+|--------|-------------|
+| `barrier_stall_cycles` | Cycles waiting on bar.sync |
+| `memory_stall_cycles` | Cycles waiting on global/shared memory |
+| `pipeline_bubbles` | Pipeline bubble cycles |
+| `warp_scheduler_idle_pct` | Scheduler with no eligible warps |
+
+### 9.7 GPU Transfer (3) — nsys / CUPTI
+
+| Metric | Description |
+|--------|-------------|
+| `h2d_bandwidth_gbps` | Host-to-device transfer rate |
+| `d2h_bandwidth_gbps` | Device-to-host transfer rate |
+| `pcie_utilization_pct` | PCIe bandwidth utilization |
+
+### 9.8 GPU VRAM (7) — nvidia-smi / cuMemGetInfo / wgpu
+
+| Metric | Source | Description |
+|--------|--------|-------------|
+| `vram_used_mb` | cuMemGetInfo / wgpu | Current VRAM consumption |
+| `vram_total_mb` | cuMemGetInfo / wgpu | Total VRAM capacity |
+| `vram_free_mb` | cuMemGetInfo / wgpu | Available VRAM |
+| `vram_utilization_pct` | computed | VRAM usage percentage |
+| `vram_peak_mb` | tracking | High-water mark during profiling |
+| `vram_allocation_count` | CUPTI callback | Number of cuMemAlloc calls |
+| `vram_fragmentation_pct` | computed | Largest free block / total free |
+
+### 9.9 PCIe Bus (5) — nvidia-smi / lspci
+
+| Metric | Description |
+|--------|-------------|
+| `pcie_gen` | PCIe generation (3/4/5) |
+| `pcie_width` | Link width (x8/x16) |
+| `pcie_bandwidth_theoretical_gbps` | Max (e.g., 32 GB/s for Gen4 x16) |
+| `pcie_rx_throughput_gbps` | Actual device→host throughput |
+| `pcie_tx_throughput_gbps` | Actual host→device throughput |
+
+### 9.10 System Health (8) — nvidia-smi / NVML / /proc
+
+| Metric | Source | Description |
+|--------|--------|-------------|
+| `gpu_temperature_celsius` | NVML | GPU die temperature (throttle detection) |
+| `gpu_power_watts` | NVML | GPU power draw |
+| `gpu_clock_mhz` | NVML | Current SM clock (frequency throttle detection) |
+| `gpu_memory_clock_mhz` | NVML | Memory clock frequency |
+| `cpu_frequency_mhz` | /proc/cpuinfo | CPU clock (AVX-512 throttle detection) |
+| `cpu_temperature_celsius` | lm-sensors | CPU package temperature |
+| `gpu_memory_used_mb` | NVML | GPU memory via NVML |
+| `gpu_memory_total_mb` | NVML | Total GPU memory via NVML |
+
+### 9.11 Energy Efficiency (2) — NVML / perf
+
+| Metric | Description |
+|--------|-------------|
+| `tflops_per_watt` | Performance per watt (cloud cost metric) |
+| `joules_per_inference` | Energy per workload (sustainability) |
+
+### 9.12 CPU Hardware Counters (8) — perf stat
+
+| Metric | perf Event | Description |
+|--------|-----------|-------------|
+| `cycles` | `cycles` | CPU clock cycles |
+| `instructions` | `instructions` | Instructions retired |
+| `cache_references` | `cache-references` | Cache accesses |
+| `cache_misses` | `cache-misses` | Cache misses |
+| `l1_dcache_load_misses` | `L1-dcache-load-misses` | L1 data cache misses |
+| `llc_loads` | `LLC-loads` | Last-level cache loads |
+| `branches` | `branches` | Branch instructions |
+| `branch_misses` | `branch-misses` | Branch mispredictions |
+
+### 9.13 CPU SIMD Counters (5) — perf stat
+
+| Metric | perf Event | Description |
+|--------|-----------|-------------|
+| `fp_arith_scalar_single` | `fp_arith_inst_retired.scalar_single` | Scalar FP32 |
+| `fp_arith_128b_packed_single` | `fp_arith_inst_retired.128b_packed_single` | SSE FP32 |
+| `fp_arith_256b_packed_single` | `fp_arith_inst_retired.256b_packed_single` | AVX2 FP32 |
+| `fp_arith_512b_packed_single` | `fp_arith_inst_retired.512b_packed_single` | AVX-512 FP32 |
+| `simd_utilization_pct` | computed | Vector / (vector + scalar) ratio |
+
+### 9.14 ARM Counters (3) — perf stat ARM PMU
+
+| Metric | Description |
+|--------|-------------|
+| `inst_retired` | Instructions retired |
+| `cpu_cycles` | CPU cycles |
+| `ase_spec` | SIMD/FP instructions speculatively executed |
+
+### 9.15 CPU Memory (8) — /proc/self/status / renacer / dhat
+
+| Metric | Source | Description |
+|--------|--------|-------------|
+| `rss_mb` | /proc/self/status | Resident set size (physical) |
+| `rss_peak_mb` | VmHWM | Peak RSS during profiling |
+| `vms_mb` | /proc/self/status | Virtual memory size |
+| `heap_allocated_mb` | dhat | Heap allocation total |
+| `heap_peak_mb` | dhat | Peak heap allocation |
+| `malloc_count` | renacer (mmap/brk) | Number of allocations |
+| `free_count` | renacer (munmap) | Number of deallocations |
+| `memory_leaks_bytes` | dhat | Unfreed memory at exit |
+
+### 9.16 Swap (4) — /proc/self/status / vmstat
+
+| Metric | Description |
+|--------|-------------|
+| `swap_used_mb` | Swap space consumed |
+| `swap_in_count` | Pages swapped in (major faults) |
+| `swap_out_count` | Pages swapped out |
+| `swap_activity_detected` | **Boolean red flag** — any swapping = perf problem |
+
+### 9.17 Disk I/O (6) — /proc/self/io / renacer
+
+| Metric | Source | Description |
+|--------|--------|-------------|
+| `disk_read_bytes` | /proc/self/io | Bytes read from disk |
+| `disk_write_bytes` | /proc/self/io | Bytes written to disk |
+| `disk_read_iops` | computed | Read ops/sec |
+| `disk_write_iops` | computed | Write ops/sec |
+| `io_wait_pct` | /proc/stat | CPU time waiting on I/O |
+| `file_descriptors_open` | /proc/self/fd | Open FD count (leak detection) |
+
+### 9.18 Network I/O (2) — /proc/self/net/dev
+
+| Metric | Description |
+|--------|-------------|
+| `net_rx_bytes` | Network bytes received (distributed workloads) |
+| `net_tx_bytes` | Network bytes transmitted |
+
+### 9.19 NUMA / Scheduling (6) — /proc / perf
+
+| Metric | Source | Description |
+|--------|--------|-------------|
+| `numa_node` | /proc/self/status | NUMA node affinity |
+| `numa_remote_access_pct` | perf | Cross-NUMA memory accesses |
+| `cpu_affinity_mask` | sched_getaffinity | Pinned core mask |
+| `voluntary_ctx_switches` | /proc/self/status | Voluntary context switches |
+| `involuntary_ctx_switches` | /proc/self/status | Involuntary (preemption) |
+| `cpu_migration_count` | perf | Process moved between CPUs |
+
+### 9.20 WASM Metrics (3) — wasmtime
+
+| Metric | Description |
+|--------|-------------|
+| `instruction_count` | Total instructions executed |
+| `fuel_consumed` | Wasmtime fuel units consumed |
+| `simd128_detected` | Whether SIMD128 instructions present |
+
+### 9.21 Quantized Kernel Metrics (3) — computed
+
+| Metric | Description |
+|--------|-------------|
+| `superblocks_per_sec` | Dequant throughput (super-blocks/sec) |
+| `effective_bandwidth_gbps` | Compressed bytes / time |
+| `compression_speedup` | Speedup vs FP32 baseline |
+
+### 9.22 Rayon Parallel (6) — perf stat + renacer
+
+| Metric | Description |
+|--------|-------------|
+| `parallel_speedup` | Wall time / single-thread time |
+| `parallel_efficiency` | Speedup / num_threads |
+| `heijunka_score` | Load balance (0.0=perfect, 1.0=worst) |
+| `thread_spawn_overhead_us` | Thread creation cost |
+| `work_steal_count` | Work stealing events |
+| `num_threads` | Thread count used |
+
+### 9.23 Compilation & JIT (4) — trueno-gpu internals
+
+| Metric | Description |
+|--------|-------------|
+| `ptx_jit_time_ms` | PTX-to-SASS JIT compilation time |
+| `ptx_cache_hit` | Whether cubin was loaded from disk cache |
+| `ptx_size_bytes` | Generated PTX text size |
+| `sass_instruction_count` | Final SASS instruction count (post-JIT) |
+
+### 9.24 Async Profiling (4) — AsyncTaskProfiler
+
+| Metric | Description |
+|--------|-------------|
+| `poll_count` | Future::poll() invocations |
+| `poll_efficiency` | 1.0 / poll_count (spurious wakeup detection) |
+| `yield_ratio` | Pending / total polls |
+| `avg_poll_latency_us` | Mean poll duration |
+
+### 9.25 Muda Waste Detection (13) — ncu + static analysis
+
+| Metric | Muda Type | Description |
+|--------|-----------|-------------|
+| `register_spills` | Transport | Data moved to slow memory |
+| `unnecessary_global_loads` | Transport | Redundant global loads |
+| `divergent_branches` | Motion | Warp divergence count |
+| `loop_overhead_cycles` | Motion | Branch overhead |
+| `precision_waste_pct` | Overprocessing | FP32 when FP16 suffices |
+| `redundant_instructions` | Overprocessing | Dead code |
+| `unused_shared_memory_bytes` | Inventory | Allocated not used |
+| `unused_registers_per_thread` | Inventory | Reserved not used |
+| `occupancy_loss_pct` | Inventory | Occupancy limiter |
+| `padding_waste_pct` | Overproduction | Inactive elements |
+| `inactive_thread_pct` | Overproduction | Idle threads |
+| `nan_count` | Defects | NaN propagation |
+| `inf_count` | Defects | Infinity propagation |
+
+### 9.26 Metal Metrics (2) — MTLCounterSampleBuffer
+
+| Metric | Description |
+|--------|-------------|
+| `gpu_timestamp_ns` | Metal GPU-side timing |
+| `dispatch_config` | Threadgroup size and grid |
+
+### 9.27 Regression Detection (4) — bootstrap CI
+
+| Metric | Description |
+|--------|-------------|
+| `regression_pct` | Change from baseline |
+| `p_value` | Statistical significance |
+| `effect_size_cohens_d` | Practical significance |
+| `verdict` | `REGRESSION` / `IMPROVED` / `NO_CHANGE` |
+
+### 9.28 Syscall Tracing (5) — renacer
+
+| Metric | Description |
+|--------|-------------|
+| `total_syscalls` | Total syscall count |
+| `syscall_breakdown` | Per-type counts (mmap, read, write, etc.) |
+| `io_overhead_pct` | Time in I/O syscalls |
+| `page_faults_minor` | Minor page faults |
+| `page_faults_major` | Major page faults |
+
+---
+
+## 10. Output Formats
+
+### 10.1 JSON Export Schema
 
 ```json
 {
-  "version": "1.0",
+  "version": "2.0",
   "timestamp": "2026-04-04T12:00:00Z",
   "hardware": {
     "gpu": "NVIDIA GeForce RTX 4090",
     "gpu_sm": "8.9",
     "gpu_memory_gb": 24,
     "gpu_bandwidth_gbps": 1008,
+    "gpu_pcie": "Gen4 x16",
     "cpu": "AMD EPYC 7763",
-    "cpu_features": ["avx2", "fma", "avx512f"]
+    "cpu_features": ["avx2", "fma", "avx512f"],
+    "numa_nodes": 2
   },
   "kernel": {
     "name": "gemm_cta_wmma_fp16",
@@ -1307,17 +1605,68 @@ FALSIFY-CGP-082: Must measure thread spawn overhead
   "throughput": {
     "tflops": 11.6,
     "bandwidth_gbps": 78.4,
-    "arithmetic_intensity": 8.0
+    "arithmetic_intensity": 16.0
   },
   "roofline": {
     "bound": "memory",
     "efficiency_pct": 3.5,
     "ridge_point": 327.4,
-    "distance_to_ridge": 40.8
+    "distance_to_ridge": 20.5
+  },
+  "gpu_compute": {
+    "sm_utilization_pct": 42.3,
+    "achieved_occupancy_pct": 33.0,
+    "tensor_core_utilization_pct": 92.3,
+    "warp_execution_efficiency_pct": 100.0
+  },
+  "gpu_memory": {
+    "dram_throughput_pct": 7.8,
+    "l1_hit_rate_pct": 95.2,
+    "l2_hit_rate_pct": 87.1,
+    "global_load_efficiency_pct": 72.0,
+    "shared_bank_conflicts": 0
+  },
+  "vram": {
+    "used_mb": 312,
+    "total_mb": 24564,
+    "peak_mb": 315,
+    "allocation_count": 6
+  },
+  "system_health": {
+    "gpu_temperature_celsius": 62,
+    "gpu_power_watts": 285,
+    "gpu_clock_mhz": 2520,
+    "cpu_frequency_mhz": 3500
+  },
+  "energy": {
+    "tflops_per_watt": 0.041,
+    "joules_per_inference": 0.0066
+  },
+  "cpu_memory": {
+    "rss_mb": 48.2,
+    "rss_peak_mb": 52.1,
+    "swap_activity_detected": false
+  },
+  "io": {
+    "disk_read_bytes": 0,
+    "disk_write_bytes": 4096,
+    "io_wait_pct": 0.0
+  },
+  "compilation": {
+    "ptx_jit_time_ms": 12.4,
+    "ptx_cache_hit": true,
+    "ptx_size_bytes": 12898,
+    "sass_instruction_count": 342
   },
   "muda": [
     {"type": "waiting", "source": "global_memory_latency", "impact_pct": 85.0}
-  ]
+  ],
+  "regression": {
+    "regression_pct": -35.0,
+    "verdict": "IMPROVED",
+    "p_value": 0.001,
+    "effect_size_cohens_d": 4.2
+  }
 }
 ```
 
