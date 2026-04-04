@@ -77,13 +77,15 @@ pub enum KernelType {
     RmsNorm,
     VectorizedRmsNorm,
     BatchedRmsNorm,
+    // Fused attention projection
+    FusedQKVHwDp4aQ4KGemv,
     // Other
     Generic,
     Unknown,
 }
 
 impl KernelType {
-    /// One-hot encoding index (0-15)
+    /// One-hot encoding index (0-16)
     pub fn to_index(self) -> usize {
         match self {
             KernelType::TiledQ4K => 0,
@@ -99,8 +101,9 @@ impl KernelType {
             KernelType::RmsNorm => 10,
             KernelType::VectorizedRmsNorm => 11,
             KernelType::BatchedRmsNorm => 12,
-            KernelType::Generic => 13,
-            KernelType::Unknown => 14,
+            KernelType::FusedQKVHwDp4aQ4KGemv => 13,
+            KernelType::Generic => 14,
+            KernelType::Unknown => 15,
         }
     }
 
@@ -120,13 +123,14 @@ impl KernelType {
             10 => KernelType::RmsNorm,
             11 => KernelType::VectorizedRmsNorm,
             12 => KernelType::BatchedRmsNorm,
-            13 => KernelType::Generic,
-            14.. => KernelType::Unknown,
+            13 => KernelType::FusedQKVHwDp4aQ4KGemv,
+            14 => KernelType::Generic,
+            15.. => KernelType::Unknown,
         }
     }
 
     /// Number of kernel types
-    pub const COUNT: usize = 16;
+    pub const COUNT: usize = 17;
 }
 
 // ============================================================================
