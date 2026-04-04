@@ -109,23 +109,21 @@ Execution: 23.2 us  |  11.6 TFLOP/s  |  3.5% of peak
 ├──────────────────────────────────┴───────────────────────────────────────────┤
 │                            Backend Abstraction Layer                          │
 │                                                                              │
-│  ┌────────────────┐ ┌────────────────┐ ┌───────────────┐ ┌───────────────┐  │
-│  │ CUDA Profiler  │ │ SIMD Profiler  │ │ wgpu Profiler │ │Scalar Profiler│  │
-│  │ ┌────────────┐ │ │ ┌────────────┐ │ │ ┌───────────┐ │ │ ┌───────────┐ │  │
-│  │ │ ncu/nsys   │ │ │ │ perf stat  │ │ │ │ wgpu      │ │ │ │ criterion │ │  │
-│  │ │ wrapper    │ │ │ │ wrapper    │ │ │ │ timestamp │ │ │ │ enhanced  │ │  │
-│  │ ├────────────┤ │ │ ├────────────┤ │ │ │ queries   │ │ │ ├───────────┤ │  │
-│  │ │ trueno-    │ │ │ │ renacer    │ │ │ └───────────┘ │ │ │ renacer   │ │  │
-│  │ │ cupti      │ │ │ │ integration│ │ │               │ │ │ syscall   │ │  │
-│  │ ├────────────┤ │ │ ├────────────┤ │ │               │ │ │ tracing   │ │  │
-│  │ │ PTX static │ │ │ │ trueno-    │ │ │               │ │ └───────────┘ │  │
-│  │ │ analysis   │ │ │ │ explain    │ │ │               │ │               │  │
-│  │ │ (explain)  │ │ │ │ SIMD mode  │ │ │               │ │               │  │
-│  │ └────────────┘ │ └────────────────┘ └───────────────┘ └───────────────┘  │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐  │
+│  │CUDA Profiler │ │SIMD Profiler │ │wgpu Profiler │ │Scalar/Parallel│ │
+│  │ ncu/nsys     │ │ perf stat    │ │ timestamp    │ │ criterion    │  │
+│  │ trueno-cupti │ │ renacer      │ │ queries      │ │ renacer      │  │
+│  │ PTX explain  │ │ explain SIMD │ │              │ │              │  │
+│  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘  │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐  │
+│  │Metal Profiler│ │WASM Profiler │ │Quant Profiler│ │Rayon Profiler│  │
+│  │ manzana      │ │ wasmtime     │ │ Q4K/Q6K CPU  │ │ thread pool  │  │
+│  │ Instruments  │ │ perf counters│ │ fused dequant│ │ work stealing│  │
+│  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘  │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │                              Hardware Layer                                   │
 │  NVIDIA (CUDA 12.x, SM 7.0-12.1) | x86 (SSE2/AVX2/AVX-512) | ARM (NEON)   │
-│  wgpu (Vulkan/Metal/DX12/WebGPU) | WASM (SIMD128)                           │
+│  wgpu (Vulkan/Metal/DX12/WebGPU)  | WASM (SIMD128) | Apple (Metal native)   │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -160,23 +158,43 @@ SUBCOMMANDS:
 
 ### 2.2 Profile Command
 
+All 13 compute modalities supported:
+
 ```bash
-# Profile a CUDA kernel (wraps ncu + trueno-cupti)
-cgp profile kernel --name gemm_cta_wmma_fp16 --size 512
-cgp profile kernel --name gemm_cta_wmma_fp16 --size 512 --metrics all
+# ── GPU: NVIDIA CUDA ──
+cgp profile kernel --name gemm_cta_wmma_fp16 --size 512          # PTX kernel via ncu+CUPTI
 cgp profile kernel --name gemm_cta_wmma_fp16 --size 512 --roofline
+cgp profile cublas --op gemm_f16 --size 4096                      # cuBLAS/cuBLASLt directly
 
-# Profile a SIMD function (wraps perf stat + renacer)
-cgp profile simd --function vector_dot_avx2 --size 1024
+# ── GPU: Cross-platform (wgpu) ──
+cgp profile wgpu --shader backward_gemm.wgsl --dispatch 256,256,1 # Vulkan/Metal/DX12
+cgp profile wgpu --shader rms_norm.wgsl --target web              # WebGPU (browser WASM)
 
-# Profile a wgpu compute shader
-cgp profile wgpu --shader backward_gemm.wgsl --dispatch 256,256,1
+# ── GPU: Apple Metal native ──
+cgp profile metal --shader layernorm_metal --dispatch 1024         # manzana crate path
 
-# Profile scalar baseline
+# ── CPU: SIMD (all ISAs) ──
+cgp profile simd --function vector_dot_avx2 --size 1024 --arch avx2
+cgp profile simd --function vector_dot_neon --size 1024 --arch neon    # ARM/aarch64
+cgp profile simd --function vector_add_avx512 --size 4096 --arch avx512
+
+# ── CPU: WASM SIMD128 ──
+cgp profile wasm --function vector_dot_wasm --size 1024            # via wasmtime perf counters
+
+# ── CPU: Quantized kernels ──
+cgp profile quant --kernel q4k_gemv --size 4096x1x4096            # Q4K fused dequant+GEMV
+cgp profile quant --kernel q6k_gemv --size 4096x1x4096            # Q6K fused dequant+GEMV
+
+# ── CPU: Scalar baseline ──
 cgp profile scalar --function matrix_mul_naive --size 256
 
-# Cross-backend comparison
-cgp profile compare --kernel gemm --size 512 --backends cuda,simd,scalar
+# ── CPU: Parallel (Rayon) ──
+cgp profile parallel --function gemm_heijunka --size 4096 --threads 8  # Rayon thread pool
+cgp profile parallel --function gemm_heijunka --size 4096 --threads auto
+
+# ── Cross-backend comparison (any combination) ──
+cgp profile compare --kernel gemm --size 512 \
+  --backends scalar,avx2,avx512,neon,cuda,cublas,wgpu
 ```
 
 ### 2.3 Bench Command (Enhanced Criterion)
@@ -701,6 +719,165 @@ impl ScalarProfiler {
 }
 ```
 
+### 4.5 NEON Profiler (ARM/aarch64)
+
+```rust
+/// ARM NEON SIMD profiling.
+/// Uses `perf stat` with ARM PMU counters on aarch64 hosts.
+/// On x86 hosts, NEON code is cross-compiled and profiled via QEMU user-mode
+/// with instruction counting (no hardware counters).
+pub struct NeonProfiler {
+    perf: PerfStatWrapper,
+    renacer: RenacerWrapper,
+    /// Whether running natively on ARM or via QEMU
+    native: bool,
+}
+
+impl NeonProfiler {
+    /// Profile NEON function with ARM PMU counters.
+    /// Key ARM counters: INST_RETIRED, CPU_CYCLES, ASE_SPEC (SIMD instructions).
+    pub fn profile(&self, binary: &Path, args: &[&str]) -> Result<SimdProfile>;
+}
+```
+
+### 4.6 WASM SIMD128 Profiler
+
+```rust
+/// WebAssembly SIMD128 profiling via wasmtime.
+/// Uses wasmtime's built-in fuel metering and epoch interrupts
+/// for deterministic instruction counting. For wall-clock timing,
+/// uses host-side Instant::now() bracketing.
+pub struct WasmProfiler {
+    /// wasmtime engine with profiling enabled
+    engine_config: WasmProfilingConfig,
+}
+
+pub struct WasmProfilingConfig {
+    /// Enable fuel metering for instruction counting
+    pub fuel_metering: bool,
+    /// Enable wasmtime's VTune/perf jitdump integration
+    pub jitdump: bool,
+    /// Target: native wasmtime or browser (Chrome DevTools Protocol)
+    pub target: WasmTarget,
+}
+
+pub enum WasmTarget {
+    /// Profile via wasmtime CLI with --profile=jitdump
+    Wasmtime,
+    /// Profile via Chrome DevTools Protocol (headless browser)
+    /// Captures WebGPU + WASM SIMD in one trace
+    Browser { cdp_url: String },
+}
+
+impl WasmProfiler {
+    /// Profile a WASM module's exported function.
+    /// Reports: instruction count, fuel consumed, wall time, SIMD utilization.
+    pub fn profile(&self, wasm_path: &Path, function: &str, args: &[WasmVal]) -> Result<WasmProfile>;
+}
+```
+
+### 4.7 Quantized Kernel Profiler (Q4K/Q6K CPU)
+
+```rust
+/// Profiles trueno's fused dequantization + GEMV CPU kernels.
+/// These are SIMD-accelerated (AVX2/NEON) but have unique profiling needs:
+/// - Super-block structure (256 elements per Q4K block, 144 bytes)
+/// - Mixed-precision pipeline (4-bit → FP32 dequant → FMA accumulate)
+/// - Memory access pattern depends on quantization format, not matrix layout
+pub struct QuantProfiler {
+    simd: SimdProfiler,
+}
+
+impl QuantProfiler {
+    /// Profile a quantized GEMV kernel.
+    /// Reports standard SIMD metrics plus quantization-specific:
+    /// - Dequant throughput (super-blocks/sec)
+    /// - Effective bandwidth (compressed bytes read / wall time)
+    /// - Expansion ratio overhead (e.g., Q4K 4:1 → FP32 costs)
+    pub fn profile(&self, kernel: QuantKernel, dims: &[u32]) -> Result<QuantProfile>;
+}
+
+pub enum QuantKernel {
+    Q4kGemv,    // 4-bit grouped quantization, fused dequant+dot
+    Q6kGemv,    // 6-bit grouped quantization
+    Q5kGemv,    // 5-bit grouped quantization
+    Q8Gemv,     // 8-bit quantization
+    Nf4Gemv,    // NormalFloat 4-bit
+}
+
+pub struct QuantProfile {
+    pub base: SimdProfile,
+    /// Super-blocks processed per second
+    pub superblocks_per_sec: f64,
+    /// Effective memory bandwidth (compressed input bytes / time)
+    pub effective_bandwidth_gbps: f64,
+    /// Compression ratio benefit vs FP32 baseline
+    pub compression_speedup: f64,
+}
+```
+
+### 4.8 Metal Native Profiler (Apple)
+
+```rust
+/// Apple Metal native profiling via manzana crate.
+/// Separate from wgpu Metal path — uses Metal Performance Shaders
+/// counters and Xcode Instruments integration.
+pub struct MetalProfiler {
+    /// Uses MTLCounterSampleBuffer for GPU-side timing
+    /// and MTLDevice.sampleTimestamps() for CPU/GPU clock correlation
+    device: manzana::Device,
+}
+
+impl MetalProfiler {
+    /// Profile a Metal compute kernel.
+    /// On macOS with Xcode: can export .trace for Instruments.
+    /// Without Xcode: timestamp-based timing only.
+    pub fn profile_compute(&self, pipeline: &str, dispatch: [u32; 3]) -> Result<MetalProfile>;
+
+    /// Check if Xcode Instruments integration is available.
+    pub fn has_instruments(&self) -> bool;
+}
+```
+
+### 4.9 Rayon Parallel Profiler
+
+```rust
+/// Profiles Rayon thread pool workloads.
+/// Measures parallel efficiency, work stealing overhead, and load balance.
+/// Wraps perf stat per-thread counters + renacer syscall tracing.
+pub struct RayonProfiler {
+    perf: PerfStatWrapper,
+    renacer: RenacerWrapper,
+}
+
+impl RayonProfiler {
+    /// Profile a parallel function with per-thread hardware counters.
+    /// Reports:
+    /// - Wall time vs single-thread time (parallel speedup)
+    /// - Per-thread utilization (detect stragglers)
+    /// - Work-stealing events (from Rayon internals)
+    /// - Thread spawn/join overhead (from renacer clone/futex syscalls)
+    /// - Heijunka score: variance in per-thread work (0% = perfect balance)
+    pub fn profile<F: Fn() + Send + Sync>(
+        &self,
+        name: &str,
+        f: F,
+        num_threads: Option<usize>,
+    ) -> Result<RayonProfile>;
+}
+
+pub struct RayonProfile {
+    pub wall_time_us: f64,
+    pub single_thread_time_us: f64,
+    pub parallel_speedup: f64,
+    pub num_threads: usize,
+    pub parallel_efficiency: f64,        // speedup / num_threads (1.0 = ideal)
+    pub heijunka_score: f64,             // 0.0 = perfect balance, 1.0 = all work on 1 thread
+    pub thread_spawn_overhead_us: f64,
+    pub work_steal_count: u64,
+}
+```
+
 ---
 
 ## 5. Visualization (Presentar TUI)
@@ -992,6 +1169,108 @@ FALSIFY-CGP-062: cgp diff must not require re-profiling
   Falsified by: timing cgp diff with saved profiles
 ```
 
+### 8.8 NEON (ARM/aarch64)
+
+```
+FALSIFY-CGP-070: Must profile NEON functions on ARM host
+  Given: aarch64 host with NEON support
+  When: cgp profile simd --function vector_add_neon --arch neon
+  Then: reports ASE_SPEC (SIMD instruction) counter, NEON utilization %
+  Falsified by: running on ARM host, verifying NEON-specific counters in output
+
+FALSIFY-CGP-071: Must degrade gracefully on x86 host for NEON target
+  Given: x86_64 host (no NEON hardware)
+  When: cgp profile simd --arch neon
+  Then: reports "NEON not available — use --cross-profile for QEMU-based analysis"
+  Falsified by: running on x86, verifying helpful error message (not crash)
+```
+
+### 8.9 WASM SIMD128
+
+```
+FALSIFY-CGP-072: Must profile WASM SIMD128 via wasmtime
+  Given: .wasm module with SIMD128 instructions
+  When: cgp profile wasm --function vector_dot_wasm --size 1024
+  Then: reports instruction count, fuel consumed, wall time
+  Falsified by: building trueno WASM target, profiling vector_dot
+
+FALSIFY-CGP-073: Must detect scalar fallback in WASM
+  Given: .wasm module compiled without SIMD128 feature
+  When: cgp profile wasm --function vector_dot_wasm
+  Then: warns "No SIMD128 instructions detected — scalar fallback"
+  Falsified by: compiling without -Ctarget-feature=+simd128, checking warning
+```
+
+### 8.10 Quantized CPU Kernels (Q4K/Q6K)
+
+```
+FALSIFY-CGP-074: Must profile Q4K GEMV with dequant metrics
+  Given: Q4K quantized weights (256-element super-blocks, 144 bytes each)
+  When: cgp profile quant --kernel q4k_gemv --size 4096x1x4096
+  Then: reports superblocks/sec, effective bandwidth (compressed), compression speedup
+  Falsified by: running Q4K GEMV, verifying superblocks/sec = elements / 256 / time
+
+FALSIFY-CGP-075: Must report effective bandwidth (not raw)
+  Given: Q4K weights at 4.5 bits/weight (144 bytes per 256 elements)
+  When: cgp profile quant --kernel q4k_gemv
+  Then: effective_bandwidth = compressed_bytes_read / time (not FP32 equivalent)
+  Falsified by: manual computation: 4096*4096 weights / 256 * 144 bytes = 9.44 MB
+```
+
+### 8.11 Metal Native (Apple)
+
+```
+FALSIFY-CGP-076: Must profile Metal compute kernels on macOS
+  Given: macOS host with Apple Silicon or AMD GPU
+  When: cgp profile metal --shader layernorm_metal
+  Then: reports GPU timestamp-based duration and dispatch configuration
+  Falsified by: running on macOS, checking MTLCounterSampleBuffer results
+
+FALSIFY-CGP-077: Must report graceful error on non-macOS
+  Given: Linux host (no Metal)
+  When: cgp profile metal --shader test
+  Then: reports "Metal backend requires macOS — use --backend wgpu for Vulkan"
+  Falsified by: running on Linux, verifying error message
+```
+
+### 8.12 wgpu WebGPU (Browser)
+
+```
+FALSIFY-CGP-078: Must profile WebGPU in headless browser
+  Given: .wasm module with WebGPU compute shaders
+  When: cgp profile wgpu --target web --shader gemm.wgsl
+  Then: launches headless Chrome, captures GPU timing via CDP
+  Falsified by: running with headless Chrome, verifying timeline events captured
+
+FALSIFY-CGP-079: Must fall back to wasmtime if no browser available
+  Given: no Chrome/Chromium installed
+  When: cgp profile wgpu --target web
+  Then: reports "No browser found — falling back to wgpu native (Vulkan/Metal)"
+  Falsified by: removing Chrome from PATH, verifying fallback message
+```
+
+### 8.13 Rayon Parallel
+
+```
+FALSIFY-CGP-080: Must measure parallel speedup
+  Given: GEMM function with Rayon parallelism
+  When: cgp profile parallel --function gemm_heijunka --size 4096 --threads 8
+  Then: reports parallel_speedup (wall time / single-thread time)
+  Falsified by: running with 1 thread and 8 threads, computing ratio
+
+FALSIFY-CGP-081: Must detect load imbalance (Heijunka violation)
+  Given: intentionally imbalanced parallel workload (e.g., thread 0 gets 90% of work)
+  When: cgp profile parallel --function imbalanced_work
+  Then: heijunka_score > 0.5 (severe imbalance), flagged as Muda::Overproduction
+  Falsified by: crafting workload where first partition is 10x larger, checking score
+
+FALSIFY-CGP-082: Must measure thread spawn overhead
+  Given: Rayon parallel function with small workload (<500us total)
+  When: cgp profile parallel --function small_gemm --threads 8
+  Then: thread_spawn_overhead_us reported, warns if overhead > 10% of total
+  Falsified by: profiling ~100us workload on 8 threads, verifying overhead reported
+```
+
 ---
 
 ## 9. Output Formats
@@ -1175,8 +1454,14 @@ Tested on: RTX 4090, Driver 570.207, ncu 2025.1.1.0, nsys 2025.3.2.367, perf 6.8
 
 **Summary**: 14 tests executed, 12 PASS, 2 FIXED (arithmetic intensity and coalescing threshold corrected).
 
-**Remaining untested** (require cgp implementation or ncu root access):
+**Remaining untested** (require cgp implementation, target hardware, or root access):
 - FALSIFY-CGP-030/031: Statistical regression detection (needs bootstrap CI implementation)
 - FALSIFY-CGP-041: SIMD vs scalar comparison (needs perf stat integration)
 - FALSIFY-CGP-052: Bank conflict detection (needs ncu shared memory metrics)
 - FALSIFY-CGP-062: Diff without re-profiling (needs JSON export implementation)
+- FALSIFY-CGP-070/071: NEON profiling (needs ARM host or QEMU cross-profile)
+- FALSIFY-CGP-072/073: WASM SIMD128 (needs wasmtime integration)
+- FALSIFY-CGP-074/075: Quantized kernel profiling (needs Q4K benchmark harness)
+- FALSIFY-CGP-076/077: Metal native (needs macOS host)
+- FALSIFY-CGP-078/079: WebGPU browser (needs headless Chrome + CDP)
+- FALSIFY-CGP-080/081/082: Rayon parallel (needs per-thread perf counter collection)
