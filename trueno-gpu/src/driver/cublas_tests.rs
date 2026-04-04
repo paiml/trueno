@@ -634,7 +634,7 @@ fn cta_wmma_vs_cublas_fp16() {
     );
     eprintln!("{}", "-".repeat(60));
 
-    for &n in &[128_usize, 256, 512] {
+    for &n in &[128_usize, 256, 512, 1024] {
         let m = n;
         let k = n;
         let flops = 2.0 * m as f64 * n as f64 * k as f64;

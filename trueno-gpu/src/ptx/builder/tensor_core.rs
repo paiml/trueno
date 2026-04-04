@@ -113,13 +113,53 @@ impl<'a> KernelBuilder<'a> {
     }
 
     /// WMMA matrix multiply-accumulate: D = A * B + C
-    /// Takes A, B, C fragment registers and returns D fragment registers
+    /// Takes A, B, C fragment registers and returns D fragment registers.
+    /// Uses row.col layout (A=row-major, B=col-major). For row.row, use
+    /// `wmma_mma_f16_f32_row_row`.
     #[allow(clippy::similar_names)]
     pub fn wmma_mma_f16_f32(
         &mut self,
         frag_a: &[VirtualReg],
         frag_b: &[VirtualReg],
         frag_c: &[VirtualReg],
+    ) -> Vec<VirtualReg> {
+        self.wmma_mma_f16_f32_layouts(
+            frag_a,
+            frag_b,
+            frag_c,
+            WmmaLayout::RowMajor,
+            WmmaLayout::ColMajor,
+        )
+    }
+
+    /// WMMA MMA with both A and B in row-major layout.
+    /// Use when both wmma_load_a and wmma_load_b used `WmmaLayout::RowMajor`.
+    #[allow(clippy::similar_names)]
+    pub fn wmma_mma_f16_f32_row_row(
+        &mut self,
+        frag_a: &[VirtualReg],
+        frag_b: &[VirtualReg],
+        frag_c: &[VirtualReg],
+    ) -> Vec<VirtualReg> {
+        self.wmma_mma_f16_f32_layouts(
+            frag_a,
+            frag_b,
+            frag_c,
+            WmmaLayout::RowMajor,
+            WmmaLayout::RowMajor,
+        )
+    }
+
+    /// WMMA matrix multiply-accumulate with explicit layout specification.
+    /// The layouts MUST match those used in the corresponding wmma_load instructions.
+    #[allow(clippy::similar_names)]
+    pub fn wmma_mma_f16_f32_layouts(
+        &mut self,
+        frag_a: &[VirtualReg],
+        frag_b: &[VirtualReg],
+        frag_c: &[VirtualReg],
+        a_layout: WmmaLayout,
+        b_layout: WmmaLayout,
     ) -> Vec<VirtualReg> {
         // Output accumulator D (8 F32 values)
         let mut frag_d = Vec::with_capacity(8);
@@ -128,9 +168,10 @@ impl<'a> KernelBuilder<'a> {
         }
 
         // MMA instruction with all fragment registers
-        // Format: wmma.mma.sync.aligned.m16n16k16.row.col.f32.f32 {d0-d7}, {a0-a7}, {b0-b7}, {c0-c7}
-        let mut instr =
-            PtxInstruction::new(PtxOp::WmmaMma, PtxType::F32).label("m16n16k16.row.col.f32.f32");
+        // Format: wmma.mma.sync.aligned.m16n16k16.{alayout}.{blayout}.f32.f32
+        let label =
+            format!("m16n16k16.{}.{}.f32.f32", a_layout.to_ptx_string(), b_layout.to_ptx_string());
+        let mut instr = PtxInstruction::new(PtxOp::WmmaMma, PtxType::F32).label(label);
 
         // Add all D registers as destinations (use push_dst for vector dests)
         for reg in &frag_d {

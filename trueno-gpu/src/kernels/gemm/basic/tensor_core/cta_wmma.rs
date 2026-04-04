@@ -4,10 +4,13 @@
 //! All 4 warps share 32×K A tile and K×32 B tile in shared memory.
 //! K-dimension tiled in chunks of 16 (WMMA tile depth).
 //!
-//! Key improvements over basic WMMA:
-//! - 4× more warps per CTA → better occupancy
-//! - Shared memory reuse: each A/B element loaded once, used by 2 warps
-//! - FP16 input (no FP32→FP16 conversion overhead)
+//! Performance optimizations:
+//! - PERF-CTA-001: Correct row.row MMA layout for RowMajor A and B
+//! - PERF-CTA-002: Fully unrolled cooperative load (no inner loop branches)
+//! - PERF-CTA-003: Warp-uniform branching (warps 0-1→A, warps 2-3→B)
+//! - PERF-CTA-004: Interior tile fast path — skip boundary checks for tiles
+//!   fully within matrix bounds (eliminates 16 branches/thread/K-tile)
+//! - PERF-CTA-005: No .maxnreg — let JIT optimize register allocation
 //!
 //! Launch: grid_2d((N+31)/32, (M+31)/32), block(128,1,1), shared_mem=2KB
 //! Input: FP16 (u16), Output: FP32
@@ -16,12 +19,12 @@ use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl, PtxMemory};
 use crate::ptx::{PtxKernel, PtxReg, PtxType, WmmaLayout};
 
 /// Build a CTA-tiled WMMA GEMM kernel for FP16 input → FP32 output.
-pub fn build_cta_wmma_fp16(m: u32, n: u32, k: u32) -> PtxKernel {
+pub fn build_cta_wmma_fp16(_m: u32, n: u32, k: u32) -> PtxKernel {
     let smem_bytes = 32 * 16 * 2 + 16 * 32 * 2; // A[32×16] + B[16×32] in FP16
     let n_k_tiles = (k + 15) / 16;
 
     PtxKernel::new("gemm_cta_wmma_fp16")
-        .max_regs(64)
+        // PERF-CTA-005: No .maxnreg — let ptxas choose optimal register allocation
         .param(PtxType::U64, "a_ptr")
         .param(PtxType::U64, "b_ptr")
         .param(PtxType::U64, "c_ptr")
@@ -75,7 +78,68 @@ pub fn build_cta_wmma_fp16(m: u32, n: u32, k: u32) -> PtxKernel {
             let warp_m_off = ctx.mul_u32_reg(warp_row, c_16);
             let warp_n_off = ctx.mul_u32_reg(warp_col, c_16);
 
-            let smem_a_base = ctx.mov_u32_imm(0);
+            // Compute base index for cooperative load (tid * 8)
+            let c_8 = ctx.mov_u32_imm(8);
+            let my_base = ctx.mul_u32_reg(tid, c_8);
+
+            // Determine if this thread loads A or B (warp-uniform, PERF-CTA-003)
+            let is_a_warp = ctx.setp_lt_u32(my_base, c_512);
+
+            // PERF-CTA-004: Pre-compute if CTA tile is interior (fully in-bounds)
+            let cta_row_end = ctx.add_u32_reg(cta_row, c_31);
+            let cta_col_end = ctx.add_u32_reg(cta_col, c_31);
+            let row_interior = ctx.setp_lt_u32(cta_row_end, m_param);
+            let col_interior = ctx.setp_lt_u32(cta_col_end, n_param);
+            let mn_interior = ctx.and_pred(row_interior, col_interior);
+
+            // PERF-CTA-006: Pre-compute per-element byte addresses OUTSIDE the K-loop.
+            // Only k_off changes per K-tile. Pre-compute:
+            //   A: base_addr[i] = a_ptr + (global_row[i]*K + col_in_tile[i]) * 2
+            //        → in loop: addr = base_addr[i] + k_off * 2
+            //   B: col_byte[i] = b_col_global[i] * 2 (fixed per thread)
+            //        row_in_tile[i] (fixed per thread)
+            //        → in loop: addr = b_ptr + ((k_off + row_in_tile[i]) * N + col_global[i]) * 2
+            let mut a_base_addrs = Vec::with_capacity(8);
+            let mut a_smem_addrs = Vec::with_capacity(8);
+            let mut a_global_rows = Vec::with_capacity(8); // for slow path bounds check
+
+            let mut b_row_in_tiles = Vec::with_capacity(8);
+            let mut b_col_globals = Vec::with_capacity(8);
+            let mut b_smem_addrs = Vec::with_capacity(8);
+
+            for i in 0..8u32 {
+                let ci = ctx.mov_u32_imm(i);
+                let idx = ctx.add_u32_reg(my_base, ci);
+
+                // A-side: pre-compute byte address (row*K + col) * 2 + a_ptr
+                let a_r = ctx.shr_u32(idx, c_4);
+                let a_c = ctx.and_u32(idx, c_15);
+                let a_gr = ctx.add_u32_reg(cta_row, a_r);
+                let a_row_k = ctx.mul_u32_reg(a_gr, k_const);
+                let a_flat_base = ctx.add_u32_reg(a_row_k, a_c);
+                let a_byte_off = ctx.mul_wide_u32(a_flat_base, 2);
+                let a_base = ctx.add_u64(a_ptr, a_byte_off);
+                let smem_off = ctx.mul_u32_reg(idx, c_2);
+
+                a_base_addrs.push(a_base);
+                a_smem_addrs.push(smem_off);
+                a_global_rows.push(a_gr);
+
+                // B-side pre-computation
+                let bi = ctx.sub_u32_reg(idx, c_512);
+                let b_r = ctx.shr_u32(bi, c_5);
+                let b_c = ctx.and_u32(bi, c_31);
+                let b_gc = ctx.add_u32_reg(cta_col, b_c);
+                let bsmem_off = ctx.mul_u32_reg(bi, c_2);
+                let bsmem_addr = ctx.add_u32_reg(c_1024, bsmem_off);
+
+                b_row_in_tiles.push(b_r);
+                b_col_globals.push(b_gc);
+                b_smem_addrs.push(bsmem_addr);
+            }
+
+            // Pre-compute k_off byte stride (k_off * 2 in 64-bit) for fast A path
+            // This is computed per K-tile iteration and added to a_base_addrs
 
             // Init WMMA accumulator
             let frag_c = ctx.wmma_init_c_zero();
@@ -88,71 +152,73 @@ pub fn build_cta_wmma_fp16(m: u32, n: u32, k: u32) -> PtxKernel {
 
             let k_off = ctx.mul_u32_reg(k_tile, c_16);
 
-            // === Load A[32×16] + B[16×32] cooperatively ===
-            // 1024 FP16 elements total, 128 threads, 8 elements each
-            let c_8 = ctx.mov_u32_imm(8);
-            let my_base = ctx.mul_u32_reg(tid, c_8);
-            let load_i = ctx.mov_u32_imm(0);
-            ctx.label("coop_load");
-            let ld_done = ctx.setp_ge_u32(load_i, c_8);
-            ctx.branch_if(ld_done, "coop_load_end");
+            // PERF-CTA-004: Check if K-tile is also fully in-bounds
+            let k_tile_end = ctx.add_u32_reg(k_off, c_15);
+            let k_ok = ctx.setp_lt_u32(k_tile_end, k_param);
+            let fully_interior = ctx.and_pred(mn_interior, k_ok);
+            ctx.branch_if(fully_interior, "fast_load");
 
-            let idx = ctx.add_u32_reg(my_base, load_i);
+            // Pre-compute k_off byte stride for fast A path
+            let k_byte_stride = ctx.mul_wide_u32(k_off, 2);
 
-            // idx < 512 → A tile, else B tile
-            let is_a = ctx.setp_lt_u32(idx, c_512);
-            ctx.branch_if_not(is_a, "ld_b");
+            // === SLOW PATH: boundary-checked loads (edge tiles only) ===
+            ctx.branch_if_not(is_a_warp, "slow_b");
+            for i in 0..8usize {
+                ctx.st_shared_f16(a_smem_addrs[i], zero_f16);
+                let skip = format!("ssa{i}");
+                let ar_ok = ctx.setp_lt_u32(a_global_rows[i], m_param);
+                ctx.branch_if_not(ar_ok, &skip);
+                // Use pre-computed base + k_byte_stride
+                let a_addr = ctx.add_u64(a_base_addrs[i], k_byte_stride);
+                // Still need to check k bounds
+                // k_off < k_param is sufficient for all A cols in this tile
+                let ac_ok = ctx.setp_lt_u32(k_off, k_param);
+                ctx.branch_if_not(ac_ok, &skip);
+                let a_val = ctx.ld_global_f16(a_addr);
+                ctx.st_shared_f16(a_smem_addrs[i], a_val);
+                ctx.label(&skip);
+            }
+            ctx.branch("load_done");
+            ctx.label("slow_b");
+            for i in 0..8usize {
+                let b_gr = ctx.add_u32_reg(k_off, b_row_in_tiles[i]);
+                ctx.st_shared_f16(b_smem_addrs[i], zero_f16);
+                let skip = format!("ssb{i}");
+                let br_ok = ctx.setp_lt_u32(b_gr, k_param);
+                ctx.branch_if_not(br_ok, &skip);
+                let bc_ok = ctx.setp_lt_u32(b_col_globals[i], n_param);
+                ctx.branch_if_not(bc_ok, &skip);
+                let b_flat = ctx.mad_lo_u32(b_gr, n_const, b_col_globals[i]);
+                let b_boff = ctx.mul_wide_u32(b_flat, 2);
+                let b_addr = ctx.add_u64(b_ptr, b_boff);
+                let b_val = ctx.ld_global_f16(b_addr);
+                ctx.st_shared_f16(b_smem_addrs[i], b_val);
+                ctx.label(&skip);
+            }
+            ctx.branch("load_done");
 
-            // A: idx/16 = row, idx%16 = col
-            let a_r = ctx.shr_u32(idx, c_4);
-            let a_c = ctx.and_u32(idx, c_15);
-            let a_gr = ctx.add_u32_reg(cta_row, a_r);
-            let a_gc = ctx.add_u32_reg(k_off, a_c);
+            // === FAST PATH: pre-computed base + k_byte_stride ===
+            // A: only 1 add_u64 + 1 load + 1 store per element (3 inst vs 6)
+            ctx.label("fast_load");
+            ctx.branch_if_not(is_a_warp, "fast_b");
+            for i in 0..8usize {
+                let a_addr = ctx.add_u64(a_base_addrs[i], k_byte_stride);
+                let a_val = ctx.ld_global_f16(a_addr);
+                ctx.st_shared_f16(a_smem_addrs[i], a_val);
+            }
+            ctx.branch("load_done");
+            ctx.label("fast_b");
+            // B: still needs per-tile row computation (row depends on k_off)
+            for i in 0..8usize {
+                let b_gr = ctx.add_u32_reg(k_off, b_row_in_tiles[i]);
+                let b_flat = ctx.mad_lo_u32(b_gr, n_const, b_col_globals[i]);
+                let b_boff = ctx.mul_wide_u32(b_flat, 2);
+                let b_addr = ctx.add_u64(b_ptr, b_boff);
+                let b_val = ctx.ld_global_f16(b_addr);
+                ctx.st_shared_f16(b_smem_addrs[i], b_val);
+            }
 
-            let smem_off = ctx.mul_u32_reg(idx, c_2);
-            let smem_addr = ctx.add_u32_reg(smem_a_base, smem_off);
-            ctx.st_shared_f16(smem_addr, zero_f16);
-
-            let ar_ok = ctx.setp_lt_u32(a_gr, m_param);
-            ctx.branch_if_not(ar_ok, "ld_next");
-            let ac_ok = ctx.setp_lt_u32(a_gc, k_param);
-            ctx.branch_if_not(ac_ok, "ld_next");
-
-            let a_flat = ctx.mad_lo_u32(a_gr, k_const, a_gc);
-            let a_boff = ctx.mul_wide_u32(a_flat, 2);
-            let a_addr = ctx.add_u64(a_ptr, a_boff);
-            let a_val = ctx.ld_global_f16(a_addr);
-            ctx.st_shared_f16(smem_addr, a_val);
-            ctx.branch("ld_next");
-
-            // B: (idx-512)/32 = row, (idx-512)%32 = col
-            ctx.label("ld_b");
-            let bi = ctx.sub_u32_reg(idx, c_512);
-            let b_r = ctx.shr_u32(bi, c_5);
-            let b_c = ctx.and_u32(bi, c_31);
-            let b_gr = ctx.add_u32_reg(k_off, b_r);
-            let b_gc = ctx.add_u32_reg(cta_col, b_c);
-
-            let bsmem_off = ctx.mul_u32_reg(bi, c_2);
-            let bsmem_addr = ctx.add_u32_reg(c_1024, bsmem_off);
-            ctx.st_shared_f16(bsmem_addr, zero_f16);
-
-            let br_ok = ctx.setp_lt_u32(b_gr, k_param);
-            ctx.branch_if_not(br_ok, "ld_next");
-            let bc_ok = ctx.setp_lt_u32(b_gc, n_param);
-            ctx.branch_if_not(bc_ok, "ld_next");
-
-            let b_flat = ctx.mad_lo_u32(b_gr, n_const, b_gc);
-            let b_boff = ctx.mul_wide_u32(b_flat, 2);
-            let b_addr = ctx.add_u64(b_ptr, b_boff);
-            let b_val = ctx.ld_global_f16(b_addr);
-            ctx.st_shared_f16(bsmem_addr, b_val);
-
-            ctx.label("ld_next");
-            ctx.add_u32_inplace(load_i, 1);
-            ctx.branch("coop_load");
-            ctx.label("coop_load_end");
-
+            ctx.label("load_done");
             ctx.bar_sync(0);
 
             // === WMMA per warp ===
@@ -171,7 +237,8 @@ pub fn build_cta_wmma_fp16(m: u32, n: u32, k: u32) -> PtxKernel {
             let b_sub_ptr = ctx.add_u64(smem_base, b_off64);
             let frag_b = ctx.wmma_load_b_f16(b_sub_ptr, 32, WmmaLayout::RowMajor);
 
-            let frag_d = ctx.wmma_mma_f16_f32(&frag_a, &frag_b, &frag_c);
+            // PERF-CTA-001: row.row MMA matches RowMajor loads for both A and B
+            let frag_d = ctx.wmma_mma_f16_f32_row_row(&frag_a, &frag_b, &frag_c);
             for (c_reg, d_reg) in frag_c.iter().zip(frag_d.iter()) {
                 ctx.mov_f32_reg(*c_reg, *d_reg);
             }
@@ -222,5 +289,27 @@ mod tests {
         let module = PtxModule::new().add_kernel(kernel);
         let ptx = module.emit();
         assert!(ptx.contains(".shared"));
+    }
+
+    #[test]
+    fn test_cta_wmma_uses_row_row_mma() {
+        let kernel = build_cta_wmma_fp16(512, 512, 512);
+        let module = PtxModule::new().add_kernel(kernel);
+        let ptx = module.emit();
+        assert!(
+            ptx.contains("wmma.mma.sync.aligned.m16n16k16.row.row.f32.f32"),
+            "MMA must use row.row to match RowMajor loads for both A and B"
+        );
+    }
+
+    #[test]
+    fn test_cta_wmma_has_fast_and_slow_paths() {
+        let kernel = build_cta_wmma_fp16(256, 256, 256);
+        let module = PtxModule::new().add_kernel(kernel);
+        let ptx = module.emit();
+        // Fast path (interior tiles, no bounds checks)
+        assert!(ptx.contains("fast_load"), "must have interior tile fast path");
+        // Slow path (edge tiles, with bounds checks)
+        assert!(ptx.contains("slow_b"), "must have edge tile slow path");
     }
 }

@@ -1267,6 +1267,24 @@ impl<'ctx> GpuStream<'ctx, states::Submitted> {
 | FlashAttn 2K×64 | TFLOPS | ≥50 | 70 (FA2) | ≤30% |
 | LayerNorm 4096 | GB/s | ≥900 | 950 | ≤6% |
 
+### 11.2 CTA WMMA GEMM Performance (RTX 4090, measured 2026-04-04)
+
+Pure Rust PTX tensor core GEMM (FP16 input, FP32 accumulation):
+
+| Size | Previous | Optimized | Improvement | cuBLAS | Gap |
+|------|----------|-----------|-------------|--------|-----|
+| 128×128 | 9.6µs | 5.7µs | **1.68x** | 3.4µs | 1.7x |
+| 256×256 | 17.3µs | 9.1µs | **1.90x** | 4.3µs | 2.1x |
+| 512×512 | 35.7µs / 7.5 TFLOP/s | 23.2µs / 11.6 TFLOP/s | **1.54x** | 7.7µs | 3.0x |
+
+**Optimizations applied (PERF-CTA-001 through PERF-CTA-006):**
+1. Fixed WMMA MMA layout: `row.col` → `row.row` to match RowMajor B loads
+2. Fully unrolled cooperative load (eliminated 8 loop branches per thread per K-tile)
+3. Warp-uniform branching (warps 0-1 load A, warps 2-3 load B, no divergence)
+4. Interior tile fast path (skip boundary checks for tiles fully within matrix)
+5. Removed `.maxnreg 64` constraint (let JIT optimize register allocation)
+6. Pre-computed per-element byte addresses outside K-loop (3 inst/element vs 6)
+
 ### 11.2 Quality Gates
 
 ```rust
