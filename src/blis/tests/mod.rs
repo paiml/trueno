@@ -11,6 +11,7 @@
 //! - `numerical` - Numerical stability tests (F31-F42)
 
 mod blis_gemm;
+mod coverage_contract;
 mod falsification;
 mod gemm_ref;
 mod jidoka;
