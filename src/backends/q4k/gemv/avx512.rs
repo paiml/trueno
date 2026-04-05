@@ -27,9 +27,7 @@ pub(crate) unsafe fn matmul_q4k_f32_avx512(
         // Uninit: output[out_idx] = hsum_avx512(acc) (SET) for every out_idx.
         let mut output: Vec<f32> = Vec::with_capacity(out_dim);
         // SAFETY: Each output[out_idx] is SET from local AVX-512 accumulator.
-        unsafe {
-            output.set_len(out_dim);
-        }
+        output.set_len(out_dim);
 
         for out_idx in 0..out_dim {
             let row_start = out_idx * row_bytes;

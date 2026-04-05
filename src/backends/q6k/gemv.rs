@@ -59,7 +59,12 @@ pub fn matmul_q6k_f32_scalar(
     let num_blocks_per_row = (in_dim + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
     let row_bytes = num_blocks_per_row * SUPER_BLOCK_BYTES;
 
-    let mut output = vec![0.0f32; out_dim];
+    // Uninit: output[out_idx] = sum (SET) for every out_idx.
+    let mut output: Vec<f32> = Vec::with_capacity(out_dim);
+    // SAFETY: Each output[out_idx] is SET from local accumulator sum.
+    unsafe {
+        output.set_len(out_dim);
+    }
 
     for out_idx in 0..out_dim {
         let row_start = out_idx * row_bytes;
@@ -176,7 +181,10 @@ unsafe fn matmul_q6k_f32_avx2(
         let num_blocks_per_row = (in_dim + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
         let row_bytes = num_blocks_per_row * SUPER_BLOCK_BYTES;
 
-        let mut output = vec![0.0f32; out_dim];
+        // Uninit: output[out_idx] = hsum_q6k_avx2(acc) (SET) for every out_idx.
+        let mut output: Vec<f32> = Vec::with_capacity(out_dim);
+        // SAFETY: Each output[out_idx] is SET from local SIMD accumulator.
+        output.set_len(out_dim);
 
         for out_idx in 0..out_dim {
             let row_start = out_idx * row_bytes;
@@ -266,7 +274,12 @@ fn matmul_q6k_f32_parallel(
     let num_blocks_per_row = (in_dim + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
     let row_bytes = num_blocks_per_row * SUPER_BLOCK_BYTES;
 
-    let mut output = vec![0.0f32; out_dim];
+    // Uninit: compute_chunk writes *out_val = sum/hsum(acc) (SET) for every element.
+    let mut output: Vec<f32> = Vec::with_capacity(out_dim);
+    // SAFETY: Each thread's compute_chunk writes every element in its chunk (SET).
+    unsafe {
+        output.set_len(out_dim);
+    }
     let has_avx2 = is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma");
 
     thread::scope(|s| {
