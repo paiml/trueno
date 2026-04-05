@@ -2217,13 +2217,28 @@ amortized across K iterations within each thread.
 | cuBLAS FP16 | ~7.7 us | 34.7 | 10.5% |
 | CTA WMMA FP16 | 23.2 us | 11.6 | 3.5% |
 
-**Head-to-Head (1024x1024 GEMM, controlled, 2026-04-05):**
+**cuBLAS FP32 SGEMM (RTX 4090, measured 2026-04-05 via `benchmarks/gemm_cublas.cu`):**
 
-| Library | 1T (ms) | 1T GFLOPS | Best (ms) | Best GFLOPS | vs trueno |
-|---------|---------|-----------|-----------|-------------|-----------|
-| NumPy 2.3 (OpenBLAS) | 16.4 | 131 | 2.69 (12T) | **799** | -- |
-| trueno BLIS (AVX-512) | 16.9 | 128 | 3.30 (16T) | **650** | **0.81x** |
-| trueno BLIS (old AVX2) | 21.5 | 100 | 6.40 (8T) | 336 | ~~0.42x~~ |
+| Size | cuBLAS FP32 | TFLOP/s | Efficiency vs 82.6 FP32 Peak |
+|------|------------|---------|------------------------------|
+| 512 | 0.013 ms | 20.2 | 24% |
+| 1024 | 0.049 ms | 43.9 | 53% |
+| 4096 | 2.352 ms | 58.4 | 71% |
+
+**CPU Head-to-Head (1024x1024 FP32 GEMM, all competitors, 2026-04-05):**
+
+| Library | Lang | 1T (ms) | 1T GFLOPS | Multi (ms) | Multi GFLOPS | vs trueno 1T |
+|---------|------|---------|-----------|-----------|-------------|-------------|
+| C/OpenBLAS 0.3.30 | C | 15.5 | 138 | 5.0 | 426 | -- |
+| NumPy 2.3 (OpenBLAS) | Python | 16.2 | 132 | 3.1 | 687 | -- |
+| ndarray 0.17 | Rust | 18.0 | 119 | — | — | -- |
+| **trueno BLIS (AVX-512)** | **Rust** | **15.8** | **135** | **3.3** | **650** | **1.0x** |
+
+**Key findings** (2026-04-05):
+- trueno 1T: 135 GFLOPS = **0.98x C/OpenBLAS**, **1.02x NumPy**, **1.14x ndarray**
+- trueno multi: 650 GFLOPS at 16T = **0.95x NumPy**, **0.81x** ideal OpenBLAS scaling
+- ndarray (matrixmultiply): 119 GFLOPS at 1024 — trueno is **1.14x faster**
+- cuBLAS FP32: 43.9 TFLOP/s at 1024 = **67x faster** than best CPU (expected — GPU >> CPU)
 
 **Progress** (4 optimization rounds):
 1. AVX-512 8×16 microkernel: 1T 100→128 GFLOPS (+28%), 8T 336→495 (+47%)
