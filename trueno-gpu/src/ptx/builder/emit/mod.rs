@@ -103,6 +103,13 @@ pub(crate) fn emit_instruction(instr: &PtxInstruction) -> String {
         return emit_wmma_dispatch(s, instr);
     }
 
+    // cp.async ops format themselves entirely (no type suffix or operand append)
+    if matches!(instr.op, PtxOp::CpAsync | PtxOp::CpAsyncCommitGroup | PtxOp::CpAsyncWaitGroup) {
+        memory::emit_memory_opcode(instr, &mut s);
+        s.push_str(";\n");
+        return s;
+    }
+
     emit_standard_body(instr, &mut s);
     s
 }
@@ -246,6 +253,13 @@ pub(super) fn write_instruction(instr: &PtxInstruction, out: &mut String) {
 
     if wmma::is_wmma_op(&instr.op) {
         out.push_str(&emit_instruction(instr));
+        return;
+    }
+
+    // cp.async ops format themselves entirely
+    if matches!(instr.op, PtxOp::CpAsync | PtxOp::CpAsyncCommitGroup | PtxOp::CpAsyncWaitGroup) {
+        memory::emit_memory_opcode(instr, out);
+        out.push_str(";\n");
         return;
     }
 

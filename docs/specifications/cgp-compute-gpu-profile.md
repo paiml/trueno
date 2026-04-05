@@ -142,6 +142,21 @@ on 64×64 tiles OR async copy (`cp.async`) to decouple global→shared transfer.
 
 **Best result so far**: CTA64 at 1024 = **30 TFLOP/s** (vs 18.4 initial → **+63%**).
 
+**cp.async PTX builder support (2026-04-05)**:
+
+Added `cp.async.ca.shared.global`, `cp.async.commit_group`, `cp.async.wait_group`
+primitives to the PTX builder (5 unit tests passing). These enable register-free
+async global→shared transfer on SM 8.0+ (Ampere+).
+
+**First cp.async 64×64 kernel attempt — FAILED** due to:
+1. 2-byte cp.async not allowed (ptxas: "expected 4 or 8 or 16")
+2. Target must be sm_80+ (currently sm_70 default)
+3. Selp type conflicts when splitting A/B thread roles inline
+4. Register declaration collision (`.reg .u64 %rd<N>` + `.reg .b64 %rd<M>`)
+
+Infrastructure kept; full kernel design deferred — needs 8-byte aligned copies
+with separate A/B branches and sm_80+ target module.
+
 **Note**: GPU pure-Rust PTX vs cuBLAS is not expected to hit 1.5x — cuBLAS uses hand-tuned SASS and proprietary tensor core scheduling. The GPU target is to close the gap from 0.38x toward 0.5x+ (competitive for deployment where vendor lock-in is unacceptable).
 
 ### What Exists Today (Fragmented)

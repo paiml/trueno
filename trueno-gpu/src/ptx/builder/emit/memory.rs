@@ -45,6 +45,45 @@ pub(crate) fn emit_memory_opcode(instr: &PtxInstruction, s: &mut String) {
         PtxOp::Prefetch => {
             s.push_str("prefetch.global.L2");
         }
+        PtxOp::CpAsync => {
+            // cp.async.ca.shared.global [dst], [src], size;
+            // srcs[0] = shared dst addr, srcs[1] = global src addr, srcs[2] = size imm
+            let size = instr
+                .srcs
+                .get(2)
+                .and_then(|op| {
+                    if let Operand::ImmU64(v) = op {
+                        Some(*v as u32)
+                    } else if let Operand::ImmI64(v) = op {
+                        Some(*v as u32)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(16);
+            let dst = instr.srcs.first().map(super::operand::emit_operand).unwrap_or_default();
+            let src = instr.srcs.get(1).map(super::operand::emit_operand).unwrap_or_default();
+            let _ = write!(s, "cp.async.ca.shared.global [{dst}], [{src}], {size}");
+        }
+        PtxOp::CpAsyncCommitGroup => {
+            s.push_str("cp.async.commit_group");
+        }
+        PtxOp::CpAsyncWaitGroup => {
+            let n = instr
+                .srcs
+                .first()
+                .and_then(|op| {
+                    if let Operand::ImmU64(v) = op {
+                        Some(*v as u32)
+                    } else if let Operand::ImmI64(v) = op {
+                        Some(*v as u32)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(0);
+            let _ = write!(s, "cp.async.wait_group {n}");
+        }
         PtxOp::AtomAdd => emit_atomic_opcode(instr, s, "add"),
         PtxOp::AtomMin => emit_atomic_opcode(instr, s, "min"),
         PtxOp::AtomMax => emit_atomic_opcode(instr, s, "max"),
@@ -125,12 +164,23 @@ pub(crate) fn is_memory_op(op: &PtxOp) -> bool {
             | PtxOp::AtomExch
             | PtxOp::AtomCas
             | PtxOp::Prefetch
+            | PtxOp::CpAsync
+            | PtxOp::CpAsyncCommitGroup
+            | PtxOp::CpAsyncWaitGroup
     )
 }
 
 /// Check if this op requires skipping the type suffix
 pub(crate) fn skip_type_for_memory_op(op: &PtxOp) -> bool {
-    matches!(op, PtxOp::Cvt | PtxOp::Cvta | PtxOp::Prefetch)
+    matches!(
+        op,
+        PtxOp::Cvt
+            | PtxOp::Cvta
+            | PtxOp::Prefetch
+            | PtxOp::CpAsync
+            | PtxOp::CpAsyncCommitGroup
+            | PtxOp::CpAsyncWaitGroup
+    )
 }
 
 #[cfg(test)]
@@ -449,5 +499,49 @@ mod tests {
     #[test]
     fn test_no_skip_type_for_atom() {
         assert!(!skip_type_for_memory_op(&PtxOp::AtomAdd));
+    }
+
+    #[test]
+    fn test_cp_async_emission() {
+        let dst = VirtualReg::new(0, PtxType::U32);
+        let src = VirtualReg::new(1, PtxType::U64);
+        let mut instr = make_instr(PtxOp::CpAsync, PtxType::U8);
+        instr.srcs = vec![Operand::Reg(dst), Operand::Reg(src), Operand::ImmU64(16)];
+        let mut s = String::new();
+        emit_memory_opcode(&instr, &mut s);
+        assert!(s.contains("cp.async.ca.shared.global"), "got: {s}");
+        assert!(s.contains("], ["), "must have [dst], [src] syntax, got: {s}");
+        assert!(s.contains(", 16"), "must have size 16, got: {s}");
+    }
+
+    #[test]
+    fn test_cp_async_commit_group_emission() {
+        let instr = make_instr(PtxOp::CpAsyncCommitGroup, PtxType::U8);
+        let mut s = String::new();
+        emit_memory_opcode(&instr, &mut s);
+        assert_eq!(s, "cp.async.commit_group");
+    }
+
+    #[test]
+    fn test_cp_async_wait_group_emission() {
+        let mut instr = make_instr(PtxOp::CpAsyncWaitGroup, PtxType::U8);
+        instr.srcs = vec![Operand::ImmU64(1)];
+        let mut s = String::new();
+        emit_memory_opcode(&instr, &mut s);
+        assert_eq!(s, "cp.async.wait_group 1");
+    }
+
+    #[test]
+    fn test_cp_async_is_memory_op() {
+        assert!(is_memory_op(&PtxOp::CpAsync));
+        assert!(is_memory_op(&PtxOp::CpAsyncCommitGroup));
+        assert!(is_memory_op(&PtxOp::CpAsyncWaitGroup));
+    }
+
+    #[test]
+    fn test_cp_async_skip_type() {
+        assert!(skip_type_for_memory_op(&PtxOp::CpAsync));
+        assert!(skip_type_for_memory_op(&PtxOp::CpAsyncCommitGroup));
+        assert!(skip_type_for_memory_op(&PtxOp::CpAsyncWaitGroup));
     }
 }

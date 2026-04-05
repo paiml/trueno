@@ -179,6 +179,16 @@ pub enum PtxOp {
     /// Prefetch global memory to L2 cache (no-fault hint)
     Prefetch,
 
+    // ===== Async Copy (SM 8.0+) =====
+    /// cp.async: asynchronous global→shared copy without registers.
+    /// Copies `size` bytes (4, 8, or 16) from global to shared memory.
+    /// Does not consume registers — data goes directly to shared memory.
+    CpAsync,
+    /// cp.async.commit_group: commit all outstanding cp.async operations
+    CpAsyncCommitGroup,
+    /// cp.async.wait_group N: wait until at most N groups are outstanding
+    CpAsyncWaitGroup,
+
     // ===== Warp Vote =====
     /// Generic warp vote (ballot)
     Vote,

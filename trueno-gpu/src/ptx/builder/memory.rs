@@ -164,6 +164,39 @@ pub trait PtxMemory: KernelBuilderCore {
         );
     }
 
+    /// Asynchronous copy from global to shared memory (SM 8.0+).
+    ///
+    /// Copies `size_bytes` (4, 8, or 16) from global `src_addr` to shared `dst_smem_offset`.
+    /// Does NOT consume registers — data goes directly global→shared.
+    /// Must be followed by `cp_async_commit_group` and `cp_async_wait_group`.
+    fn cp_async_global_to_shared(
+        &mut self,
+        dst_smem_offset: VirtualReg,
+        src_global_addr: VirtualReg,
+        size_bytes: u32,
+    ) {
+        self.instructions_mut().push(
+            PtxInstruction::new(PtxOp::CpAsync, PtxType::U8)
+                .src(Operand::Reg(dst_smem_offset))
+                .src(Operand::Reg(src_global_addr))
+                .src(Operand::ImmU64(size_bytes as u64)),
+        );
+    }
+
+    /// Commit all outstanding cp.async operations as a group.
+    fn cp_async_commit_group(&mut self) {
+        self.instructions_mut().push(PtxInstruction::new(PtxOp::CpAsyncCommitGroup, PtxType::U8));
+    }
+
+    /// Wait until at most `n` cp.async groups are outstanding.
+    /// `n=0` waits for ALL groups to complete.
+    fn cp_async_wait_group(&mut self, n: u32) {
+        self.instructions_mut().push(
+            PtxInstruction::new(PtxOp::CpAsyncWaitGroup, PtxType::U8)
+                .src(Operand::ImmU64(n as u64)),
+        );
+    }
+
     /// Store f16 to shared memory (stored as b16)
     ///
     /// Half-precision floats are stored using b16 type in PTX.
