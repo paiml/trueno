@@ -12,6 +12,7 @@ pub struct PerformanceContract {
     pub kind: String,
     pub name: String,
     pub version: String,
+    #[serde(default)]
     pub kernel: String,
     #[serde(default)]
     pub hardware: HardwareSpec,
@@ -21,6 +22,9 @@ pub struct PerformanceContract {
     pub metrics: std::collections::HashMap<String, MetricBound>,
     #[serde(default)]
     pub falsification: Vec<FalsificationCheck>,
+    /// Absorb any extra fields from domain-specific contract schemas
+    #[serde(flatten, default)]
+    pub extra: std::collections::HashMap<String, serde_yaml_ng::Value>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -32,6 +36,7 @@ pub struct HardwareSpec {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceBound {
+    #[serde(default, deserialize_with = "deserialize_size")]
     pub size: Vec<u32>,
     #[serde(default)]
     pub max_time_us: Option<f64>,
@@ -41,6 +46,45 @@ pub struct PerformanceBound {
     pub max_regression_pct: Option<f64>,
     #[serde(default)]
     pub min_bandwidth_gbps: Option<f64>,
+    /// Absorb domain-specific bound fields (operation, competitor, etc.)
+    #[serde(flatten, default)]
+    pub extra: std::collections::HashMap<String, serde_yaml_ng::Value>,
+}
+
+/// Accept both `size: 1024` (single int) and `size: [1024, 1024, 1024]` (sequence).
+fn deserialize_size<'de, D>(deserializer: D) -> Result<Vec<u32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de;
+
+    struct SizeVisitor;
+    impl<'de> de::Visitor<'de> for SizeVisitor {
+        type Value = Vec<u32>;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("an integer or sequence of integers")
+        }
+        fn visit_u64<E: de::Error>(self, v: u64) -> Result<Vec<u32>, E> {
+            Ok(vec![v as u32])
+        }
+        fn visit_i64<E: de::Error>(self, v: i64) -> Result<Vec<u32>, E> {
+            Ok(vec![v as u32])
+        }
+        fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> Result<Vec<u32>, A::Error> {
+            let mut v = Vec::new();
+            while let Some(elem) = seq.next_element::<u32>()? {
+                v.push(elem);
+            }
+            Ok(v)
+        }
+        fn visit_none<E: de::Error>(self) -> Result<Vec<u32>, E> {
+            Ok(Vec::new())
+        }
+        fn visit_unit<E: de::Error>(self) -> Result<Vec<u32>, E> {
+            Ok(Vec::new())
+        }
+    }
+    deserializer.deserialize_any(SizeVisitor)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,8 +96,12 @@ pub struct MetricBound {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FalsificationCheck {
     pub name: String,
+    #[serde(default)]
     pub description: String,
+    #[serde(default)]
     pub check: String,
+    #[serde(flatten, default)]
+    pub extra: std::collections::HashMap<String, serde_yaml_ng::Value>,
 }
 
 /// Result of verifying a single contract.
@@ -433,6 +481,7 @@ mod tests {
                 min_tflops: Some(9.0),
                 max_regression_pct: Some(10.0),
                 min_bandwidth_gbps: None,
+                extra: Default::default(),
             }],
             metrics: {
                 let mut m = std::collections::HashMap::new();
@@ -446,7 +495,9 @@ mod tests {
                 name: "FALSIFY-TEST-001".to_string(),
                 description: "CTA WMMA must achieve >9 TFLOP/s".to_string(),
                 check: "tflops > 9.0".to_string(),
+                extra: Default::default(),
             }],
+            extra: Default::default(),
         }
     }
 
