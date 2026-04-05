@@ -1943,7 +1943,7 @@ Tested on: RTX 4090, Driver 570.207, ncu 2025.1.1.0, nsys 2025.3.2.367, perf 6.8
 
 ### Appendix A.1: FALSIFY Suite (automated, 2026-04-05)
 
-12 end-to-end falsification tests in `tests/falsify.rs`, all passed:
+15 end-to-end falsification tests in `tests/falsify.rs`, all passed:
 
 | Test ID | Claim | Result | Method |
 |---------|-------|--------|--------|
@@ -1951,9 +1951,12 @@ Tested on: RTX 4090, Driver 570.207, ncu 2025.1.1.0, nsys 2025.3.2.367, perf 6.8
 | FALSIFY-CGP-021 | Ridge = 330000/1008 = 327.4 | **PASS** | JSON roofline parse, math check |
 | FALSIFY-CGP-030 | Detect 10% regression | **PASS** | Synthetic profiles, bootstrap CI |
 | FALSIFY-CGP-031 | No false positive <2% | **PASS** | 0.9% diff → NO_CHANGE verdict |
+| FALSIFY-CGP-032 | Detect 1.54x improvement | **PASS** | 35.7→23.2µs, diff reports IMPROVED |
 | FALSIFY-CGP-041 | AVX2 >= 3x scalar | **PASS** | JSON compare, speedup = 4.8x |
+| FALSIFY-CGP-042 | cuBLAS > PTX for large GEMM | **PASS** | JSON compare at 4096, cuBLAS > CTA WMMA |
 | FALSIFY-CGP-043 | Profile binary via nsys | **PASS** | nvidia-smi as test binary |
 | FALSIFY-CGP-045 | Compete normalized table | **PASS** | sleep 0.01 vs 0.02, labels verified |
+| FALSIFY-CGP-046 | CPU-only competitor | **PASS** | sleep commands, wall-clock fallback |
 | FALSIFY-CGP-047 | Crash handling | **PASS** | `false` binary, no cgp crash |
 | FALSIFY-CGP-060 | Profile < 30s | **PASS** | compare --backends scalar,avx2 |
 | FALSIFY-CGP-061 | Doctor < 2s | **PASS** | 107ms measured |
@@ -2028,7 +2031,7 @@ amortized across K iterations within each thread.
 - GPU CTA WMMA: 11.6 TFLOP/s / 330 peak = 3.5% → larger tiles + double-buffering needed
 - GPU fused K+V DP4A: 170 insn/SB vs 216 separate (21% savings per layer)
 
-**Implementation status** (2026-04-04): cgp binary fully functional in `crates/cgp/` with 111 unit + 12 falsify + 29 integration = 152 tests.
+**Implementation status** (2026-04-04): cgp binary fully functional in `crates/cgp/` with 111 unit + 15 falsify + 29 integration = 155 tests.
 
 All 17 CLI subcommands implemented and dogfooded on RTX 4090 + Threadripper 7960X:
 
@@ -2073,7 +2076,7 @@ New in Phase 3 (PMAT-037):
 - **Scaling command**: Thread-count sweep with GEMM output parsing, JSON support
 - **Dogfooding**: All measurements regenerated via `cgp profile scaling` (see Appendix A.2)
 
-FALSIFY tests implemented (111 unit + 12 falsify + 29 integration = 152):
+FALSIFY tests implemented (111 unit + 15 falsify + 29 integration = 155):
 - FALSIFY-CGP-010/011/012: Doctor tool detection (doctor.rs + integration)
 - FALSIFY-CGP-020/021: Roofline ridge points, all 4 precisions (analysis/roofline.rs + integration)
 - FALSIFY-CGP-030/031/032: Regression detection — bootstrap CI (analysis/regression.rs)

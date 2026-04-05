@@ -499,3 +499,132 @@ fn falsify_cgp_020_bandwidth_spec() {
         expected_bw / 1e9
     );
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// FALSIFY-CGP-032: Must detect improvement
+// Given: baseline at 35.7us, current at 23.2us
+// When: cgp diff
+// Then: reports IMPROVED with 1.54x speedup
+// ══════════════════════════════════════════════════════════════════════
+#[test]
+fn falsify_cgp_032_detect_improvement() {
+    let baseline = serde_json::json!({
+        "version": "2.0", "timestamp": "", "hardware": {"cpu_features": []},
+        "timing": {
+            "wall_clock_time_us": 35.7,
+            "samples": 50, "stddev_us": 0.5,
+            "ci_95_low_us": 35.2, "ci_95_high_us": 36.2
+        },
+        "throughput": {"tflops": 7.5, "gflops": 0.0, "bandwidth_gbps": 0.0, "arithmetic_intensity": 0.0},
+        "muda": []
+    });
+    let current = serde_json::json!({
+        "version": "2.0", "timestamp": "", "hardware": {"cpu_features": []},
+        "timing": {
+            "wall_clock_time_us": 23.2,
+            "samples": 50, "stddev_us": 0.3,
+            "ci_95_low_us": 22.9, "ci_95_high_us": 23.5
+        },
+        "throughput": {"tflops": 11.6, "gflops": 0.0, "bandwidth_gbps": 0.0, "arithmetic_intensity": 0.0},
+        "muda": []
+    });
+
+    std::fs::write("/tmp/cgp-falsify-032-b.json", baseline.to_string()).unwrap();
+    std::fs::write("/tmp/cgp-falsify-032-c.json", current.to_string()).unwrap();
+
+    let output = cgp_cmd()
+        .args([
+            "diff",
+            "--baseline",
+            "/tmp/cgp-falsify-032-b.json",
+            "--current",
+            "/tmp/cgp-falsify-032-c.json",
+        ])
+        .output()
+        .expect("Failed to run cgp diff");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Must detect improvement (lower time = better)
+    assert!(
+        stdout.contains("IMPROVED"),
+        "FALSIFY-CGP-032 FAILED: 35.7→23.2us should be IMPROVED.\nOutput:\n{stdout}"
+    );
+
+    let _ = std::fs::remove_file("/tmp/cgp-falsify-032-b.json");
+    let _ = std::fs::remove_file("/tmp/cgp-falsify-032-c.json");
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// FALSIFY-CGP-042: cuBLAS must be faster than pure-Rust PTX for large GEMM
+// Verified via compare command's estimation model at 4096.
+// ══════════════════════════════════════════════════════════════════════
+#[test]
+fn falsify_cgp_042_cublas_faster_than_ptx() {
+    let output = cgp_cmd()
+        .args([
+            "--json",
+            "profile",
+            "compare",
+            "--kernel",
+            "gemm",
+            "--size",
+            "4096",
+            "--backends",
+            "cuda,cublas",
+        ])
+        .output()
+        .expect("Failed to run cgp profile compare");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).expect("Compare JSON invalid");
+
+    let arr = parsed.as_array().unwrap();
+    let cuda = arr.iter().find(|r| r["name"] == "cuda").unwrap();
+    let cublas = arr.iter().find(|r| r["name"] == "cublas").unwrap();
+
+    let cuda_tflops = cuda["tflops"].as_f64().unwrap();
+    let cublas_tflops = cublas["tflops"].as_f64().unwrap();
+
+    assert!(
+        cublas_tflops > cuda_tflops,
+        "FALSIFY-CGP-042 FAILED: cuBLAS {cublas_tflops:.1} TFLOP/s should exceed pure PTX {cuda_tflops:.1} TFLOP/s at 4096"
+    );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// FALSIFY-CGP-046: Must handle CPU-only competitor (no CUDA)
+// When profiling a CPU-only command, cgp compete should still work
+// (falls back to wall-clock timing, no GPU metrics).
+// ══════════════════════════════════════════════════════════════════════
+#[test]
+fn falsify_cgp_046_cpu_only_competitor() {
+    let output = cgp_cmd()
+        .args([
+            "compete",
+            "cpu_timing",
+            "--ours",
+            "sleep 0.01",
+            "--theirs",
+            "sleep 0.015",
+            "--label",
+            "fast,slow",
+        ])
+        .output()
+        .expect("Failed to run cgp compete");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Must produce timing output without crashing on CPU-only workloads
+    assert!(
+        stdout.contains("fast") && stdout.contains("slow"),
+        "FALSIFY-CGP-046 FAILED: Labels missing.\nOutput:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Winner"),
+        "FALSIFY-CGP-046: Should declare a winner.\nOutput:\n{stdout}"
+    );
+}
