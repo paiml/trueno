@@ -3082,7 +3082,20 @@ Analysis via `decy audit` + `pmat query` + direct source comparison.
 ### Current State Summary (updated 2026-04-05)
 
 **cgp tool**: 18/18 CLI commands implemented (only `cgp tui` is STUB).
-3475 tests passing. 65 peer-reviewed citations [1]-[65]. 10 provable-contracts.
+3475 tests passing. 65 peer-reviewed citations [1]-[65]. 11 provable-contracts.
+All 11 contracts pass (53 checks pass, 0 fail, 44 skip).
+
+**GPU GEMM (2026-04-05 measurements)**:
+
+| Kernel | 1024 (µs) | TFLOP/s | vs cuBLAS | Notes |
+|--------|-----------|---------|-----------|-------|
+| CTA32 (4-warp, 32×32) | 117 | 18.4 | 0.38x | Baseline |
+| CTA64 (16-warp, 64×64) | 72.4 | 29.7 | 0.29x | **+62%** (2× data reuse) |
+| CTA64 double-buffer | 71.7 | 30.0 | 0.28x | Neutral (amortized) |
+| cuBLAS FP16 | 20.5 | ~105 | 1.00x | Target: 0.5x |
+
+16 experiments (6 positive, 10 negative). Double-buffer on 32×32 was negative
+(register pressure + code bloat). 64×64 tiles proved the data reuse thesis.
 
 **GEMM performance (Threadripper 7960X, AVX-512 8×32 microkernel + SIMD B-packing)**:
 
@@ -3141,11 +3154,10 @@ Effort: Medium (1 week). Already partially implemented in `gemm_blis_parallel_wi
 Note: previous shared-B attempt regressed (495→316) because sharing was at the
 wrong level (full B, not NR-panel level). Job-level sharing avoids this.
 
-**P1c. Dynamic cache blocking from CPU topology.**
-Read `/sys/devices/system/cpu/cpu0/cache/` at runtime to determine L1/L2/L3 size.
-Compute optimal MC/KC/NC per-machine instead of hardcoding. Zen 4 has 32KB L1,
-1MB L2, 32MB shared L3 — but other CPUs differ significantly.
-Effort: Low (2-3 days). Pure `/sys/` parsing + arithmetic.
+**P1c. Dynamic cache blocking from CPU topology. ✅ DONE**
+`cache_topology.rs` reads `/sys/` at runtime, computes MC/KC/NC dynamically.
+`gemm_blis_avx512_large()` uses `blocking_8x32()` since Phase 6.
+Zen 4 detected: L1D=32K, L2=1M, L3=32M → KC=256, MC=96, NC=4096.
 
 **P1d. Q4K GEMV: vectorize super-block header parsing (VBMI2).**
 cgp shows Q4K at 56% compute utilization. The bottleneck is the scalar `parse_q4k_header`
