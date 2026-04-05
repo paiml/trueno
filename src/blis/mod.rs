@@ -31,6 +31,7 @@
 //! - [`transpose`]: Matrix transpose operations
 
 pub mod backend_selection;
+pub mod cache_topology;
 pub mod compute;
 pub mod elementwise;
 pub mod gemv;

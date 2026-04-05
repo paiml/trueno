@@ -983,12 +983,19 @@ unsafe fn gemm_blis_avx512_large(
     let start = if track_time { Some(Instant::now()) } else { None };
 
     // Phase 4 (Appendix D): use 8×32 when N >= 32, doubling NR for 2× FMA/K-step.
+    // Phase 5 (P1c): dynamic cache blocking from /sys/ CPU topology.
+    // Contract: cgp-dynamic-cache-v1.yaml (C-CACHE-001 through C-CACHE-006).
     let use_wide = n >= 32;
-    let nr = if use_wide { 32_usize } else { 16_usize };
-    let mc = if use_wide { 96_usize } else { 64_usize }.min(m);
-    let nc = 1024_usize.min(n);
-    let kc_param = KC;
-    let mr = MR; // MR=8
+    let blk = if use_wide {
+        super::cache_topology::blocking_8x32()
+    } else {
+        super::cache_topology::blocking_8x16()
+    };
+    let mr = blk.mr;
+    let nr = blk.nr;
+    let mc = blk.mc.min(m);
+    let nc = blk.nc.min(n);
+    let kc_param = blk.kc;
 
     TL_PACKED_A.with(|tl_a| {
         TL_PACKED_B.with(|tl_b| {
