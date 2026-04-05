@@ -147,6 +147,163 @@ pub fn gemm_blis_parallel(
     Ok(())
 }
 
+/// Parallel GEMM with shared packed-B: pack B once per (jc,pc) block,
+/// distribute M-slices across threads. Each thread only packs its own A.
+/// This eliminates O(threads) redundant B packings.
+///
+/// BLIS loop structure:
+///   for jc (N tiles):      ← sequential
+///     for pc (K tiles):    ← sequential, pack B ONCE
+///       for ic (M tiles):  ← PARALLEL across threads
+///         pack A_local
+///         microkernel(packed_a, shared_packed_b, c_local)
+#[cfg(feature = "parallel")]
+pub fn gemm_blis_parallel_shared_b(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    b: &[f32],
+    c: &mut [f32],
+) -> Result<(), TruenoError> {
+    use rayon::prelude::*;
+
+    if a.len() != m * k || b.len() != k * n || c.len() != m * n {
+        return Err(TruenoError::InvalidInput("Dimension mismatch".to_string()));
+    }
+
+    // For small problems, use single-thread path
+    let flops = m * n * k;
+    if flops < 8_000_000 {
+        return gemm_blis(m, n, k, a, b, c, None);
+    }
+
+    // Require AVX-512 for the 8×32 microkernel
+    #[cfg(target_arch = "x86_64")]
+    if !std::arch::is_x86_feature_detected!("avx512f") {
+        return gemm_blis(m, n, k, a, b, c, None);
+    }
+
+    let phys_cores = num_cpus::get_physical();
+    let max_threads = if flops < 64_000_000 {
+        2.min(phys_cores)
+    } else if flops < 512_000_000 {
+        4.min(phys_cores)
+    } else if flops < 4_000_000_000 {
+        // Shared-B means less L3 pressure per thread, so we can potentially
+        // use more threads than the per-thread-B path. Try phys_cores/2.
+        (phys_cores / 2).max(8).min(phys_cores)
+    } else {
+        (phys_cores / 2).max(8).min(phys_cores)
+    };
+
+    let blk = super::cache_topology::blocking_8x32();
+    let mr = blk.mr; // 8
+    let nr = blk.nr; // 32
+    let mc = blk.mc.min(m);
+    let nc = blk.nc.min(n);
+    let kc = blk.kc;
+
+    // Shared packed B: one allocation for the largest B panel
+    let b_panels = (nc + nr - 1) / nr;
+    let packed_b_size = b_panels * nr * kc;
+    let mut packed_b = vec![0.0f32; packed_b_size];
+
+    let c_ptr = c.as_mut_ptr() as usize;
+    let num_threads = max_threads.min(rayon::current_num_threads());
+
+    for jc in (0..n).step_by(nc) {
+        let nc_block = nc.min(n - jc);
+
+        for pc in (0..k).step_by(kc) {
+            let kc_block = kc.min(k - pc);
+
+            // Pack B ONCE (sequential) — shared by all threads
+            super::compute::pack_b_block_generic(
+                b,
+                n,
+                pc,
+                jc,
+                kc_block,
+                nc_block,
+                nr,
+                &mut packed_b,
+            );
+            let shared_b: &[f32] = &packed_b;
+
+            // Parallel ic loop: each thread gets a slice of M
+            let m_per_thread = ((m + num_threads - 1) / num_threads + mr - 1) / mr * mr;
+
+            (0..num_threads).into_par_iter().for_each(|tid| {
+                let ic_start = tid * m_per_thread;
+                if ic_start >= m {
+                    return;
+                }
+                let ic_end = (ic_start + m_per_thread).min(m);
+
+                // Thread-local packed A
+                let a_panels = (m_per_thread + mr - 1) / mr;
+                let mut packed_a = vec![0.0f32; a_panels * mr * kc_block];
+
+                let panels_n = (nc_block + nr - 1) / nr;
+
+                for ic in (ic_start..ic_end).step_by(mc) {
+                    let mc_block = mc.min(ic_end - ic);
+
+                    super::packing::pack_a_block(a, k, ic, pc, mc_block, kc_block, &mut packed_a);
+
+                    let panels_m = (mc_block + mr - 1) / mr;
+
+                    for ir_panel in 0..panels_m {
+                        let ir = ir_panel * mr;
+                        let mr_block = mr.min(mc_block - ir);
+
+                        for jr_panel in 0..panels_n {
+                            let jr = jr_panel * nr;
+                            let nr_block = nr.min(nc_block - jr);
+
+                            let a_panel = &packed_a[ir_panel * mr * kc_block..];
+                            let b_panel = &shared_b[jr_panel * nr * kc_block..];
+
+                            if mr_block == 8 && nr_block == 32 {
+                                #[cfg(target_arch = "x86_64")]
+                                unsafe {
+                                    super::compute::avx512_microkernel_8x32_rowmajor(
+                                        kc_block,
+                                        a_panel.as_ptr(),
+                                        b_panel.as_ptr(),
+                                        (c_ptr as *mut f32).add((ic + ir) * n + (jc + jr)),
+                                        n,
+                                    );
+                                }
+                            } else {
+                                // Scalar fallback for edge tiles
+                                for ir_local in 0..mr_block {
+                                    for jr_local in 0..nr_block {
+                                        let mut sum = 0.0f32;
+                                        for p in 0..kc_block {
+                                            sum += a_panel[p * mr + ir_local]
+                                                * b_panel[p * nr + jr_local];
+                                        }
+                                        unsafe {
+                                            let c = c_ptr as *mut f32;
+                                            *c.add(
+                                                (ic + ir + ir_local) * n + (jc + jr + jr_local),
+                                            ) += sum;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    Ok(())
+}
+
 /// Non-parallel fallback
 #[cfg(not(feature = "parallel"))]
 pub fn gemm_blis_parallel(

@@ -129,8 +129,64 @@ fn main() {
         benchmark_bcast_b(1024, 2);
     }
 
+    #[cfg(feature = "parallel")]
+    {
+        println!("\n--- Parallel Comparison (per-thread-B vs shared-B) ---");
+        for &n in &[256, 512, 1024] {
+            benchmark_parallel_compare(n);
+        }
+    }
+
     println!("\n--- Detailed Profiler Output ---");
     benchmark_with_profiler(256);
+}
+
+#[cfg(feature = "parallel")]
+fn benchmark_parallel_compare(n: usize) {
+    use trueno::blis::{gemm_blis_parallel, gemm_blis_parallel_shared_b};
+    let a: Vec<f32> = (0..n * n).map(|i| ((i % 7) as f32) * 0.1).collect();
+    let b: Vec<f32> = (0..n * n).map(|i| ((i % 11) as f32) * 0.1).collect();
+    let mut c = vec![0.0f32; n * n];
+    let iters = if n >= 1024 {
+        5
+    } else if n >= 512 {
+        10
+    } else {
+        20
+    };
+    let flops = 2u64 * (n as u64).pow(3);
+
+    // Warmup + bench per-thread-B
+    for _ in 0..3 {
+        c.fill(0.0);
+        gemm_blis_parallel(n, n, n, &a, &b, &mut c).unwrap();
+    }
+    let start = std::time::Instant::now();
+    for _ in 0..iters {
+        c.fill(0.0);
+        gemm_blis_parallel(n, n, n, &a, &b, &mut c).unwrap();
+    }
+    let per_thread = start.elapsed().as_secs_f64() / iters as f64;
+    let gf_pt = flops as f64 / per_thread / 1e9;
+
+    // Warmup + bench shared-B
+    for _ in 0..3 {
+        c.fill(0.0);
+        gemm_blis_parallel_shared_b(n, n, n, &a, &b, &mut c).unwrap();
+    }
+    let start = std::time::Instant::now();
+    for _ in 0..iters {
+        c.fill(0.0);
+        gemm_blis_parallel_shared_b(n, n, n, &a, &b, &mut c).unwrap();
+    }
+    let shared = start.elapsed().as_secs_f64() / iters as f64;
+    let gf_sb = flops as f64 / shared / 1e9;
+
+    let ratio = shared / per_thread;
+    println!(
+        "{:4}x{:4}: per-thread-B {:6.1} GFLOPS ({:.2}ms) | shared-B {:6.1} GFLOPS ({:.2}ms) | ratio {:.2}x",
+        n, n, gf_pt, per_thread * 1e3, gf_sb, shared * 1e3, ratio,
+    );
 }
 
 #[cfg(target_arch = "x86_64")]

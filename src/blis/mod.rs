@@ -77,6 +77,8 @@ pub use compute::gemm_blis_broadcast_b;
 pub use compute::{gemm_blis, gemm_blis_with_prepacked_b};
 
 // Re-export parallel
+#[cfg(feature = "parallel")]
+pub use parallel::gemm_blis_parallel_shared_b;
 pub use parallel::{gemm_blis_parallel, gemm_blis_parallel_with_prepacked_b, HeijunkaScheduler};
 
 // Re-export prepacked

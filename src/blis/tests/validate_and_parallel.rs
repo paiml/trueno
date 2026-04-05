@@ -210,3 +210,51 @@ fn test_gemm_blis_parallel_rectangular_tall() {
     // Verify at least one non-zero output
     assert!(c.iter().any(|&v| v != 0.0));
 }
+
+// ========================================================================
+// Shared-B parallel GEMM tests
+// ========================================================================
+
+/// FALSIFY-SHARED-B-001: shared-B parallel matches reference for 256×256.
+#[cfg(feature = "parallel")]
+#[test]
+fn test_gemm_parallel_shared_b_256() {
+    let n = 256;
+    let a: Vec<f32> = (0..n * n).map(|i| ((i % 11) as f32) * 0.1).collect();
+    let b: Vec<f32> = (0..n * n).map(|i| ((i % 7) as f32) * 0.1).collect();
+    let mut c_shared = vec![0.0f32; n * n];
+    let mut c_ref = vec![0.0f32; n * n];
+
+    super::super::parallel::gemm_blis_parallel_shared_b(n, n, n, &a, &b, &mut c_shared).unwrap();
+    gemm_reference(n, n, n, &a, &b, &mut c_ref).unwrap();
+
+    let mut max_diff = 0.0f32;
+    for i in 0..n * n {
+        let diff = (c_shared[i] - c_ref[i]).abs();
+        max_diff = max_diff.max(diff);
+    }
+    assert!(max_diff < 1e-1, "FALSIFY-SHARED-B-001: max diff {max_diff} >= 1e-1 at 256");
+}
+
+/// FALSIFY-SHARED-B-002: shared-B parallel matches reference for non-aligned 100×96.
+#[cfg(feature = "parallel")]
+#[test]
+fn test_gemm_parallel_shared_b_non_aligned() {
+    let m = 100;
+    let n = 96;
+    let k = 128;
+    let a: Vec<f32> = (0..m * k).map(|i| ((i % 11) as f32) * 0.1).collect();
+    let b: Vec<f32> = (0..k * n).map(|i| ((i % 7) as f32) * 0.1).collect();
+    let mut c_shared = vec![0.0f32; m * n];
+    let mut c_ref = vec![0.0f32; m * n];
+
+    super::super::parallel::gemm_blis_parallel_shared_b(m, n, k, &a, &b, &mut c_shared).unwrap();
+    gemm_reference(m, n, k, &a, &b, &mut c_ref).unwrap();
+
+    let mut max_diff = 0.0f32;
+    for i in 0..m * n {
+        let diff = (c_shared[i] - c_ref[i]).abs();
+        max_diff = max_diff.max(diff);
+    }
+    assert!(max_diff < 1e-1, "FALSIFY-SHARED-B-002: max diff {max_diff} >= 1e-1");
+}

@@ -2632,6 +2632,10 @@ Before any further optimization work, these retroactive contracts MUST be writte
   Root cause: row-major C requires scalar scatter store (384 individual stores per tile)
   vs broadcast-A's 8 zmm stores (128 bytes each). faer avoids this via column-major C.
   Broadcast-B is only viable with column-major C layout, which trueno doesn't use. (2026-04-05)
+- **Shared packed-B parallel GEMM**: 398 vs 628 GFLOPS at 1024 (1.58× slower).
+  Root cause: 8 threads reading same packed_b buffer causes cross-core L2 contention.
+  Per-thread independent B packing keeps data in private L1/L2 — zero contention.
+  This is the third confirmation that shared-B is wrong for BLIS parallel GEMM. (2026-04-05)
 - Shared-B packing: regressed 495→316 GFLOPS (cross-core L1/L2 cache penalty) [16]
 - Manual K-unrolling: regressed 567→400 GFLOPS (LLVM already unrolls optimally)
 - Q4K parallel threshold 8M→2M: regressed 17→14 GFLOPS (thread overhead at <300µs)
