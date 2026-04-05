@@ -1,1 +1,0 @@
-{"content_hash":"7badd8d16a9899cd","findings":[{"rule_id":"PV-PRV-001","severity":"error","message":"PROVABILITY-001: falsification_tests (3) < proof_obligations (4)","file":"contracts/fft-stockham-v1.yaml","line":null,"contract_stem":"fft-stockham-v1","suppressed":false}]}

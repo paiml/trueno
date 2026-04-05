@@ -1,3 +1,4 @@
+#![allow(dead_code, clippy::many_single_char_names)]
 //! PMAT-324: WGSL transformer forward pass — multi-pass single submission.
 //!
 //! Instead of one matmul per CPU call (2ms roundtrip each), this encodes
