@@ -857,11 +857,16 @@ pub fn gemm_blis(
         }
     }
 
-    // NR=8 BLIS with row-major C SIMD load/store.
-    // Key insight from matrixmultiply: NR=8 maps perfectly to ymm width (8 f32),
-    // enabling _mm256_loadu_ps/_mm256_storeu_ps for C rows. This replaces
-    // 96 scalar C ops per tile with 16 SIMD ops (6× reduction).
-    // Also matches matrixmultiply's tile shape (MR=8, NR=8).
+    // AVX-512 BLIS: MR=16, NR=8 using zmm registers (2× throughput vs AVX2).
+    // This closes the gap with OpenBLAS which uses AVX-512 on Zen 4.
+    // CRITICAL: Without this, trueno is 0.49x NumPy at 8T (shipping blocker).
+    #[cfg(target_arch = "x86_64")]
+    if profiler.is_none() && is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("fma")
+    {
+        return unsafe { gemm_blis_avx512_large(m, n, k, a, b, c) };
+    }
+
+    // NR=8 BLIS with row-major C SIMD load/store (AVX2 fallback).
     #[cfg(target_arch = "x86_64")]
     if profiler.is_none() && is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
         return unsafe { gemm_blis_nr8_rowmajor_c(m, n, k, a, b, c) };
@@ -948,7 +953,192 @@ pub fn gemm_blis(
     Ok(())
 }
 
-/// BLIS 5-loop GEMM with NR=8 and row-major C SIMD load/store.
+/// AVX-512 BLIS 5-loop GEMM — MR=8, NR=16 using zmm registers.
+///
+/// 2× throughput vs AVX2 path: each C row = 16 f32 = 1 zmm register.
+/// 8 zmm accumulators (8 rows × 16 cols = 128 elements), well within
+/// AVX-512's 32-register budget. B loaded as zmm (16 f32), A broadcast.
+///
+/// Cache blocking: MC=64, KC=256, NC=1024.
+/// A packing: MR=8 column-major panels (reuses pack_a_block).
+/// B packing: NR=16 row-major panels.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f", enable = "fma")]
+unsafe fn gemm_blis_avx512_large(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    b: &[f32],
+    c: &mut [f32],
+) -> Result<(), TruenoError> {
+    use std::arch::x86_64::*;
+
+    let mc = 64_usize.min(m);
+    let nc = 1024_usize.min(n);
+    let kc_param = KC;
+    let nr = 16_usize; // AVX-512: 16 columns per tile (zmm width)
+    let mr = MR; // MR=8
+
+    TL_PACKED_A.with(|tl_a| {
+        TL_PACKED_B.with(|tl_b| {
+            let mut packed_a = tl_a.borrow_mut();
+            let mut packed_b = tl_b.borrow_mut();
+
+            let needed_a = packed_a_size(mc, kc_param);
+            let needed_b = kc_param * nc; // NR=16 packing
+            if packed_a.len() < needed_a {
+                packed_a.resize(needed_a, 0.0);
+            }
+            if packed_b.len() < needed_b {
+                packed_b.resize(needed_b, 0.0);
+            }
+
+            for jc in (0..n).step_by(nc) {
+                let nc_block = nc.min(n - jc);
+
+                for pc in (0..k).step_by(kc_param) {
+                    let kc_block = kc_param.min(k - pc);
+
+                    // Pack B with NR=16
+                    pack_b_block_nr16(b, n, pc, jc, kc_block, nc_block, &mut packed_b);
+
+                    for ic in (0..m).step_by(mc) {
+                        let mc_block = mc.min(m - ic);
+
+                        pack_a_block(a, k, ic, pc, mc_block, kc_block, &mut packed_a);
+
+                        let panels_m = (mc_block + mr - 1) / mr;
+                        let panels_n = (nc_block + nr - 1) / nr;
+
+                        for ir_panel in 0..panels_m {
+                            let ir = ir_panel * mr;
+                            let mr_block = mr.min(mc_block - ir);
+
+                            for jr_panel in 0..panels_n {
+                                let jr = jr_panel * nr;
+                                let nr_block = nr.min(nc_block - jr);
+
+                                let a_panel = &packed_a[ir_panel * mr * kc_block..];
+                                let b_panel = &packed_b[jr_panel * nr * kc_block..];
+
+                                if mr_block == 8 && nr_block == 16 {
+                                    // Full 8×16 AVX-512 tile
+                                    unsafe {
+                                        avx512_microkernel_8x16_rowmajor(
+                                            kc_block,
+                                            a_panel.as_ptr(),
+                                            b_panel.as_ptr(),
+                                            c.as_mut_ptr().add((ic + ir) * n + (jc + jr)),
+                                            n,
+                                        );
+                                    }
+                                } else {
+                                    // Scalar fallback for edge tiles
+                                    for ir_local in 0..mr_block {
+                                        for jr_local in 0..nr_block {
+                                            let mut sum =
+                                                c[(ic + ir + ir_local) * n + (jc + jr + jr_local)];
+                                            for p in 0..kc_block {
+                                                sum += a_panel[p * mr + ir_local]
+                                                    * b_panel[p * nr + jr_local];
+                                            }
+                                            c[(ic + ir + ir_local) * n + (jc + jr + jr_local)] =
+                                                sum;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(())
+        })
+    })
+}
+
+/// AVX-512 8×16 microkernel for row-major C (stride = n).
+/// Processes 8 rows × 16 columns using zmm registers for C rows.
+/// Each C row is 16 f32 = 1 zmm register. 8 rows = 8 zmm accumulators.
+/// A: broadcast scalar to zmm. B: load 16 f32 (1 zmm) per K step.
+/// 8 FMA ops per K step, each processing 16 elements = 2× throughput vs AVX2.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f", enable = "fma")]
+unsafe fn avx512_microkernel_8x16_rowmajor(
+    k: usize,
+    a: *const f32, // MR=8 packed column-major
+    b: *const f32, // NR=16 packed row-major
+    c: *mut f32,
+    ldc: usize, // row stride = n for row-major
+) {
+    use std::arch::x86_64::*;
+
+    // Load 8 C rows (each row = 16 f32 = 1 zmm)
+    let mut c0 = _mm512_loadu_ps(c);
+    let mut c1 = _mm512_loadu_ps(c.add(ldc));
+    let mut c2 = _mm512_loadu_ps(c.add(2 * ldc));
+    let mut c3 = _mm512_loadu_ps(c.add(3 * ldc));
+    let mut c4 = _mm512_loadu_ps(c.add(4 * ldc));
+    let mut c5 = _mm512_loadu_ps(c.add(5 * ldc));
+    let mut c6 = _mm512_loadu_ps(c.add(6 * ldc));
+    let mut c7 = _mm512_loadu_ps(c.add(7 * ldc));
+
+    // Main loop: for each K, load B[16] into zmm, broadcast A[i] to zmm, FMA
+    for p in 0..k {
+        let b_row = _mm512_loadu_ps(b.add(p * 16));
+        let ap = a.add(p * 8); // MR=8
+
+        c0 = _mm512_fmadd_ps(_mm512_set1_ps(*ap), b_row, c0);
+        c1 = _mm512_fmadd_ps(_mm512_set1_ps(*ap.add(1)), b_row, c1);
+        c2 = _mm512_fmadd_ps(_mm512_set1_ps(*ap.add(2)), b_row, c2);
+        c3 = _mm512_fmadd_ps(_mm512_set1_ps(*ap.add(3)), b_row, c3);
+        c4 = _mm512_fmadd_ps(_mm512_set1_ps(*ap.add(4)), b_row, c4);
+        c5 = _mm512_fmadd_ps(_mm512_set1_ps(*ap.add(5)), b_row, c5);
+        c6 = _mm512_fmadd_ps(_mm512_set1_ps(*ap.add(6)), b_row, c6);
+        c7 = _mm512_fmadd_ps(_mm512_set1_ps(*ap.add(7)), b_row, c7);
+    }
+
+    // Store 8 C rows
+    _mm512_storeu_ps(c, c0);
+    _mm512_storeu_ps(c.add(ldc), c1);
+    _mm512_storeu_ps(c.add(2 * ldc), c2);
+    _mm512_storeu_ps(c.add(3 * ldc), c3);
+    _mm512_storeu_ps(c.add(4 * ldc), c4);
+    _mm512_storeu_ps(c.add(5 * ldc), c5);
+    _mm512_storeu_ps(c.add(6 * ldc), c6);
+    _mm512_storeu_ps(c.add(7 * ldc), c7);
+}
+
+/// Pack B block with NR=16 row-major panels for AVX-512.
+/// Each panel is KC × 16, stored as kc_block × nr contiguous.
+fn pack_b_block_nr16(
+    b: &[f32],
+    ldb: usize,
+    pc: usize,
+    jc: usize,
+    kc: usize,
+    nc: usize,
+    packed: &mut [f32],
+) {
+    let nr = 16;
+    let panels = (nc + nr - 1) / nr;
+    for panel in 0..panels {
+        let j_start = panel * nr;
+        let nr_local = nr.min(nc - j_start);
+        for p in 0..kc {
+            for j in 0..nr_local {
+                packed[panel * nr * kc + p * nr + j] = b[(pc + p) * ldb + (jc + j_start + j)];
+            }
+            // Zero-pad if nr_local < 16
+            for j in nr_local..nr {
+                packed[panel * nr * kc + p * nr + j] = 0.0;
+            }
+        }
+    }
+}
+
+/// BLIS 5-loop GEMM with NR=8 and row-major C SIMD load/store (AVX2).
 ///
 /// Key optimization vs standard BLIS: C rows are loaded/stored with
 /// `_mm256_loadu_ps`/`_mm256_storeu_ps` (NR=8 = 1 ymm per row).
