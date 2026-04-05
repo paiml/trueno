@@ -1,3 +1,6 @@
+// Rust 1.93+: BLIS microkernels use bare unsafe ops inside `unsafe fn`.
+// Wrapping each intrinsic in `unsafe {}` would add 100+ blocks with no safety benefit.
+#![allow(unsafe_op_in_unsafe_fn)]
 //! Core BLIS compute routines: microkernel dispatch, macroblock execution,
 //! and the cache-blocked GEMM main loop.
 //!
@@ -972,8 +975,6 @@ unsafe fn gemm_blis_avx512_large(
     b: &[f32],
     c: &mut [f32],
 ) -> Result<(), TruenoError> {
-    use std::arch::x86_64::*;
-
     let mc = 64_usize.min(m);
     let nc = 1024_usize.min(n);
     let kc_param = KC;
