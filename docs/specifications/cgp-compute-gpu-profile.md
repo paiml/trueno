@@ -2627,6 +2627,10 @@ Before any further optimization work, these retroactive contracts MUST be writte
 - **8×48 codegen NR=48 KC=128**: regressed 512: 135→41 GFLOPS, 1024: 130→85 GFLOPS
   Root cause: KC halved (128 vs 256) for L1 fit → 2× more K-loop packing passes.
   24 FMA/K-step doesn't compensate for packing overhead. Reverted to NR=32. (2026-04-05)
+- **Broadcast-B 64×6 (faer-style)**: 47-61 GFLOPS vs 115-135 for broadcast-A 8×32.
+  Root cause: row-major C requires scalar scatter store (384 individual stores per tile)
+  vs broadcast-A's 8 zmm stores (128 bytes each). faer avoids this via column-major C.
+  Broadcast-B is only viable with column-major C layout, which trueno doesn't use. (2026-04-05)
 - Shared-B packing: regressed 495→316 GFLOPS (cross-core L1/L2 cache penalty) [16]
 - Manual K-unrolling: regressed 567→400 GFLOPS (LLVM already unrolls optimally)
 - Q4K parallel threshold 8M→2M: regressed 17→14 GFLOPS (thread overhead at <300µs)

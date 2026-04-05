@@ -72,6 +72,8 @@ pub use reference::{gemm_reference, gemm_reference_with_jidoka};
 pub use packing::{pack_a, pack_b, packed_a_size, packed_b_size};
 
 // Re-export compute
+#[cfg(target_arch = "x86_64")]
+pub use compute::gemm_blis_broadcast_b;
 pub use compute::{gemm_blis, gemm_blis_with_prepacked_b};
 
 // Re-export parallel

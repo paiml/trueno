@@ -119,6 +119,46 @@ fn main() {
     benchmark_gemm("BLIS", 512, 5);
     benchmark_gemm("BLIS", 1024, 2);
 
+    #[cfg(target_arch = "x86_64")]
+    {
+        println!("\n--- Broadcast-B (MR=64, NR=6) Performance ---");
+        benchmark_bcast_b(64, 1000);
+        benchmark_bcast_b(128, 100);
+        benchmark_bcast_b(256, 20);
+        benchmark_bcast_b(512, 5);
+        benchmark_bcast_b(1024, 2);
+    }
+
     println!("\n--- Detailed Profiler Output ---");
     benchmark_with_profiler(256);
+}
+
+#[cfg(target_arch = "x86_64")]
+fn benchmark_bcast_b(n: usize, iterations: usize) {
+    use trueno::blis::gemm_blis_broadcast_b;
+    let a: Vec<f32> = (0..n * n).map(|i| ((i % 7) as f32) * 0.1).collect();
+    let b: Vec<f32> = (0..n * n).map(|i| ((i % 11) as f32) * 0.1).collect();
+    let mut c = vec![0.0f32; n * n];
+
+    // Warmup
+    for _ in 0..3 {
+        c.fill(0.0);
+        gemm_blis_broadcast_b(n, n, n, &a, &b, &mut c).unwrap();
+    }
+
+    let start = std::time::Instant::now();
+    for _ in 0..iterations {
+        c.fill(0.0);
+        gemm_blis_broadcast_b(n, n, n, &a, &b, &mut c).unwrap();
+    }
+    let elapsed = start.elapsed();
+
+    let total_flops = 2u64 * (n as u64) * (n as u64) * (n as u64) * (iterations as u64);
+    let gflops = total_flops as f64 / elapsed.as_secs_f64() / 1e9;
+    let time_per_op = elapsed.as_micros() as f64 / iterations as f64;
+
+    println!(
+        "{:20} {:4}x{:4}: {:8.1} us, {:6.1} GFLOP/s",
+        "Bcast-B (64x6)", n, n, time_per_op, gflops
+    );
 }

@@ -157,6 +157,32 @@ pub fn blocking_8x48() -> BlisBlocking {
     })
 }
 
+/// Get optimal BLIS blocking for broadcast-B 64×6 microkernel (cached).
+/// 64×6: 24 FMA accumulators — matches faer's nano-gemm register utilization.
+/// NR=6 keeps B panel tiny → KC can be large (256-512).
+pub fn blocking_64x6_bcast_b() -> BlisBlocking {
+    static BLOCKING_64X6: OnceLock<BlisBlocking> = OnceLock::new();
+    *BLOCKING_64X6.get_or_init(|| {
+        let topo = topology();
+        let mr = 64usize;
+        let nr = 6usize;
+        // KC: B panel = NR × KC × 4 = 24 × KC bytes. At KC=512: 12KB (fits L1 easily).
+        // A panel = MR × KC × 4 = 256 × KC bytes. At KC=512: 128KB (fits L2).
+        // Limit KC so A panel fits in L2: KC ≤ L2 / (MR × 4)
+        let kc_max_l2 = topo.l2_bytes / (mr * 4);
+        let kc_max_l1 = topo.l1d_bytes * 3 / 4 / (nr * 4); // B uses 3/4 of L1
+        let kc = kc_max_l2.min(kc_max_l1).clamp(64, 512);
+        // MC: number of rows per L2 tile. Since MR=64 is large, MC should be
+        // a small multiple of MR.
+        let mc_max = topo.l2_bytes / (kc * 4);
+        let mc = (mc_max / mr * mr).min(4 * mr).max(mr);
+        // NC: columns per L3 tile
+        let nc_max = topo.l3_bytes / (2 * kc * 4);
+        let nc = (nc_max / nr * nr).min(4096).max(nr);
+        BlisBlocking { mr, nr, mc, kc, nc, dynamic: true }
+    })
+}
+
 /// Get default blocking for 8×16 microkernel (hardcoded, used for small N).
 pub fn blocking_8x16() -> BlisBlocking {
     DEFAULT_BLOCKING_8X16

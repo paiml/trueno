@@ -96,6 +96,56 @@ fn test_gemm_blis_edge_m_not_divisible_by_mr() {
     }
 }
 
+// ========================================================================
+// Broadcast-B GEMM Tests (faer-style MR=64, NR=6)
+// ========================================================================
+
+/// FALSIFY-BCAST-B-001: broadcast-B GEMM matches reference for 256×256.
+#[cfg(target_arch = "x86_64")]
+#[test]
+fn test_gemm_broadcast_b_256() {
+    let n = 256;
+    let a: Vec<f32> = (0..n * n).map(|i| ((i % 7) as f32) * 0.1).collect();
+    let b: Vec<f32> = (0..n * n).map(|i| ((i % 11) as f32) * 0.1).collect();
+    let mut c_ref = vec![0.0; n * n];
+    let mut c_bcast = vec![0.0; n * n];
+
+    gemm_reference(n, n, n, &a, &b, &mut c_ref).unwrap();
+    super::super::compute::gemm_blis_broadcast_b(n, n, n, &a, &b, &mut c_bcast).unwrap();
+
+    let mut max_diff = 0.0f32;
+    for i in 0..n * n {
+        let diff = (c_ref[i] - c_bcast[i]).abs();
+        max_diff = max_diff.max(diff);
+    }
+
+    assert!(max_diff < 1e-1, "FALSIFY-BCAST-B-001: max diff {max_diff} >= 1e-1 at 256");
+}
+
+/// FALSIFY-BCAST-B-002: broadcast-B GEMM matches reference for non-MR-aligned M.
+#[cfg(target_arch = "x86_64")]
+#[test]
+fn test_gemm_broadcast_b_non_aligned() {
+    let m = 100; // Not a multiple of MR=64
+    let n = 96;
+    let k = 128;
+    let a: Vec<f32> = (0..m * k).map(|i| ((i % 7) as f32) * 0.1).collect();
+    let b: Vec<f32> = (0..k * n).map(|i| ((i % 11) as f32) * 0.1).collect();
+    let mut c_ref = vec![0.0; m * n];
+    let mut c_bcast = vec![0.0; m * n];
+
+    gemm_reference(m, n, k, &a, &b, &mut c_ref).unwrap();
+    super::super::compute::gemm_blis_broadcast_b(m, n, k, &a, &b, &mut c_bcast).unwrap();
+
+    let mut max_diff = 0.0f32;
+    for i in 0..m * n {
+        let diff = (c_ref[i] - c_bcast[i]).abs();
+        max_diff = max_diff.max(diff);
+    }
+
+    assert!(max_diff < 1e-1, "FALSIFY-BCAST-B-002: max diff {max_diff} >= 1e-1 at {m}x{n}x{k}");
+}
+
 #[test]
 fn test_gemm_blis_edge_n_not_divisible_by_nr() {
     let m = 16;

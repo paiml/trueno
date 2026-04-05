@@ -1118,6 +1118,156 @@ unsafe fn gemm_blis_avx512_large(
     })
 }
 
+/// AVX-512 broadcast-B BLIS GEMM — MR=64, NR=6 (faer-style).
+///
+/// Key difference from broadcast-A path:
+/// - A is loaded as zmm vectors (64 elements = 4 zmm per K step)
+/// - B is broadcast as scalars (6 per K step)
+/// - 24 FMA accumulators = 75% register utilization (matching faer)
+/// - NR=6 → B panel is tiny (6×KC×4 bytes) → KC can stay large (256+)
+///
+/// This avoids the KC-halving problem that killed the 8×48 attempt.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f", enable = "fma")]
+unsafe fn gemm_blis_avx512_bcast_b(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    b: &[f32],
+    c: &mut [f32],
+) -> Result<(), TruenoError> {
+    let blk = super::cache_topology::blocking_64x6_bcast_b();
+    let mr = blk.mr; // 64
+    let nr = blk.nr; // 6
+    let mc = blk.mc.min(m);
+    let nc = blk.nc.min(n);
+    let kc = blk.kc;
+
+    // Allocate packing buffers
+    let a_panels = (mc + mr - 1) / mr;
+    let needed_a = a_panels * mr * kc;
+    let b_panels = (nc + nr - 1) / nr;
+    let needed_b = b_panels * nr * kc;
+
+    let mut packed_a = vec![0.0f32; needed_a];
+    let mut packed_b = vec![0.0f32; needed_b];
+
+    for jc in (0..n).step_by(nc) {
+        let nc_block = nc.min(n - jc);
+
+        for pc in (0..k).step_by(kc) {
+            let kc_block = kc.min(k - pc);
+
+            // Pack B with NR=6
+            pack_b_block_generic(b, n, pc, jc, kc_block, nc_block, nr, &mut packed_b);
+
+            for ic in (0..m).step_by(mc) {
+                let mc_block = mc.min(m - ic);
+
+                // Pack A with MR=64 (generic column-major packing)
+                pack_a_block_generic(a, k, ic, pc, mc_block, kc_block, mr, &mut packed_a);
+
+                let panels_m = (mc_block + mr - 1) / mr;
+                let panels_n = (nc_block + nr - 1) / nr;
+
+                for ir_panel in 0..panels_m {
+                    let ir = ir_panel * mr;
+                    let mr_block = mr.min(mc_block - ir);
+
+                    for jr_panel in 0..panels_n {
+                        let jr = jr_panel * nr;
+                        let nr_block = nr.min(nc_block - jr);
+
+                        let a_panel = &packed_a[ir_panel * mr * kc_block..];
+                        let b_panel = &packed_b[jr_panel * nr * kc_block..];
+
+                        if mr_block == 64 && nr_block == 6 {
+                            // Full 64×6 broadcast-B tile
+                            unsafe {
+                                super::microkernels::codegen::microkernel_64x6_avx512_bcast_b(
+                                    kc_block,
+                                    a_panel.as_ptr(),
+                                    b_panel.as_ptr(),
+                                    c.as_mut_ptr().add((ic + ir) * n + (jc + jr)),
+                                    n,
+                                );
+                            }
+                        } else {
+                            // Scalar fallback for edge tiles
+                            for ir_local in 0..mr_block {
+                                for jr_local in 0..nr_block {
+                                    let mut sum = 0.0f32;
+                                    for p in 0..kc_block {
+                                        sum +=
+                                            a_panel[p * mr + ir_local] * b_panel[p * nr + jr_local];
+                                    }
+                                    c[(ic + ir + ir_local) * n + (jc + jr + jr_local)] += sum;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Generic A-packing: column-major panels with arbitrary MR.
+/// Packs A[row_start..row_start+rows][col_start..col_start+cols] into
+/// panels of MR×cols (column-major within each panel).
+fn pack_a_block_generic(
+    a: &[f32],
+    lda: usize,
+    row_start: usize,
+    col_start: usize,
+    rows: usize,
+    cols: usize,
+    mr: usize,
+    packed: &mut [f32],
+) {
+    let panels = (rows + mr - 1) / mr;
+    let mut pack_idx = 0;
+    for panel in 0..panels {
+        let ir = panel * mr;
+        let mr_actual = mr.min(rows - ir);
+        for col in 0..cols {
+            for row in 0..mr {
+                if row < mr_actual {
+                    packed[pack_idx] = a[(row_start + ir + row) * lda + col_start + col];
+                } else {
+                    packed[pack_idx] = 0.0;
+                }
+                pack_idx += 1;
+            }
+        }
+    }
+}
+
+/// Safe public wrapper for broadcast-B GEMM (experimental).
+/// Uses MR=64, NR=6 codegen microkernel with large KC.
+#[cfg(target_arch = "x86_64")]
+pub fn gemm_blis_broadcast_b(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    b: &[f32],
+    c: &mut [f32],
+) -> Result<(), TruenoError> {
+    if a.len() != m * k || b.len() != k * n || c.len() != m * n {
+        return Err(TruenoError::InvalidInput("Dimension mismatch".to_string()));
+    }
+    if std::arch::is_x86_feature_detected!("avx512f") {
+        // SAFETY: AVX-512 detected, dimensions validated
+        unsafe { gemm_blis_avx512_bcast_b(m, n, k, a, b, c) }
+    } else {
+        gemm_blis(m, n, k, a, b, c, None)
+    }
+}
+
 /// AVX-512 8×16 microkernel for row-major C (stride = n).
 /// Processes 8 rows × 16 columns using zmm registers for C rows.
 /// Each C row is 16 f32 = 1 zmm register. 8 rows = 8 zmm accumulators.
