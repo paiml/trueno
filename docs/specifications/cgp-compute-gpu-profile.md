@@ -2337,29 +2337,78 @@ Before any further optimization work, these retroactive contracts MUST be writte
 
 **Suggested optimizations (with literature support):**
 
-1. **Hand-tuned x86 ASM microkernel** — The remaining 0.71x gap vs OpenBLAS is from
-   compiler-generated intrinsics vs hand-tuned SASS-equivalent assembly. Goto & van de
-   Geijn [45] established that BLIS microkernels MUST be hand-written for peak throughput.
-   OpenBLAS and BLIS both use ASM for the inner kernel. A Zen 4 AVX-512 microkernel with
-   software pipelining would close most of this gap.
+1. **Vectorize Q4K header parsing** — AVX-512 Q4K gains were only +5-35% because
+   `parse_q4k_header` (f16 decode, 6-bit scale unpack) is scalar and runs per super-block.
+   Using VBMI2 `vpermb` for scale extraction [47] would eliminate this bottleneck.
+   Issue #239 (Marlin-style pre-packing) tackles the GPU equivalent.
 
-2. **AVX-512 Q4K dequantization** — The Q4K path currently uses AVX2 (8 elements/FMA).
-   AVX-512 `vpermb`/`vpermi2b` can shuffle nibbles for 4-bit dequant at 16 elements/cycle.
-   GPTQ [46] and QuIP# [47] use similar techniques for fast GPU dequant; the CPU equivalent
-   uses AVX-512 VBMI2 byte shuffles. Expected gain: ~1.5-2× on the dequant bottleneck.
+2. **CUDA graph dispatch** (issue #238) — 430 kernel launches/token × 5µs = 83.2% overhead.
+   Capturing the full decode pass as a CUDA graph eliminates per-launch driver cost.
+   Issue #243 adds `cuGraphAddKernelNode` for manual graph construction (stream capture
+   fails on Ada driver 570.207). `cgp trace` should detect launch-bound decode passes.
 
-3. **Persistent CUDA kernels for GEMM** — Current CTA WMMA launches a new kernel per tile.
-   Persistent kernels [48] keep warps resident and amortize launch overhead. Combined with
-   Twill-style software pipelining [34], this could close the cuBLAS gap from 0.33x to 0.5x+.
+3. **Half-warp DP4A Q4K** (issue #175) — Restructure GPU Q4K from 32 to 16 threads/SB,
+   matching llama.cpp's QI4_K=32/VDR=2 architecture. ncu shows current kernel is compute-
+   bound at 72%; half-warp reduces thread overhead for GEMV (M=1) workloads.
 
-4. **BrickProfiler micro-level instrumentation** — Current AVX-512 profiling is macro-level
-   only. Adding per-tile timing (TileStats) would enable automatic identification of
-   cache-blocking inefficiencies via the cbtop TUI.
+4. **LM head multi-row blocking** (issue #174) — Q6K GEMV takes 35% of decode time on
+   LM head (n=151936). Multi-row blocking processes 4+ output rows per thread block,
+   amortizing weight loads across rows. `cgp profile kernel` should flag this hotspot.
+
+5. **Hand-tuned x86 ASM microkernel** [44][45] — The 0.71x parallel gap vs OpenBLAS
+   requires hand-written Zen 4 AVX-512 assembly with software pipelining. Goto & van de
+   Geijn [45] established this is mandatory for peak BLIS throughput.
+
+6. **DP4A accumulator precision** (issue #241) — +4.4 PPL vs FP32 dequant. `cgp` should
+   add quality-aware profiling: GFLOPS × accuracy as a combined metric, with automatic
+   detection of precision-sensitive layers (attention output, residual connections).
 
 **Negative results documented (all with contracts):**
 - Shared-B packing: regressed 495→316 GFLOPS (cross-core L1/L2 cache penalty) [16]
 - Manual K-unrolling: regressed 567→400 GFLOPS (LLVM already unrolls optimally)
 - Q4K parallel threshold 8M→2M: regressed 17→14 GFLOPS (thread overhead at <300µs)
+- AVX-512 Q4K dequant: only +5-35% gain (bottleneck is scalar header parsing, not SIMD width)
+
+### GitHub Issue Integration (2026-04-05)
+
+16 open issues map to cgp performance gaps. Key issues by priority:
+
+**GPU kernel launch overhead (P0 — blocks 1.5x target):**
+- **#238** Tensor graph dispatch — 430 launches/token × 5µs = 83.2% overhead.
+  `cgp` should detect this via `nsys` timeline analysis and flag launch-bound kernels.
+- **#243** cuGraphAddKernelNode — stream capture fails on Ada, manual graph needed.
+  Enables `cgp trace` to profile graph-captured decode passes.
+
+**Q4K quality + performance (P1 — both cgp profiling targets):**
+- **#241** DP4A accumulator precision: +4.4 PPL vs FP32 dequant. `cgp` should
+  add quality-aware profiling (GFLOPS × accuracy as a combined metric).
+- **#239** Marlin-style weight pre-packing: eliminates scatter/gather, currently
+  20.1% bandwidth utilization. This is the Q4K GPU bottleneck cgp identified.
+- **#175** Half-warp DP4A Q4K (16 threads/SB) — matches llama.cpp QI4_K architecture.
+- **#174** LM head Q6K takes 35% decode time — multi-row blocking needed.
+  `cgp profile kernel` should flag single-kernel dominance in decode timeline.
+
+**Contract compliance (P1 — cgp contract verify scope):**
+- **#199** 16 contract equations with test-only implementations (no production code).
+- **#198** 8 contracted functions missing `#[requires]`/`#[ensures]` macros.
+- **#176** Binding registry Level 1-3 integration (currently at 42/42 Level 1).
+
+**Training infrastructure (P2 — future cgp scope):**
+- **#235** cublas_hgemm_forward for fp16 training GEMMs.
+- **#234** cublasGemmEx with FP16 input for bandwidth reduction.
+- **#162** cuBLAS GEMM benchmark infrastructure — cgp compete backend.
+
+**Bugs blocking profiling:**
+- **#242** SIGSEGV in tests + contract_pre_add macro mismatch.
+  Pre-existing test crash (observed in cgp sessions). Blocks full test suite profiling.
+- **#233** NF4 dequant zeros out V projection (n=256 k=1536). Training NaN.
+
+**How cgp addresses these issues:**
+- `cgp trace` (#238): nsys timeline with kernel-launch overhead breakdown
+- `cgp profile kernel` (#174, #175): ncu metrics for Q4K/Q6K per-kernel bottlenecks
+- `cgp contract verify` (#199, #198): detect unimplemented contract equations
+- `cgp compete` (#162, #234, #235): cuBLAS vs trueno head-to-head benchmarks
+- `cgp explain ptx` (#239): static analysis of Marlin-style packed weight layout
 
 **Contracts inventory:**
 
