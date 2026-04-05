@@ -2149,7 +2149,7 @@ Contract: `avx512-q4k-v1.yaml`, bindings: 42/42.
 regressed attn_qkv (1536×1536, 2.4M) from 17→14 GFLOPS. Thread spawn overhead (~40µs)
 dominates when total compute is <300µs. Contract: `cgp-q4k-parallel-threshold-v1.yaml`.
 
-**Implementation status** (2026-04-05): cgp binary fully functional in `crates/cgp/` with 111 unit + 17 falsify + 29 integration = 157 tests.
+**Implementation status** (2026-04-05): cgp binary fully functional in `crates/cgp/` with 111 unit + 17 falsify + 29 integration = 157 (cgp); 42/42 provable-contracts bindings tests.
 
 All 17 CLI subcommands implemented and dogfooded on RTX 4090 + Threadripper 7960X:
 
@@ -2196,7 +2196,7 @@ New in Phase 3 (PMAT-037):
 - **Performance contracts**: First contracts in `contracts/cgp/` (BLIS GEMM + roofline)
 - **Dogfooding**: All measurements regenerated via `cgp profile scaling` (see Appendix A.2)
 
-FALSIFY tests implemented (111 unit + 17 falsify + 29 integration = 157):
+FALSIFY tests implemented (111 unit + 17 falsify + 29 integration = 157 (cgp); 42/42 provable-contracts bindings):
 - FALSIFY-CGP-010/011/012: Doctor tool detection (doctor.rs + integration)
 - FALSIFY-CGP-020/021: Roofline bandwidth + ridge points (falsify.rs + analysis/roofline.rs)
 - FALSIFY-CGP-030/031/032: Regression detection + improvement detection (falsify.rs)
