@@ -1178,6 +1178,11 @@ pub(super) unsafe fn avx512_microkernel_8x32_rowmajor(
     let mut c7l = _mm512_loadu_ps(c.add(7 * ldc));
     let mut c7h = _mm512_loadu_ps(c.add(7 * ldc + 16));
 
+    // NOTE: Manual 2-way K-unrolling was tested (2026-04-05) but regressed
+    // from 15.62ms→15.9ms at 1024 and 34.3→34.9µs at 128. The 8×32 kernel
+    // uses 16 zmm accumulators + 2 B loads = 18 zmm live, leaving only 14
+    // for unrolled state. LLVM's autounroll is better at managing this pressure.
+    // Also tested MC=192 (from 96): regressed at 128-256 due to increased A-packing.
     for p in 0..k {
         let bl = _mm512_loadu_ps(b.add(p * 32));
         let bh = _mm512_loadu_ps(b.add(p * 32 + 16));

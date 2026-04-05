@@ -2173,17 +2173,20 @@ Best single-thread efficiency: 94.7% (1024). Best 8T efficiency: 52% (1024).
 Note: 256 has low parallel efficiency because thread cap is 2 (L2 contention
 dominates at small sizes). 512 cap is 4 (see Phase 3 thread cap tuning).
 
-**Parallel scaling analysis (`cgp profile scaling --size 1024 --runs 5`, 2026-04-05, AVX-512):**
+**Parallel scaling analysis (`cgp profile scaling --size 1024 --runs 5`, 2026-04-05, AVX-512 8x32):**
 
-| Threads | 1024x1024 GFLOPS | Scaling | Notes |
-|---------|-----------------|---------|-------|
-| 1 | 128 | 1.0x | baseline (AVX-512 peak at sustained clocks) |
-| 2 | 253 | 2.0x | near-linear |
-| 4 | 442 | 3.5x | |
-| 8 | 644 | 5.0x | |
-| 12 | 616 | 4.8x | |
-| 16 | **650** | **5.1x** | **peak** |
-| 24 | 503 | 3.9x | cross-CCD overhead dominates |
+| Threads | 1024x1024 GFLOPS | Scaling | Efficiency | Notes |
+|---------|-----------------|---------|-----------|-------|
+| 1 | 135 | 1.0x | — | baseline (8x32 microkernel) |
+| 2 | 235 | 1.8x | 87% | near-linear |
+| 4 | 405 | 3.1x | 75% | |
+| 8 | **645** | **4.9x** | **62%** | **peak** |
+| 12 | 555 | 4.2x | 34% | |
+| 16 | 593 | 4.5x | 27% | |
+| 24 | 509 | 3.9x | 16% | cross-CCD overhead |
+
+Note: 8x32 microkernel shifted peak from 16T→8T (fewer tiles = less sync).
+Efficiency at 8T: 62% (up from 42% with 8x16 kernel at 16T).
 
 **512x512 scaling (`cgp profile scaling --size 512 --runs 5`):**
 
@@ -2852,15 +2855,22 @@ stride. trueno unconditionally packs both A and B for every tile.
 
 **Fix**: Check stride at runtime, skip pack for contiguous row-major data.
 
-### Priority Order
+### Priority Order (updated with experimental results)
 
-| # | Fix | Est. Gain | Effort | Dependencies |
-|---|-----|-----------|--------|-------------|
-| 1 | Larger microkernel (MR=48, NR=6) | 10-30% small, 5% large | High | New microkernel code |
-| 2 | 4-way K-unrolling | 10-20% | Medium | Macro refactor |
-| 3 | Dynamic cache blocking | 5-10% | Medium | /sys/ parsing |
-| 4 | SIMD B-packing | 3-5% | Low | zmm pack routine |
-| 5 | Conditional packing | 2-3% | Low | Stride check |
+| # | Fix | Est. Gain | Actual | Status |
+|---|-----|-----------|--------|--------|
+| 1 | Wider microkernel (8×32, NR 16→32) | 10-30% small, 5% large | **+13% at 64, +2% at 1024** | **DONE** (commit `930f6742`) |
+| 2 | 2-way K-unrolling | 10-20% | **REGRESSED** (−2%) | **NEGATIVE** — LLVM autounroll optimal |
+| 3 | Increase MC (96→192) | 5-10% | **REGRESSED** (−4% at 128) | **NEGATIVE** — more A-pack overhead |
+| 4 | SIMD B-packing | 3-5% | Not yet tested | Pending |
+| 5 | Conditional packing | 2-3% | Not yet tested | Pending |
+
+**Conclusion**: Zen 4's OOO engine and LLVM backend are exceptionally good at
+handling the 8×32 loop as-is. Manual K-unrolling at 18 zmm live registers causes
+spills. MC increase adds packing cost that exceeds the L2 reuse benefit at small
+MC blocks. The remaining faer gap (1.04x at 1024, 1.22x at 64) likely requires
+a fundamentally different approach: either faer's `nano-gemm` codegen for
+shape-specialized microkernels, or integration with faer's `gemm` crate directly.
 
 Source: `gemm-0.19.0` (faer's GEMM engine), `gemm-common-0.19.0`, `nano-gemm-0.2.2`.
 Analysis via `decy audit` + `pmat query` + direct source comparison.
