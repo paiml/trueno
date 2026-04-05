@@ -39,11 +39,22 @@ These targets apply per-backend, per-operation. Competing solutions:
 
 | Operation | Competitor | Current | Target (1.5x) | Stretch (2x) | Status |
 |-----------|-----------|---------|---------------|-------------|--------|
-| CPU GEMM 1024 (parallel) | NumPy MKL | **2.10x** | 1.50x | 2.00x | **PASS** |
-| CPU GEMM 1024 (1T) | ndarray BLIS | TBD | 1.50x | 2.00x | MEASURE |
+| CPU GEMM 1024 (8T) | NumPy OpenBLAS | **0.49x** | 1.50x | 2.00x | **FAIL — BLOCKER** |
+| CPU GEMM 1024 (1T) | NumPy OpenBLAS | **0.76x** | 1.50x | 2.00x | **FAIL — BLOCKER** |
 | GPU GEMM 512 FP16 | cuBLAS | **0.33x** | N/A | N/A | KNOWN GAP |
 | Q4K GEMV (CPU) | llama.cpp | TBD | 1.50x | 2.00x | MEASURE |
 | Q4K GEMV (GPU DP4A) | llama.cpp CUDA | TBD | 1.50x | 2.00x | MEASURE |
+
+**CRITICAL (2026-04-05)**: CPU GEMM is a **shipping blocker**. Direct measurement:
+- 1T: NumPy (OpenBLAS 0.3.30) = 131 GFLOPS, trueno BLIS = 100 GFLOPS → **0.76x**
+- 8T: NumPy = 679 GFLOPS, trueno = 336 GFLOPS → **0.49x**
+
+Root cause: trueno dispatches to AVX2 8×8 microkernel for m>256. OpenBLAS uses
+AVX-512 with 32×8 microkernel on Zen 4. Fix: integrate existing `microkernel_16x8_avx512`
+into BLIS 5-loop for large matrices (currently only used for m≤256).
+
+Previous "2.10x" claim was from timing the full benchmark suite (all sizes × all ops),
+not isolating the GEMM operation. Corrected via honest head-to-head measurement.
 
 **Note**: GPU pure-Rust PTX vs cuBLAS is not expected to hit 1.5x — cuBLAS uses hand-tuned SASS and proprietary tensor core scheduling. The GPU target is to close the gap from 0.33x toward 0.5x+ (competitive for deployment where vendor lock-in is unacceptable).
 
@@ -2072,12 +2083,19 @@ amortized across K iterations within each thread.
 | cuBLAS FP16 | ~7.7 us | 34.7 | 10.5% |
 | CTA WMMA FP16 | 23.2 us | 11.6 | 3.5% |
 
-**Head-to-Head (cgp compete, full benchmark suite):**
+**Head-to-Head (1024x1024 GEMM, controlled, 2026-04-05):**
 
-| Library | Time | vs Best | vs 1.5x Target | vs 2.0x Stretch |
-|---------|------|---------|----------------|-----------------|
-| trueno (parallel BLIS) | 184.8 ms | **1.00x** | -- | -- |
-| NumPy 2.x (MKL) | 388.3 ms | 2.10x | **PASS** (>1.5x) | **PASS** (>2.0x) |
+| Library | 1T (ms) | 1T GFLOPS | 8T (ms) | 8T GFLOPS | vs trueno |
+|---------|---------|-----------|---------|-----------|-----------|
+| NumPy 2.3 (OpenBLAS) | 16.4 | 131 | 3.17 | **679** | -- |
+| trueno BLIS (AVX2) | 21.5 | 100 | 6.40 | 336 | **0.49x** |
+
+**Status**: trueno is **2.0x slower** than NumPy at 8T. This is a **shipping blocker**.
+
+**Action plan**: Integrate AVX-512 microkernel into BLIS 5-loop (src/blis/compute.rs).
+The 16×8 zmm microkernel exists but only dispatches for m≤256. Extending it to
+large matrices should close the 1T gap (AVX-512 = 2× FLOPs/cycle vs AVX2) and
+combined with thread cap tuning should reach the 1.5x target.
 
 **Roofline gap analysis (2026-04-05):**
 - CPU BLIS at 1024 (8T, capped): 471 GFLOPS / 896 peak (8-core) = 52.6% — CCD-local
@@ -2200,13 +2218,20 @@ FALSIFY tests implemented (111 unit + 15 falsify + 29 integration = 155):
 
 **Performance gaps to close (vs 1.5x minimum / 2.0x stretch):**
 
-| Gap | Current | 1.5x Target | Action |
-|-----|---------|-------------|--------|
-| CPU GEMM vs NumPy | **2.10x** | **PASS** | Maintain; profile ndarray/faer |
-| CPU Q4K vs llama.cpp | TBD | 1.50x | Benchmark with `cgp compete` |
-| GPU CTA WMMA vs cuBLAS | 0.33x | N/A (known) | Close to 0.5x: larger tiles + double-buffering |
-| GPU DP4A Q4K vs llama.cpp CUDA | TBD | 1.50x | Profile fused K+V end-to-end |
-| CPU 24T parallel eff | 17% | 25%+ | NUMA-aware partitioning |
+| Gap | Current | 1.5x Target | Action | Priority |
+|-----|---------|-------------|--------|----------|
+| CPU GEMM vs NumPy (8T) | **0.49x** | 1.50x | **AVX-512 BLIS for large matrices** | **P0 BLOCKER** |
+| CPU GEMM vs NumPy (1T) | **0.76x** | 1.50x | AVX-512 microkernel in main path | **P0 BLOCKER** |
+| CPU Q4K vs llama.cpp | TBD | 1.50x | Benchmark with `cgp compete` | P1 |
+| GPU CTA WMMA vs cuBLAS | 0.33x | N/A (known) | Close to 0.5x | P2 |
+| GPU DP4A Q4K vs llama.cpp CUDA | TBD | 1.50x | Profile fused K+V end-to-end | P1 |
+
+**Root cause analysis (five-whys):**
+1. trueno 1024 GEMM is 2x slower than NumPy. Why?
+2. trueno uses AVX2 8×8 microkernel (256-bit). NumPy/OpenBLAS uses AVX-512. Why?
+3. The AVX-512 microkernel (`microkernel_16x8_avx512`) is only dispatched for m≤256. Why?
+4. The `gemm_blis_nr8_rowmajor_c` function hardcodes MR=8 and AVX2 intrinsics. Why?
+5. The AVX-512 BLIS path was built for small matrices first and never extended. **Fix: extend it.**
 
 **Contracts to add (spec section 11.3 lists 22 total):**
 - 2/22 implemented (gemm-blis-cpu, roofline-model)
