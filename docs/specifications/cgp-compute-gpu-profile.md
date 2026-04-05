@@ -2410,8 +2410,10 @@ is more achievable on GPU via half-warp DP4A (#175) and CUDA graphs (#238).
 - **#162** cuBLAS GEMM benchmark infrastructure — cgp compete backend.
 
 **Bugs blocking profiling:**
-- **#242** SIGSEGV in tests + contract_pre_add macro mismatch.
-  Pre-existing test crash (observed in cgp sessions). Blocks full test suite profiling.
+- **#242** SIGSEGV: **FIXED** (2026-04-05). Root cause: `_mm256_stream_ps` (NT store)
+  on unaligned output pointer. `Vec<f32>` has 4-byte alignment, stream_ps requires 32.
+  Fix: alignment check before NT path in add/sub/mul. 3440 tests now pass clean.
+  Found via valgrind `--tool=memcheck` → General Protection Fault at avx2::mul.
 - **#233** NF4 dequant zeros out V projection (n=256 k=1536). Training NaN.
 
 **How cgp addresses these issues:**
