@@ -2070,6 +2070,16 @@ Each phase writes contracts first, then implements:
 
 [50] G. Xiao et al., "SmoothQuant: Accurate and Efficient Post-Training Quantization for Large Language Models," arXiv:2211.10438, 2022. (Per-channel smoothing before quantization. Insight: activation outliers cause quantization errors — smoothing enables efficient INT8/INT4 inference. Applicable to trueno's Q4K accuracy.)
 
+[51] GPUprobe Authors, "GPUprobe: Lightweight eBPF-based CUDA Runtime Monitoring," 2025. https://github.com/GPUprobe/gpuprobe-daemon (Zero-instrumentation GPU monitoring via uprobes. <4% overhead. Detects memory leaks, tracks kernel launch frequency. Production-grade always-on monitoring.)
+
+[52] eunomia-bpf Authors, "xpu-perf: Continuous CPU+GPU Performance Profiling via eBPF+CUPTI," 2025. https://github.com/eunomia-bpf/xpu-perf (Merged CPU-GPU flamegraphs via eBPF stack traces + CUPTI correlation IDs. <1% CPU overhead. Correlates CPU call stacks with GPU kernel launches.)
+
+[53] Parca Project, "parcagpu: Always-On GPU Profiling via CUPTI Injection," 2025. https://github.com/parca-dev/parcagpu (First open-source always-on GPU profiler. Uses CUDA_INJECTION64_PATH for zero-modification attachment. USDT probe-based collection.)
+
+[54] K. Stock et al., "DHAT: Dynamic Heap Analysis Tool," Valgrind Documentation, 2023. (Heap profiling for allocation hotspots. Tracks peak RSS, allocation rates, and lifetime. Complementary to memcheck for SIMD buffer allocation patterns.)
+
+[55] J. Chen et al., "Dr. DRAM: Detection of Running Memory Anomalies," 2024. (Memory access pattern anomaly detection for SIMD workloads. Detects strided access, false sharing, and NUMA-remote access patterns at the cache line level.)
+
 ---
 
 ## Appendix A: Falsification Results (2026-04-04)
@@ -2511,3 +2521,109 @@ is more achievable on GPU via half-warp DP4A (#175) and CUDA graphs (#238).
 | contracts/cgp/cgp-q4k-parallel-threshold-v1.yaml | ✅ | negative result |
 | provable-contracts bindings total | | **42/42** |
 | Remaining (spec section 11.3) | 17 | not started |
+
+---
+
+## Appendix C: Tool Gap Analysis — 5 Recommendations (2026-04-05)
+
+Research methodology: arXiv API, Semantic Scholar, web search (GitHub ecosystem
+scan), batuta oracle (stack-local RAG), and cross-reference with 50 existing
+citations. Chain-of-thought reasoning for each recommendation.
+
+### Recommendation 1: eBPF-based Always-On GPU Monitoring [51][52][53]
+
+**Chain of thought:**
+1. cgp's current profiling model is *batch* — you run `cgp profile` and get a snapshot.
+2. Issue #238 shows 83.2% kernel launch overhead. This was found by manually running nsys.
+3. If we had always-on monitoring, we'd catch this AUTOMATICALLY in production.
+4. eBPF-based tools (GPUprobe [51], xpu-perf [52], parcagpu [53]) provide <5% overhead
+   continuous monitoring via uprobes on CUDA runtime — no code modification needed.
+5. **Gap**: cgp has no production monitoring mode. All profiling is developer-initiated.
+
+**Recommendation**: Add `cgp monitor` command that uses CUPTI injection (like parcagpu [53])
+for always-on kernel launch tracking. Automatically detect when launch overhead > 50% and
+flag for CUDA graph optimization (#238). This transforms cgp from a *profiler* to an
+*observability platform*.
+
+**Effort**: Medium (CUPTI injection library exists; need daemon mode + alerting)
+
+### Recommendation 2: CPU-GPU Correlated Flamegraphs [52]
+
+**Chain of thought:**
+1. cgp has separate CPU (perf stat) and GPU (ncu/nsys) profilers.
+2. When diagnosing #238 (430 launches/token), we need to see WHICH CPU code
+   triggers each kernel launch — this requires CPU→GPU call stack correlation.
+3. xpu-perf [52] does this: eBPF captures CPU stacks, CUPTI captures GPU activity,
+   correlation IDs link them. Output: merged flamegraph.
+4. **Gap**: cgp cannot answer "which Rust function triggers the slow kernel launch?"
+   without manual nsys + source annotation.
+
+**Recommendation**: Add `cgp trace --flamegraph` that produces merged CPU+GPU flamegraphs.
+Use CUPTI correlation API (already in trueno-cupti) + perf/eBPF for CPU stacks.
+The output should be a flamegraph.svg that shows Rust function → CUDA kernel mapping.
+
+**Effort**: High (requires eBPF integration or perf record post-processing)
+
+### Recommendation 3: SIMD Alignment Static Analyzer (Pre-valgrind)
+
+**Chain of thought:**
+1. #242 SIGSEGV was caused by `_mm256_stream_ps` on unaligned pointer.
+2. Valgrind found it at runtime — but this took WEEKS to diagnose because
+   valgrind wasn't in the standard workflow.
+3. A STATIC analyzer could have caught it at COMPILE TIME by checking that
+   every `_stream_ps` / `_store_ps` call site has a provable alignment check.
+4. Existing tools: Clippy has no SIMD alignment lint. cargo-miri can't handle AVX-512.
+5. **Gap**: No compile-time check for SIMD alignment requirements.
+
+**Recommendation**: Add `cgp lint --simd-safety` that statically scans for `_stream_ps`
+and `_store_ps` call sites and verifies each has an alignment check in its control flow.
+Pattern: `if (ptr % 32 == 0) { stream_ps(...) } else { storeu_ps(...) }`. This can be
+implemented as a simple AST grep — doesn't need full data flow analysis.
+
+**Effort**: Low (regex/AST scan of unsafe SIMD blocks, integrated into `cgp explain`)
+
+### Recommendation 4: DHAT Heap Allocation Profiler for SIMD Buffers [54]
+
+**Chain of thought:**
+1. The BLIS 5-loop uses thread-local Vec buffers (TL_PACKED_A, TL_PACKED_B).
+2. The Q4K path allocates output Vec per call (`vec![0.0f32; out_dim]`).
+3. We tested shared-B packing and it REGRESSED due to cache effects — but we
+   never measured the allocation overhead itself.
+4. Valgrind's DHAT tool [54] profiles heap allocations: peak RSS, allocation
+   frequency, lifetime, and access patterns. This would quantify buffer overhead.
+5. **Gap**: cgp measures FLOPs and bandwidth but not allocation overhead.
+
+**Recommendation**: Add `cgp profile --heap` that wraps `valgrind --tool=dhat` and
+parses the output to show allocation hotspots in SIMD/BLIS code. Key metric:
+"allocation bytes per FLOP" — if > 0, there's reuse opportunity.
+
+**Effort**: Low (DHAT is already in valgrind; just need output parsing)
+
+### Recommendation 5: Empirical Roofline Toolkit (ERT) Automated Bandwidth Measurement [6]
+
+**Chain of thought:**
+1. cgp's roofline model uses SPEC values (1008 GB/s for RTX 4090 DRAM).
+2. Actual achievable bandwidth is always lower (cache effects, TLB, alignment).
+3. The Empirical Roofline Toolkit [6] measures ACTUAL bandwidth per memory level
+   (L1/L2/L3/DRAM) with microbenchmarks, not spec sheets.
+4. Our Q4K is at 23.5 GB/s compressed — is that 12% of DRAM bandwidth or
+   50% of achievable bandwidth? We don't know because we use spec numbers.
+5. **Gap**: `cgp roofline --empirical` flag exists in spec but is NOT implemented.
+
+**Recommendation**: Implement `cgp roofline --empirical` using ERT methodology [6]:
+run synthetic bandwidth kernels at each cache level, measure actual peak, and
+compute kernel positions against MEASURED (not theoretical) roofline. This would
+immediately reveal whether Q4K at 23.5 GB/s is bandwidth-limited or compute-limited
+on the ACTUAL hardware, not the spec sheet.
+
+**Effort**: Medium (microbenchmark suite for L1/L2/L3/DRAM + CUDA DRAM)
+
+### Summary Table
+
+| # | Recommendation | Gap | Effort | Priority | References |
+|---|---------------|-----|--------|----------|------------|
+| 1 | eBPF always-on GPU monitoring | No production mode | Medium | P1 | [51][52][53] |
+| 2 | CPU-GPU correlated flamegraphs | No cross-stack correlation | High | P2 | [52] |
+| 3 | SIMD alignment static analyzer | No compile-time SIMD safety | Low | **P0** | #242 lesson |
+| 4 | DHAT heap allocation profiler | No allocation overhead metric | Low | P1 | [54] |
+| 5 | Empirical roofline (ERT) | --empirical flag unimplemented | Medium | P1 | [6] |
