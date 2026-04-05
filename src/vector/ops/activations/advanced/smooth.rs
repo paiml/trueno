@@ -88,7 +88,13 @@ impl Vector<f32> {
             }
         }
 
-        let mut result = vec![0.0; self.len()];
+        // Uninit: dispatch_unary_op writes every element before any read.
+        let n = self.len();
+        let mut result: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Backend activation writes all elements before any read.
+        unsafe {
+            result.set_len(n);
+        }
 
         // Dispatch to appropriate backend
         dispatch_unary_op!(self.backend, gelu, &self.data, &mut result);
@@ -165,7 +171,13 @@ impl Vector<f32> {
             }
         }
 
-        let mut result = vec![0.0; self.len()];
+        // Uninit: dispatch_unary_op writes every element before any read.
+        let n = self.len();
+        let mut result: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Backend activation writes all elements before any read.
+        unsafe {
+            result.set_len(n);
+        }
 
         // Dispatch to appropriate SIMD backend
         dispatch_unary_op!(self.backend, swish, &self.data, &mut result);
