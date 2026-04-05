@@ -860,13 +860,13 @@ pub fn gemm_blis(
         }
     }
 
-    // AVX-512 BLIS: MR=16, NR=8 using zmm registers (2× throughput vs AVX2).
+    // AVX-512 BLIS: MR=8, NR=16 using zmm registers (2× throughput vs AVX2).
     // This closes the gap with OpenBLAS which uses AVX-512 on Zen 4.
     // CRITICAL: Without this, trueno is 0.49x NumPy at 8T (shipping blocker).
+    // Contract: avx512-blis-v1.yaml (C-AVX512-BLIS-001, C-AVX512-PROF-001)
     #[cfg(target_arch = "x86_64")]
-    if profiler.is_none() && is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("fma")
-    {
-        return unsafe { gemm_blis_avx512_large(m, n, k, a, b, c) };
+    if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("fma") {
+        return unsafe { gemm_blis_avx512_large(m, n, k, a, b, c, &mut profiler) };
     }
 
     // NR=8 BLIS with row-major C SIMD load/store (AVX2 fallback).
@@ -965,6 +965,8 @@ pub fn gemm_blis(
 /// Cache blocking: MC=64, KC=256, NC=1024.
 /// A packing: MR=8 column-major panels (reuses pack_a_block).
 /// B packing: NR=16 row-major panels.
+/// AVX-512 BLIS 5-loop GEMM — MR=8, NR=16 with BlisProfiler support.
+/// Contract: avx512-blis-v1.yaml (C-AVX512-BLIS-001, C-AVX512-PROF-001)
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx512f", enable = "fma")]
 unsafe fn gemm_blis_avx512_large(
@@ -974,7 +976,12 @@ unsafe fn gemm_blis_avx512_large(
     a: &[f32],
     b: &[f32],
     c: &mut [f32],
+    profiler: &mut Option<&mut BlisProfiler>,
 ) -> Result<(), TruenoError> {
+    // KAIZEN-038: Only call Instant::now() when profiler is active
+    let track_time = profiler.is_some();
+    let start = if track_time { Some(Instant::now()) } else { None };
+
     let mc = 64_usize.min(m);
     let nc = 1024_usize.min(n);
     let kc_param = KC;
@@ -1054,6 +1061,11 @@ unsafe fn gemm_blis_avx512_large(
                     }
                 }
             }
+            // Record profiler event if active (C-AVX512-PROF-001)
+            if let (Some(prof), Some(s)) = (profiler.as_mut(), start) {
+                prof.record_avx512_blis(m, n, k, s.elapsed());
+            }
+
             Ok(())
         })
     })
