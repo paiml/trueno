@@ -44,7 +44,7 @@ These targets apply per-backend, per-operation. Competing solutions:
 | CPU GEMM 1024 (1T) | ndarray 0.17 | **1.17x** | 1.0x | **FASTER** |
 | CPU GEMM 1024 (8T) | NumPy OpenBLAS | **0.82x** | 1.0x | **GAP — ASM microkernel IPC** |
 | GPU GEMM 1024 FP16 | cuBLAS | **0.39x** (cp.async: 40.5 TF/s) | 0.5x | +120% from baseline via cp.async |
-| Q4K GEMV 4096 (CPU) | llama.cpp est. | **~0.5x** | 1.50x | **cgp: 70.4 GFLOPS, 47% util** |
+| Q4K GEMV 4096 (CPU) | llama.cpp est. | **~0.5x** | 1.50x | **cgp: 87.4 GFLOPS (uninit +5%), 58% util** |
 | Q4K GEMV (GPU DP4A) | llama.cpp CUDA | TBD | 1.50x | MEASURE |
 
 **Status (2026-04-05, post SIMD B-packing optimization):**
@@ -3152,7 +3152,8 @@ Analysis via `decy audit` + `pmat query` + direct source comparison.
 ### Current State Summary (updated 2026-04-05)
 
 **cgp tool**: 18/18 CLI commands implemented (only `cgp tui` is STUB).
-3475 tests passing. 65 peer-reviewed citations [1]-[65]. 11 provable-contracts.
+3608 tests passing (updated 2026-04-05 post uninit-alloc sweep).
+65 peer-reviewed citations [1]-[65]. 11 provable-contracts.
 All 11 contracts pass (53 checks pass, 0 fail, 44 skip).
 
 **GPU GEMM (2026-04-05 measurements)**:
@@ -3175,7 +3176,7 @@ async DMA directly global→shared.
 |--------|--------|------|-------|---------|----------|
 | 1T GFLOPS (1024) | **140** | 142 | 129 | 119 | 115 |
 | vs trueno | 1.00x | 1.02x | 0.92x | 0.85x | 0.82x |
-| 8T GFLOPS (1024) | **628** | — | 763 | — | — |
+| 8T GFLOPS (1024) | **561** (measured) | — | 763 | — | — |
 | 1T GFLOPS (512) | **145** | 148 | 137 | 118 | 118 |
 
 **Fused attention (FlashAttention-style [64], AVX2, online softmax)**:
@@ -3189,11 +3190,45 @@ Projected realizr impact: AttentionScore 44.3% → ~15%. **~30% end-to-end infer
 
 **Q4K quantized inference**: 14.6 tok/s composite (Llama-7B, 4 layer sizes).
 Q4K ceiling at ~83 GFLOPS — FMA dependency chain limited [65].
+Updated 2026-04-05 post uninit-alloc: Q4K 4096×4096 **87.4 GFLOPS** (+5% from
+eliminating output buffer zero-fill).
 
-**Optimization experiments**: 14 total (5 positive, 9 negative).
-Positive: 8×32 NR, SIMD B-packing, 8T cap, fused attention (scalar+AVX2).
+**Uninit allocation sweep (2026-04-05, CGP-DBUF)**:
+
+Systematic audit of all `vec![0.0; n]` in hot paths. Replaced zero-fill with
+`Vec::with_capacity(n) + set_len(n)` where every element is SET (not accumulated)
+before any read. Key safety distinction: BLIS GEMM uses load_c_tile (c_micro = c[...])
+which READS from c — requires zero-init. GEMV accumulates (c[j] += a[k]*b[k*n+j])
+— requires zero-init. But dot products, unary ops, and local-accumulator patterns
+write every element before reading.
+
+| Operation | Pattern | Improvement | Safe? |
+|-----------|---------|-------------|-------|
+| Vector sqrt (AVX2/100) | dispatch_unary_op SET | **-67%** (3× faster) | YES |
+| Vector sqrt (AVX2/10K) | dispatch_unary_op SET | **-41%** | YES |
+| Vector recip | dispatch_unary_op SET | similar to sqrt | YES |
+| Matrix::matvec | dispatch_dot! SET per row | ~5-10% at small sizes | YES |
+| Q4K GEMV (all backends) | local acc → output[i] = hsum(acc) | **+5%** (83→87 GFLOPS) | YES |
+| blis::softmax (scalar+AVX2) | out[i] = exp(...) SET | ~5-10% | YES |
+| brick::SoftmaxOp | simd_exp/simd_scale SET | ~5-10% | YES |
+| brick::AttentionOp | per-row fill(0.0) + SET | small (fill dominates) | YES |
+| brick::FusedQkvOp | q[i]=sum (dot product SET) | small | YES |
+| brick::FusedGateUpOp | output[i] = silu*up SET | small | YES |
+| Matrix::matmul (BLIS) | load_c_tile READS c | N/A | **NO** — requires zeros |
+| Matrix::batched_matmul | gemm_blis accumulates | N/A | **NO** — requires zeros |
+| Matrix::vecmat (gemv) | c[j] += a[k]*b[...] | N/A | **NO** — requires zeros |
+
+3608 tests pass across all changes. The key insight: BLIS GEMM and GEMV use
+accumulation patterns that require zero-initialized output buffers. Only
+operations with SET semantics (dot product, unary transform, local accumulator)
+benefit from uninit allocation.
+
+**Optimization experiments**: 14+11 total (5+6 positive, 9+5 negative/neutral).
+Positive: 8×32 NR, SIMD B-packing, 8T cap, fused attention (scalar+AVX2),
+uninit alloc (sqrt 3×, Q4K +5%, softmax, attention, fused ops).
 Negative: 8×48 KC, broadcast-B scatter, shared-B parallel (3×), AVX-512 GEMV,
-K-unroll, MC=192, prefetch, Q4K ceiling (6 attempts).
+K-unroll, MC=192, prefetch, Q4K ceiling (6 attempts),
+matmul/batched_matmul/vecmat uninit (BLIS accumulates, requires zeros).
 All grounded with arXiv citations [44][45][60]-[65].
 
 ### Priority 1: Performance (highest impact, ship-blocking)
