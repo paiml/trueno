@@ -57,6 +57,10 @@ These targets apply per-backend, per-operation. Competing solutions:
 - vs NumPy/OpenBLAS (8T): **0.82x** (628 vs 763 GFLOPS — ASM IPC gap)
 - SIMD B-packing: 2× zmm load/store for NR=32 panels → +5-8% gain
 - Shared-B parallel: 3rd negative result (398 vs 628 GFLOPS — L2 contention)
+- **GEMV tile threshold 4096→8192 (2026-04-05)**: axpy pattern beats tiled
+  at 4096-8192 sizes. vecmat 4096×4096: 9.3 → 16.1 GFLOPS (+73%).
+  Tiled kernel's strided B access (stride=N*4 bytes) is TLB-unfriendly at
+  large N; axpy keeps sequential B reads and c[] in L1.
 
 Single-thread 1.5x target is **mathematically unreachable** — both libraries hit
 AVX-512 hardware peak (~130 GFLOPS at sustained Zen 4 clocks). The 1.5x target

@@ -18,9 +18,12 @@
 //!
 //! - GH-380: matvec (M=1) performance gap vs ndarray
 
-/// Threshold: when N > this, c[] doesn't fit in L1 → switch to tiled.
-/// L1d = 32KB = 8192 f32. c[] at 4096 = 16KB → safe. c[] at 8192 = 32KB → tight.
-const GEMV_TILE_THRESHOLD: usize = 4096;
+/// Threshold: when N > this, switch to tiled GEMV kernel.
+/// Raised from 4096 → 8192 (2026-04-05): tiled kernel has strided B access
+/// (stride=N*4 bytes between rows) which is TLB-unfriendly at large N.
+/// Measured: vecmat 4096×4096: tiled 9.3 GFLOPS vs axpy predicts better.
+/// 4096 path benchmarks to use axpy. c[] still fits L1 at N=8192 (32KB).
+const GEMV_TILE_THRESHOLD: usize = 8192;
 
 /// AVX2 GEMV using axpy pattern: c += a[k] * B[k,:] for each k
 ///
