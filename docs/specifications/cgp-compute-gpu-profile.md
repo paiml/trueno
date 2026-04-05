@@ -2234,21 +2234,32 @@ amortized across K iterations within each thread.
 | ndarray 0.17 | Rust | 18.0 | 119 | — | — | -- |
 | **trueno BLIS (AVX-512)** | **Rust** | **15.8** | **135** | **3.3** | **650** | **1.0x** |
 
-**Rust-only head-to-head (criterion, single-thread, 1024x1024, 2026-04-05):**
+**Rust-only head-to-head (criterion, single-thread, pre-allocated output, 2026-04-05):**
 
 | Library | Crate | Time (ms) | GFLOPS | vs trueno |
 |---------|-------|-----------|--------|-----------|
-| **faer 0.24** | `faer` | **8.18** | **262** | **1.98x faster** |
-| **trueno 0.17** | `trueno` | **16.20** | **133** | **1.00x** |
-| matrixmultiply 0.3 | `matrixmultiply` | 18.65 | 115 | 0.87x |
-| nalgebra 0.34 | `nalgebra` | 19.06 | 113 | 0.85x |
-| ndarray 0.17 | `ndarray` | 19.52 | 110 | 0.83x |
+| **faer 0.24** | `faer` (gemm 0.19) | **14.67** | **146** | **1.08x** |
+| **trueno 0.17** | `trueno` (BLIS) | **15.86** | **135** | **1.00x** |
+| matrixmultiply 0.3 | `matrixmultiply` | 18.04 | 119 | 0.88x |
+| nalgebra 0.34 | `nalgebra` | 18.58 | 115 | 0.86x |
+| ndarray 0.17 | `ndarray` | 18.17 | 118 | 0.87x |
 
-**CRITICAL FINDING**: faer is 2x faster than trueno at 1024 single-thread GEMM.
-faer uses the `gemm` crate (by the same author) which has more aggressively
-optimized AVX-512 microkernels and packing. Investigation in progress — faer's
-`gemm` crate uses `nano-gemm` for microkernel codegen and `pulp` for portable SIMD.
-This represents the **#1 optimization opportunity** for trueno CPU GEMM.
+**Note**: Initial faer result showed 2x gap because `&a * &b` includes matrix allocation.
+With pre-allocated output (`faer::linalg::matmul::matmul` with `Accum::Replace`),
+faer is only **8% faster** at 1024. Both are near AVX-512 hardware peak (~130-150 GFLOPS).
+faer uses `nano-gemm` codegen + `pulp` SIMD, trueno uses hand-written BLIS 5-loop + AVX-512
+intrinsics. Gap at smaller sizes is larger (faer 1.3x at 64, 1.3x at 128, 1.3x at 256).
+
+| Size | trueno | faer | Ratio |
+|------|--------|------|-------|
+| 64 | 4.9 µs | 3.7 µs | 1.32x |
+| 128 | 37.8 µs | 28.4 µs | 1.33x |
+| 256 | 287 µs | 224 µs | 1.28x |
+| 512 | 2.01 ms | 1.78 ms | 1.13x |
+| 1024 | 15.86 ms | 14.67 ms | 1.08x |
+
+faer's edge narrows as problem size grows (1.33x → 1.08x), suggesting the gap
+is in microkernel efficiency at small tile sizes, not the outer blocking strategy.
 
 **Key findings** (2026-04-05):
 - trueno 1T: 133 GFLOPS = **0.98x C/OpenBLAS**, **1.02x NumPy**, **1.14x ndarray**

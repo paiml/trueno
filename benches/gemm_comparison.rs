@@ -42,10 +42,21 @@ fn bench_gemm(c: &mut Criterion) {
             bench.iter(|| black_box(black_box(&a).dot(black_box(&b))));
         });
         // faer: fastest pure-Rust BLAS (uses runtime SIMD dispatch)
+        // Pre-allocate output to measure compute only (same as trueno)
         g.bench_with_input(BenchmarkId::new("faer", n), &n, |bench, &n| {
-            let a = faer::Mat::<f32>::from_fn(n, n, |i, j| a[i * n + j]);
-            let b = faer::Mat::<f32>::from_fn(n, n, |i, j| b[i * n + j]);
-            bench.iter(|| black_box(black_box(&a) * black_box(&b)));
+            let fa = faer::Mat::<f32>::from_fn(n, n, |i, j| a[i * n + j]);
+            let fb = faer::Mat::<f32>::from_fn(n, n, |i, j| b[i * n + j]);
+            let mut fc = faer::Mat::<f32>::zeros(n, n);
+            bench.iter(|| {
+                faer::linalg::matmul::matmul(
+                    black_box(fc.as_mut()),
+                    faer::Accum::Replace,
+                    black_box(fa.as_ref()),
+                    black_box(fb.as_ref()),
+                    1.0f32,
+                    faer::Par::Seq,
+                );
+            });
         });
         // nalgebra: popular Rust linear algebra (uses matrixmultiply crate)
         g.bench_with_input(BenchmarkId::new("nalgebra", n), &n, |bench, &n| {
