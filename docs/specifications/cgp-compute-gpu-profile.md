@@ -43,7 +43,7 @@ These targets apply per-backend, per-operation. Competing solutions:
 | CPU GEMM 1024 (1T) | faer 0.24 | **0.98x** | 1.0x | **NEAR PARITY** |
 | CPU GEMM 1024 (1T) | ndarray 0.17 | **1.17x** | 1.0x | **FASTER** |
 | CPU GEMM 1024 (8T) | NumPy OpenBLAS | **0.82x** | 1.0x | **GAP — ASM microkernel IPC** |
-| GPU GEMM 1024 FP16 | cuBLAS | **0.29x** (CTA64: 29.7 TF/s) | 0.5x | GAP — 64×64 +62% over 32×32 |
+| GPU GEMM 1024 FP16 | cuBLAS | **0.39x** (cp.async: 40.5 TF/s) | 0.5x | +120% from baseline via cp.async |
 | Q4K GEMV 4096 (CPU) | llama.cpp est. | **~0.5x** | 1.50x | **cgp: 70.4 GFLOPS, 47% util** |
 | Q4K GEMV (GPU DP4A) | llama.cpp CUDA | TBD | 1.50x | MEASURE |
 
@@ -148,14 +148,27 @@ Added `cp.async.ca.shared.global`, `cp.async.commit_group`, `cp.async.wait_group
 primitives to the PTX builder (5 unit tests passing). These enable register-free
 async global→shared transfer on SM 8.0+ (Ampere+).
 
-**First cp.async 64×64 kernel attempt — FAILED** due to:
-1. 2-byte cp.async not allowed (ptxas: "expected 4 or 8 or 16")
-2. Target must be sm_80+ (currently sm_70 default)
-3. Selp type conflicts when splitting A/B thread roles inline
-4. Register declaration collision (`.reg .u64 %rd<N>` + `.reg .b64 %rd<M>`)
+**cp.async 64×64 kernel — POSITIVE RESULT (+35% over single-buffer)**:
 
-Infrastructure kept; full kernel design deferred — needs 8-byte aligned copies
-with separate A/B branches and sm_80+ target module.
+After fixing two bugs in PTX infrastructure:
+1. Register allocator used per-TYPE IDs → duplicate `%rd0` when both U64 and
+   B64 allocated (they share `%rd` prefix). Fixed to per-PREFIX IDs.
+2. Kernel passed generic u64 pointer to cp.async dst; must be u32 shared-
+   space offset.
+
+| Size | CTA32 (µs) | CTA64 (µs) | cp.async (µs) | cp.async TFLOP/s | vs cuBLAS |
+|------|-----------|-----------|---------------|------------------|-----------|
+| 128 | 5.0 | 7.1 | **5.1** | 0.8 | 0.64x |
+| 256 | 8.4 | 12.4 | **8.4** | 4.0 | 0.40x |
+| 512 | 18.9 | 22.9 | **16.0** | 16.8 | 0.39x |
+| **1024** | 117.3 | 73.2 | **53.0** | **40.5** | **0.39x** |
+
+**cp.async wins at every size** — 1.38-1.47× over CTA64 single-buffer.
+**+120% improvement from 18.4 initial baseline** (18.4 → 40.5 TFLOP/s at 1024).
+
+Design: 16 warps × 4 elements/thread, ONE 8-byte cp.async per thread per K-tile,
+true async (WMMA runs while cp.async completes in background), double-buffer
+with 8KB shared memory (2× 4KB buffers). Requires sm_80+ target module.
 
 **Note**: GPU pure-Rust PTX vs cuBLAS is not expected to hit 1.5x — cuBLAS uses hand-tuned SASS and proprietary tensor core scheduling. The GPU target is to close the gap from 0.38x toward 0.5x+ (competitive for deployment where vendor lock-in is unacceptable).
 
@@ -3105,12 +3118,14 @@ All 11 contracts pass (53 checks pass, 0 fail, 44 skip).
 | Kernel | 1024 (µs) | TFLOP/s | vs cuBLAS | Notes |
 |--------|-----------|---------|-----------|-------|
 | CTA32 (4-warp, 32×32) | 117 | 18.4 | 0.38x | Baseline |
-| CTA64 (16-warp, 64×64) | 72.4 | 29.7 | 0.29x | **+62%** (2× data reuse) |
-| CTA64 double-buffer | 71.7 | 30.0 | 0.28x | Neutral (amortized) |
-| cuBLAS FP16 | 20.5 | ~105 | 1.00x | Target: 0.5x |
+| CTA64 (16-warp, 64×64) | 73.2 | 29.3 | 0.28x | **+62%** (2× data reuse) |
+| CTA64 double-buffer | 71.7 | 30.0 | 0.29x | Neutral (amortized) |
+| **CTA64 + cp.async** | **53.0** | **40.5** | **0.39x** | **+120% total** (8-byte async copy) |
+| cuBLAS FP16 | 20.6 | ~104 | 1.00x | Target: 0.5x |
 
-16 experiments (6 positive, 10 negative). Double-buffer on 32×32 was negative
-(register pressure + code bloat). 64×64 tiles proved the data reuse thesis.
+17 experiments (7 positive, 10 negative). cp.async gives the biggest win by
+eliminating register pressure and enabling true load-compute overlap via
+async DMA directly global→shared.
 
 **GEMM performance (Threadripper 7960X, AVX-512 8×32 microkernel + SIMD B-packing)**:
 

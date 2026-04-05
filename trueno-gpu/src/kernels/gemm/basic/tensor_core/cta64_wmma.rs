@@ -35,6 +35,249 @@ pub fn build_cta64_wmma_fp16_dbuf(_m: u32, n: u32, k: u32) -> PtxKernel {
     build_cta64_wmma_fp16_impl(_m, n, k, true)
 }
 
+/// cp.async double-buffered 64×64 variant (SM 8.0+).
+///
+/// Uses `cp.async.ca.shared.global` with 8-byte copies (4 FP16 elements per
+/// thread). Each thread does ONE cp.async per K-tile. True async: WMMA runs
+/// while cp.async transfers complete in background.
+///
+/// Requires: K % 4 == 0 and N % 4 == 0 for 8-byte alignment.
+/// Requires: sm_80+ target (caller must set `PtxModule::target("sm_80")`).
+pub fn build_cta64_wmma_fp16_cpasync(m: u32, n: u32, k: u32) -> PtxKernel {
+    let tile_m: u32 = 64;
+    let tile_n: u32 = 64;
+    let tile_k: u32 = 16;
+    let a_smem_bytes = (tile_m * tile_k * 2) as usize; // 2048
+    let b_smem_bytes = (tile_k * tile_n * 2) as usize; // 2048
+    let smem_single = a_smem_bytes + b_smem_bytes; // 4096
+    let smem_bytes = smem_single * 2; // double-buffer
+    let n_k_tiles = (k + tile_k - 1) / tile_k;
+    // Each thread loads 4 consecutive FP16 elements (8 bytes) with ONE cp.async.
+    let a_threads: u32 = 256; // threads 0..255 load A, 256..511 load B
+    let _ = m;
+
+    PtxKernel::new("gemm_cta64_cpasync_fp16")
+        .param(PtxType::U64, "a_ptr")
+        .param(PtxType::U64, "b_ptr")
+        .param(PtxType::U64, "c_ptr")
+        .param(PtxType::U32, "m_param")
+        .param(PtxType::U32, "n_param")
+        .param(PtxType::U32, "k_param")
+        .shared_memory(smem_bytes)
+        .build(move |ctx| {
+            let tid = ctx.special_reg(PtxReg::TidX);
+            let ctaid_x = ctx.special_reg(PtxReg::CtaIdX);
+            let ctaid_y = ctx.special_reg(PtxReg::CtaIdY);
+
+            let c_2 = ctx.mov_u32_imm(2);
+            let c_4 = ctx.mov_u32_imm(4);
+            let c_5 = ctx.mov_u32_imm(5);
+            let c_16 = ctx.mov_u32_imm(16);
+            let c_63 = ctx.mov_u32_imm(63);
+            let c_64 = ctx.mov_u32_imm(64);
+            let c_256 = ctx.mov_u32_imm(a_threads);
+            let c_a_smem = ctx.mov_u32_imm(a_smem_bytes as u32);
+            let k_const = ctx.mov_u32_imm(k);
+            let n_const = ctx.mov_u32_imm(n);
+            let n_k_tiles_reg = ctx.mov_u32_imm(n_k_tiles);
+
+            let cta_row = ctx.mul_u32_reg(ctaid_y, c_64);
+            let cta_col = ctx.mul_u32_reg(ctaid_x, c_64);
+
+            let m_param = ctx.load_param_u32("m_param");
+            let n_param = ctx.load_param_u32("n_param");
+            let _k_param = ctx.load_param_u32("k_param");
+
+            let cta_oob = ctx.setp_ge_u32(cta_row, m_param);
+            ctx.branch_if(cta_oob, "exit");
+            let cta_oob2 = ctx.setp_ge_u32(cta_col, n_param);
+            ctx.branch_if(cta_oob2, "exit");
+
+            let a_ptr = ctx.load_param_u64("a_ptr");
+            let b_ptr = ctx.load_param_u64("b_ptr");
+            let c_ptr = ctx.load_param_u64("c_ptr");
+
+            let c_3 = ctx.mov_u32_imm(3);
+            let warp_id = ctx.shr_u32(tid, c_5);
+            let warp_row = ctx.shr_u32(warp_id, c_2);
+            let warp_col = ctx.and_u32(warp_id, c_3);
+            let warp_m_off = ctx.mul_u32_reg(warp_row, c_16);
+            let warp_n_off = ctx.mul_u32_reg(warp_col, c_16);
+
+            // Smem base via cvta for generic pointer
+            let smem_base = ctx.shared_base_addr();
+
+            // Thread role: is_a = (tid < 256)
+            let is_a_thread = ctx.setp_lt_u32(tid, c_256);
+
+            // ═══ Pre-compute thread's load parameters ═══
+            // For A-threads (t in 0..255):
+            //   idx_start = t*4, row = t/4, col = (t*4) % 16 = (t%4)*4
+            //   smem_off = t*4*2 = t*8
+            //   global_start = a_ptr + ((cta_row + row) * K + k_off + col) * 2
+            // For B-threads (t in 256..511), local = t - 256:
+            //   local_start = local*4, row = local/16, col = (local*4) % 64 = (local%16)*4
+            //   smem_off = a_smem + local*8
+            //   global_start = b_ptr + ((k_off + row) * N + cta_col + col) * 2
+
+            // Compute smem offset for this thread (conditional via selp)
+            // A path: smem_off = tid * 8
+            // B path: smem_off = a_smem + (tid - 256) * 8
+            let c_8 = ctx.mov_u32_imm(8);
+            let a_smem_off = ctx.mul_u32_reg(tid, c_8);
+            let b_local = ctx.sub_u32_reg(tid, c_256);
+            let b_local_8 = ctx.mul_u32_reg(b_local, c_8);
+            let b_smem_off = ctx.add_u32_reg(c_a_smem, b_local_8);
+            let base_smem_off = ctx.selp_u32(is_a_thread, a_smem_off, b_smem_off);
+
+            // Pre-compute per-thread row/col (A and B variants)
+            // A: row = t/4, col = (t%4)*4
+            let a_row_in_tile = ctx.shr_u32(tid, c_2); // t/4
+            let c_mask3 = ctx.mov_u32_imm(3);
+            let a_col_mod = ctx.and_u32(tid, c_mask3); // t%4
+            let a_col_in_tile = ctx.mul_u32_reg(a_col_mod, c_4); // (t%4)*4
+            let a_global_row = ctx.add_u32_reg(cta_row, a_row_in_tile);
+            // A address computed per K-tile: (a_global_row * K + k_off + a_col_in_tile) * 2 + a_ptr
+
+            // B: row = local/16, col = (local%16)*4
+            let b_row_in_tile = ctx.shr_u32(b_local, c_4); // local/16
+            let c_mask15 = ctx.mov_u32_imm(15);
+            let b_col_mod = ctx.and_u32(b_local, c_mask15); // local%16
+            let b_col_in_tile = ctx.mul_u32_reg(b_col_mod, c_4); // (local%16)*4
+            let b_global_col = ctx.add_u32_reg(cta_col, b_col_in_tile);
+            // B address computed per K-tile: ((k_off + b_row_in_tile) * N + b_global_col) * 2 + b_ptr
+
+            let frag_c = ctx.wmma_init_c_zero();
+            let smem_single_reg = ctx.mov_u32_imm(smem_single as u32);
+            let store_buf_off = ctx.mov_u32_imm(0);
+
+            // ─── Prologue: cp.async tile 0 into buf[0] ───
+            {
+                let k_off = ctx.mov_u32_imm(0);
+                // A global: (a_global_row * K + k_off + a_col_in_tile) * 2 + a_ptr
+                // Since k_off = 0: (a_global_row * K + a_col_in_tile) * 2 + a_ptr
+                let a_rowk = ctx.mul_u32_reg(a_global_row, k_const);
+                let a_flat = ctx.add_u32_reg(a_rowk, a_col_in_tile);
+                let a_byte_off = ctx.mul_wide_u32(a_flat, 2);
+                let a_addr = ctx.add_u64(a_ptr, a_byte_off);
+
+                // B global: ((0 + b_row_in_tile) * N + b_global_col) * 2 + b_ptr
+                let b_flat = ctx.mad_lo_u32(b_row_in_tile, n_const, b_global_col);
+                let b_byte_off = ctx.mul_wide_u32(b_flat, 2);
+                let b_addr = ctx.add_u64(b_ptr, b_byte_off);
+
+                // Select global address based on thread role
+                let gaddr = ctx.selp_u64(is_a_thread, a_addr, b_addr);
+                // cp.async expects u32 shared-space offset for dst (not generic u64)
+                // base_smem_off is already a u32 byte offset within smem[]
+                ctx.cp_async_global_to_shared(base_smem_off, gaddr, 8);
+                let _ = k_off;
+            }
+            ctx.cp_async_commit_group();
+            ctx.cp_async_wait_group(0);
+            ctx.bar_sync(0);
+
+            // ─── Main loop ───
+            let k_tile = ctx.mov_u32_imm(1);
+            ctx.label("k_loop");
+            let k_done = ctx.setp_ge_u32(k_tile, n_k_tiles_reg);
+            ctx.branch_if(k_done, "dbuf_epi");
+
+            // Swap buffer
+            let new_store = ctx.sub_u32_reg(smem_single_reg, store_buf_off);
+            ctx.mov_u32_reg(store_buf_off, new_store);
+            let compute_off = ctx.sub_u32_reg(smem_single_reg, store_buf_off);
+
+            let k_off = ctx.mul_u32_reg(k_tile, c_16);
+
+            // Compute addresses (same as prologue but with k_off)
+            let a_col_full = ctx.add_u32_reg(k_off, a_col_in_tile);
+            let a_rowk = ctx.mul_u32_reg(a_global_row, k_const);
+            let a_flat = ctx.add_u32_reg(a_rowk, a_col_full);
+            let a_byte_off = ctx.mul_wide_u32(a_flat, 2);
+            let a_addr = ctx.add_u64(a_ptr, a_byte_off);
+
+            let b_row_full = ctx.add_u32_reg(k_off, b_row_in_tile);
+            let b_flat = ctx.mad_lo_u32(b_row_full, n_const, b_global_col);
+            let b_byte_off = ctx.mul_wide_u32(b_flat, 2);
+            let b_addr = ctx.add_u64(b_ptr, b_byte_off);
+
+            let gaddr = ctx.selp_u64(is_a_thread, a_addr, b_addr);
+            let smem_off_with_buf = ctx.add_u32_reg(base_smem_off, store_buf_off);
+            // cp.async dst is u32 shared-space offset (not generic u64)
+            ctx.cp_async_global_to_shared(smem_off_with_buf, gaddr, 8);
+            ctx.cp_async_commit_group();
+
+            // WMMA on compute buffer (overlaps with cp.async in-flight)
+            {
+                let a_sub_bytes = ctx.mul_u32_reg(warp_m_off, c_16);
+                let a_sub_bytes = ctx.mul_u32_reg(a_sub_bytes, c_2);
+                let a_sub_buf = ctx.add_u32_reg(a_sub_bytes, compute_off);
+                let a_sub_off = ctx.cvt_u64_u32(a_sub_buf);
+                let a_sub_ptr = ctx.add_u64(smem_base, a_sub_off);
+                let frag_a = ctx.wmma_load_a_f16(a_sub_ptr, 16, WmmaLayout::RowMajor);
+
+                let b_sub_bytes = ctx.mul_u32_reg(warp_n_off, c_2);
+                let b_base_off = ctx.add_u32_reg(c_a_smem, b_sub_bytes);
+                let b_buf = ctx.add_u32_reg(b_base_off, compute_off);
+                let b_off64 = ctx.cvt_u64_u32(b_buf);
+                let b_sub_ptr = ctx.add_u64(smem_base, b_off64);
+                let frag_b = ctx.wmma_load_b_f16(b_sub_ptr, 64, WmmaLayout::RowMajor);
+
+                let frag_d = ctx.wmma_mma_f16_f32_row_row(&frag_a, &frag_b, &frag_c);
+                for (c_reg, d_reg) in frag_c.iter().zip(frag_d.iter()) {
+                    ctx.mov_f32_reg(*c_reg, *d_reg);
+                }
+            }
+
+            ctx.cp_async_wait_group(0);
+            ctx.bar_sync(0);
+            ctx.add_u32_inplace(k_tile, 1);
+            ctx.branch("k_loop");
+
+            // ─── Epilogue ───
+            ctx.label("dbuf_epi");
+            {
+                let a_sub_bytes = ctx.mul_u32_reg(warp_m_off, c_16);
+                let a_sub_bytes = ctx.mul_u32_reg(a_sub_bytes, c_2);
+                let a_sub_buf = ctx.add_u32_reg(a_sub_bytes, store_buf_off);
+                let a_sub_off = ctx.cvt_u64_u32(a_sub_buf);
+                let a_sub_ptr = ctx.add_u64(smem_base, a_sub_off);
+                let frag_a = ctx.wmma_load_a_f16(a_sub_ptr, 16, WmmaLayout::RowMajor);
+
+                let b_sub_bytes = ctx.mul_u32_reg(warp_n_off, c_2);
+                let b_base_off = ctx.add_u32_reg(c_a_smem, b_sub_bytes);
+                let b_buf = ctx.add_u32_reg(b_base_off, store_buf_off);
+                let b_off64 = ctx.cvt_u64_u32(b_buf);
+                let b_sub_ptr = ctx.add_u64(smem_base, b_off64);
+                let frag_b = ctx.wmma_load_b_f16(b_sub_ptr, 64, WmmaLayout::RowMajor);
+
+                let frag_d = ctx.wmma_mma_f16_f32_row_row(&frag_a, &frag_b, &frag_c);
+                for (c_reg, d_reg) in frag_c.iter().zip(frag_d.iter()) {
+                    ctx.mov_f32_reg(*c_reg, *d_reg);
+                }
+            }
+
+            // Store C
+            let c_row = ctx.add_u32_reg(cta_row, warp_m_off);
+            let c_col = ctx.add_u32_reg(cta_col, warp_n_off);
+            let cr_ok = ctx.setp_lt_u32(c_row, m_param);
+            ctx.branch_if_not(cr_ok, "exit");
+            let cc_ok = ctx.setp_lt_u32(c_col, n_param);
+            ctx.branch_if_not(cc_ok, "exit");
+
+            let c_row_off = ctx.mul_wide_u32_reg(c_row, n_param);
+            let c_col_off = ctx.cvt_u64_u32(c_col);
+            let c_base = ctx.add_u64(c_row_off, c_col_off);
+            let c_base = ctx.mul_u64(c_base, 4);
+            let c_addr = ctx.add_u64(c_ptr, c_base);
+            ctx.wmma_store_d_f32(c_addr, &frag_c, n, WmmaLayout::RowMajor);
+
+            ctx.label("exit");
+            ctx.ret();
+        })
+}
+
 fn build_cta64_wmma_fp16_impl(_m: u32, n: u32, k: u32, double_buffer: bool) -> PtxKernel {
     let tile_m: u32 = 64;
     let tile_n: u32 = 64;
@@ -596,5 +839,62 @@ mod tests {
         let ptx = PtxModule::new().add_kernel(kernel).emit();
         let mma_count = ptx.matches("wmma.mma.sync.aligned.m16n16k16.row.row.f32.f32").count();
         assert_eq!(mma_count, 2, "dbuf should have 2 WMMA (loop + epilogue)");
+    }
+
+    // ── cp.async FALSIFY tests ──
+
+    #[test]
+    fn test_cta64_cpasync_valid_ptx() {
+        let kernel = build_cta64_wmma_fp16_cpasync(256, 256, 256);
+        let ptx = PtxModule::new().add_kernel(kernel).emit();
+        assert!(ptx.contains(".entry gemm_cta64_cpasync_fp16"));
+        assert!(ptx.contains("cp.async.ca.shared.global"));
+        assert!(ptx.contains("cp.async.commit_group"));
+        assert!(ptx.contains("cp.async.wait_group"));
+    }
+
+    #[test]
+    fn test_cta64_cpasync_8byte_copies() {
+        let kernel = build_cta64_wmma_fp16_cpasync(256, 256, 256);
+        let ptx = PtxModule::new().add_kernel(kernel).emit();
+        // Must use 8-byte cp.async (not 2 or 4)
+        assert!(
+            ptx.contains(", 8;") || ptx.contains(", 8\n"),
+            "cp.async must use 8-byte copies, got: {}",
+            ptx.lines().filter(|l| l.contains("cp.async.ca")).next().unwrap_or("")
+        );
+    }
+
+    #[test]
+    fn test_cta64_cpasync_8kb_smem() {
+        let kernel = build_cta64_wmma_fp16_cpasync(256, 256, 256);
+        let ptx = PtxModule::new().add_kernel(kernel).emit();
+        let extract_smem = |ptx: &str| -> usize {
+            for line in ptx.lines() {
+                if line.contains(".shared") && line.contains("smem[") {
+                    let start = line.find("smem[").unwrap() + 5;
+                    let end = line[start..].find(']').unwrap() + start;
+                    return line[start..end].parse().unwrap();
+                }
+            }
+            panic!("no .shared smem found");
+        };
+        assert_eq!(extract_smem(&ptx), 8192);
+    }
+
+    #[test]
+    fn test_cta64_cpasync_two_wmma() {
+        let kernel = build_cta64_wmma_fp16_cpasync(256, 256, 256);
+        let ptx = PtxModule::new().add_kernel(kernel).emit();
+        let mma_count = ptx.matches("wmma.mma.sync.aligned.m16n16k16.row.row.f32.f32").count();
+        assert_eq!(mma_count, 2);
+    }
+
+    #[test]
+    fn test_cta64_cpasync_kernel_name() {
+        let kernel = build_cta64_wmma_fp16_cpasync(256, 256, 256);
+        let ptx = PtxModule::new().add_kernel(kernel).emit();
+        // Distinct kernel name to avoid conflict with non-cp.async variant
+        assert!(ptx.contains("gemm_cta64_cpasync_fp16"));
     }
 }

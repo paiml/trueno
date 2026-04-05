@@ -931,7 +931,7 @@ fn cta_wmma_dbuf_bench_fp16() {
 fn cta64_vs_cta32_vs_cublas_fp16() {
     use crate::driver::module::CudaModule;
     use crate::kernels::gemm::basic::tensor_core::cta64_wmma::{
-        build_cta64_wmma_fp16, build_cta64_wmma_fp16_dbuf,
+        build_cta64_wmma_fp16, build_cta64_wmma_fp16_cpasync, build_cta64_wmma_fp16_dbuf,
     };
     use crate::kernels::gemm::basic::tensor_core::cta_wmma::build_cta_wmma_fp16;
     use crate::ptx::PtxModule;
@@ -944,12 +944,12 @@ fn cta64_vs_cta32_vs_cublas_fp16() {
     handle.set_stream(&stream).expect("set_stream");
 
     eprintln!();
-    eprintln!("=== CTA64: single vs dbuf vs CTA32 vs cuBLAS — FP16 ===");
+    eprintln!("=== CTA64: single vs dbuf vs cp.async vs CTA32 vs cuBLAS — FP16 ===");
     eprintln!(
-        "{:<6} {:>9} {:>9} {:>9} {:>9} {:>9} {:>7} {:>7}",
-        "Size", "CTA32", "CTA64", "Dbuf64", "cuBLAS", "Dbuf TF/s", "dbvs64", "vsCuBL"
+        "{:<6} {:>8} {:>8} {:>8} {:>8} {:>8} {:>8} {:>6}",
+        "Size", "CTA32", "CTA64", "Dbuf64", "CpAsync", "cuBLAS", "CpA TF/s", "cpVsCu"
     );
-    eprintln!("{}", "-".repeat(82));
+    eprintln!("{}", "-".repeat(80));
 
     for &n in &[128_usize, 256, 512, 1024] {
         let m = n;
@@ -1087,7 +1087,60 @@ fn cta64_vs_cta32_vs_cublas_fp16() {
         }
         stream.synchronize().ok();
         let dbuf64_us = start.elapsed().as_micros() as f64 / iters as f64;
-        let dbuf64_tflops = flops / (dbuf64_us * 1e6);
+        let _dbuf64_tflops = flops / (dbuf64_us * 1e6);
+
+        // ─── 64×64 cp.async (SM 8.0+) ───
+        let kernel_cp = build_cta64_wmma_fp16_cpasync(m as u32, n as u32, k as u32);
+        // cp.async requires sm_80+ target
+        let ptx_cp = PtxModule::new().target("sm_80").add_kernel(kernel_cp).emit();
+        let cpasync_us = match CudaModule::from_ptx(&ctx, &ptx_cp) {
+            Ok(mut mod_cp) => {
+                let cfg_cp = LaunchConfig {
+                    grid: (((n + 63) / 64) as u32, ((m + 63) / 64) as u32, 1),
+                    block: (512, 1, 1),
+                    shared_mem: 8192,
+                };
+                a_ptr = a_buf.as_ptr();
+                b_ptr = b_buf.as_ptr();
+                c_ptr = c_buf.as_ptr();
+                m_v = m as u32;
+                n_v = n as u32;
+                k_v = k as u32;
+                for _ in 0..5 {
+                    unsafe {
+                        stream
+                            .launch_kernel(
+                                &mut mod_cp,
+                                "gemm_cta64_cpasync_fp16",
+                                &cfg_cp,
+                                &mut args,
+                            )
+                            .ok();
+                    }
+                }
+                stream.synchronize().ok();
+                let start = Instant::now();
+                for _ in 0..iters {
+                    unsafe {
+                        stream
+                            .launch_kernel(
+                                &mut mod_cp,
+                                "gemm_cta64_cpasync_fp16",
+                                &cfg_cp,
+                                &mut args,
+                            )
+                            .ok();
+                    }
+                }
+                stream.synchronize().ok();
+                start.elapsed().as_micros() as f64 / iters as f64
+            }
+            Err(e) => {
+                eprintln!("{:<6} cp.async compile failed: {e}", n);
+                f64::INFINITY
+            }
+        };
+        let cpasync_tflops = flops / (cpasync_us * 1e6);
 
         // ─── cuBLAS reference ───
         let c16_buf = GpuBuffer::from_host(&ctx, &vec![0u16; m * n]).expect("C16");
@@ -1124,12 +1177,11 @@ fn cta64_vs_cta32_vs_cublas_fp16() {
         stream.synchronize().ok();
         let cublas_us = start.elapsed().as_micros() as f64 / iters as f64;
 
-        let dbuf_vs_64 = cta64_us / dbuf64_us;
-        let vs_cublas = cublas_us / dbuf64_us;
+        let cp_vs_cublas = cublas_us / cpasync_us;
 
         eprintln!(
-            "{:<6} {:>9.1} {:>9.1} {:>9.1} {:>9.1} {:>9.1} {:>6.2}x {:>6.2}x",
-            n, cta32_us, cta64_us, dbuf64_us, cublas_us, dbuf64_tflops, dbuf_vs_64, vs_cublas,
+            "{:<6} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>5.2}x",
+            n, cta32_us, cta64_us, dbuf64_us, cpasync_us, cublas_us, cpasync_tflops, cp_vs_cublas,
         );
     }
     eprintln!();

@@ -195,14 +195,22 @@ impl RegisterAllocator {
         }
     }
 
-    /// Allocate a new virtual register with per-type ID
+    /// Allocate a new virtual register with per-prefix ID
     ///
-    /// Each type has its own register prefix (U32 → %r, S32 → %ri, F32 → %f, etc.)
-    /// so per-type counters are safe since prefixes don't overlap.
+    /// Per-prefix counters (NOT per-type) because some types share prefixes:
+    /// U64+B64 → %rd, U32+B32 share none (U32=%r, B32=%rb), U8+B8 → %rs, etc.
+    /// Using per-type IDs caused duplicate register names (e.g., both U64 and B64
+    /// allocating `%rd0`), breaking ptxas.
     pub fn allocate_virtual(&mut self, ty: PtxType) -> VirtualReg {
-        // Get next ID for this type (starting from 0)
-        let id = *self.type_counters.get(&ty).unwrap_or(&0);
-        self.type_counters.insert(ty, id + 1);
+        // Look up existing counter by matching register prefix
+        // (find any existing type that shares this prefix)
+        let prefix = ty.register_prefix();
+        let existing_ty_with_prefix =
+            self.type_counters.keys().find(|t| t.register_prefix() == prefix).copied();
+
+        let lookup_ty = existing_ty_with_prefix.unwrap_or(ty);
+        let id = *self.type_counters.get(&lookup_ty).unwrap_or(&0);
+        self.type_counters.insert(lookup_ty, id + 1);
 
         let vreg = VirtualReg::new(id, ty);
         self.allocated.push(vreg);
@@ -249,26 +257,25 @@ impl RegisterAllocator {
     pub fn emit_declarations(&self) -> String {
         let mut decls = String::new();
 
-        // Group by type
-        let mut by_type: HashMap<PtxType, Vec<&VirtualReg>> = HashMap::new();
+        // Group by register prefix (u64 and b64 share %rd, etc.)
+        // BUG FIX: previously grouped by PtxType → duplicate .reg lines for
+        // types sharing a prefix (U64+B64→%rd, U8+B8→%rs, etc.).
+        // Now groups by prefix; declaration type is taken from first type in group.
+        let mut by_prefix: HashMap<&'static str, (PtxType, Vec<&VirtualReg>)> = HashMap::new();
         for vreg in &self.allocated {
-            by_type.entry(vreg.ty()).or_default().push(vreg);
+            let prefix = vreg.ty().register_prefix();
+            by_prefix.entry(prefix).or_insert_with(|| (vreg.ty(), Vec::new())).1.push(vreg);
         }
 
         // Emit declarations
         // NOTE: PTX only supports register declarations of 16-bit or wider types.
         // 8-bit types (.u8, .s8, .b8) must be widened to their 16-bit equivalent.
         // Values are automatically zero/sign-extended to 16 bits by the hardware.
-        for (ty, regs) in by_type {
+        for (prefix, (ty, regs)) in by_prefix {
             if !regs.is_empty() {
                 let count = regs.len();
                 let decl_type = ty.register_declaration_type();
-                decls.push_str(&format!(
-                    "    .reg {}  {}<{}>;\n",
-                    decl_type,
-                    ty.register_prefix(),
-                    count
-                ));
+                decls.push_str(&format!("    .reg {}  {}<{}>;\n", decl_type, prefix, count));
             }
         }
 
