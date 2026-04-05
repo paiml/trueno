@@ -2874,9 +2874,10 @@ stride. trueno unconditionally packs both A and B for every tile.
 **Conclusion**: Zen 4's OOO engine and LLVM backend are exceptionally good at
 handling the 8×32 loop as-is. Manual K-unrolling at 18 zmm live registers causes
 spills. MC increase adds packing cost that exceeds the L2 reuse benefit at small
-MC blocks. The remaining faer gap (1.04x at 1024, 1.22x at 64) likely requires
-a fundamentally different approach: either faer's `nano-gemm` codegen for
-shape-specialized microkernels, or integration with faer's `gemm` crate directly.
+MC blocks. The remaining faer gap (1.04x at 1024, 1.22x at 64) requires
+**proc-macro microkernel codegen** (P1a in Appendix E) — a sovereign implementation
+of the nano-gemm approach that generates shape-specialized code at compile time.
+No external dependencies; trueno owns the codegen.
 
 Source: `gemm-0.19.0` (faer's GEMM engine), `gemm-common-0.19.0`, `nano-gemm-0.2.2`.
 Analysis via `decy audit` + `pmat query` + direct source comparison.
@@ -2903,27 +2904,41 @@ Analysis via `decy audit` + `pmat query` + direct source comparison.
 
 ### Priority 1: Performance (highest impact, ship-blocking)
 
-**P1a. Integrate faer's `gemm` crate as optional BLAS backend.**
-The remaining 4% gap at 1024 (22% at small sizes) is architectural — faer's
-`nano-gemm` codegen produces shape-specialized microkernels that trueno can't
-match with static intrinsic code. Instead of reimplementing `nano-gemm`,
-add `faer` as an optional dependency:
-```toml
-[dependencies]
-faer = { version = "0.24", optional = true }
-[features]
-faer-blas = ["faer"]
-```
-When enabled, `gemm()` delegates to `faer::linalg::matmul::matmul`. This would
-give trueno **143 GFLOPS 1T** (matching best-in-class pure Rust) immediately.
-Effort: Low (1-2 days). Risk: faer dependency adds compile time.
+> **Sovereign Stack Policy**: trueno owns every line of compute code. No external
+> BLAS dependencies (faer, OpenBLAS, MKL). The techniques below are learned from
+> faer's architecture (Appendix D) and reimplemented from scratch in trueno.
 
-**P1b. Parallel GEMM via faer's job-level parallelism.**
-trueno's current M-split parallelism peaks at 645 GFLOPS (8T). faer's job-level
-parallelism with shared B packing could unlock OpenBLAS-class scaling (800+ GFLOPS).
-Effort: Medium. Requires replacing `thread::scope` with faer's `Par::Rayon(0)`.
+**P1a. Proc-macro microkernel codegen (`trueno-gemm-codegen`).**
+faer's edge comes from `nano-gemm`: a proc macro that generates shape-specialized
+microkernels at compile time for each (MR, NR, K-unroll) combination. trueno can
+build the same as a workspace proc-macro crate. The macro would:
+1. Accept `#[microkernel(mr=32, nr=6, k_unroll=4, isa=avx512)]`
+2. Emit fully-unrolled AVX-512 FMA code with optimal register allocation
+3. Generate both column-major and row-major C variants
+4. Auto-select at runtime via `is_x86_feature_detected!()`
 
-**P1c. Q4K GEMV: vectorize super-block header parsing (VBMI2).**
+This eliminates the tradeoff between manual unrolling (which LLVM can't do across
+loop-carried deps) and the register-spill risk we observed with hand-written unrolls.
+Estimated gain: 10-20% at small sizes, 3-5% at 1024. Closes faer gap fully.
+Effort: Medium (1-2 weeks). Sovereign — no external dependencies.
+
+**P1b. Job-level parallel GEMM with shared B packing.**
+Current approach: M-split parallelism with per-thread B packing (redundant).
+New approach: pack B once (shared immutable), then distribute (ir, jr) micro-tiles
+across Rayon's work-stealing pool. Each thread packs its own A slice but reads
+shared B. Eliminates O(threads × B_size) redundant packing.
+Estimated gain: 10-20% parallel scaling (645 → 750+ GFLOPS at 8T).
+Effort: Medium (1 week). Already partially implemented in `gemm_blis_parallel_with_prepacked_b`.
+Note: previous shared-B attempt regressed (495→316) because sharing was at the
+wrong level (full B, not NR-panel level). Job-level sharing avoids this.
+
+**P1c. Dynamic cache blocking from CPU topology.**
+Read `/sys/devices/system/cpu/cpu0/cache/` at runtime to determine L1/L2/L3 size.
+Compute optimal MC/KC/NC per-machine instead of hardcoding. Zen 4 has 32KB L1,
+1MB L2, 32MB shared L3 — but other CPUs differ significantly.
+Effort: Low (2-3 days). Pure `/sys/` parsing + arithmetic.
+
+**P1d. Q4K GEMV: vectorize super-block header parsing (VBMI2).**
 cgp shows Q4K at 56% compute utilization. The bottleneck is the scalar `parse_q4k_header`
 (f16 decode + 6-bit scale unpack). AVX-512 VBMI2 byte shuffle instructions could
 vectorize this, est. 10-20% gain. Requires Zen 4 VBMI2 support detection.
@@ -2967,27 +2982,27 @@ Effort: High (2-4 weeks). See trueno#200, trueno#203.
 
 ### Priority 4: Research & Future
 
-**P4a. nano-gemm-style codegen for trueno.**
-faer's `nano-gemm` generates compile-time-specialized microkernels per (MR, NR)
-shape using proc macros. This eliminates the static tile-size tradeoff. Trueno
-could adopt a similar approach for its BLIS layer.
-
-**P4b. Energy-aware profiling (Appendix C gap #1).**
+**P4a. Energy-aware profiling (Appendix C gap #1).**
 cgp does not measure energy. ELANA [58] and NVML provide joules/token metrics.
-Add `cgp profile --energy` for power-aware optimization.
+Add `cgp profile --energy` for power-aware optimization via NVML directly.
 
-**P4c. eBPF always-on GPU monitoring (Appendix C gap #1).**
-Production monitoring mode with near-zero overhead.
+**P4b. eBPF always-on GPU monitoring (Appendix C gap #1).**
+Production monitoring mode with near-zero overhead. Own the eBPF probes.
+
+**P4c. ARM NEON microkernel parity.**
+Current NEON path is functional but not optimized to AVX-512 level. Apple M-series
+and Graviton are deployment targets that need dedicated 8x8 NEON microkernels.
 
 ### Decision Matrix
 
-| Item | Impact | Effort | Risk | Recommendation |
-|------|--------|--------|------|---------------|
-| P1a faer integration | High | Low | Low | **DO FIRST** |
-| P1b faer parallel | High | Medium | Medium | Do after P1a |
-| P1c VBMI2 header | Medium | High | High | Investigate, don't commit |
-| P2a cgp tui | Low | Medium | Low | Nice-to-have |
-| P2b compare --measure | Low | Low | Low | Quick win |
-| P3a contract schema | Low | Low | Low | Quick win |
-| P3b llama.cpp bench | Medium | Low | Low | **DO SOON** — validates Q4K |
-| P3c GPU PTX | Medium | High | High | Long-term |
+| Item | Impact | Effort | Risk | Sovereign | Recommendation |
+|------|--------|--------|------|-----------|---------------|
+| P1a microkernel codegen | High | Medium | Medium | Yes | **DO FIRST** — closes faer gap |
+| P1b job-level parallel | High | Medium | Medium | Yes | Do after P1a |
+| P1c dynamic cache blocking | Medium | Low | Low | Yes | **Quick win** |
+| P1d VBMI2 header | Medium | High | High | Yes | Investigate |
+| P2a cgp tui | Low | Medium | Low | Yes | Nice-to-have |
+| P2b compare --measure | Low | Low | Low | Yes | Quick win |
+| P3a contract schema | Low | Low | Low | Yes | Quick win |
+| P3b llama.cpp bench | Medium | Low | Low | Yes | **DO SOON** — validates Q4K |
+| P3c GPU PTX | Medium | High | High | Yes | Long-term |
