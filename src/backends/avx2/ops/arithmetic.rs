@@ -15,7 +15,9 @@ const NT_THRESHOLD: usize = 8192;
 pub(crate) unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]) {
     unsafe {
         let len = a.len();
-        if len >= NT_THRESHOLD {
+        // NT stores require 32-byte alignment (#242 SIGSEGV fix)
+        let rp_aligned = (result.as_ptr() as usize) % 32 == 0;
+        if len >= NT_THRESHOLD && rp_aligned {
             add_nt(a, b, result);
         } else {
             add_cached(a, b, result);
@@ -100,7 +102,9 @@ pub(crate) unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
         let rp = result.as_mut_ptr();
         let mut i = 0;
 
-        if len >= NT_THRESHOLD {
+        // NT stores require 32-byte alignment (#242 SIGSEGV fix)
+        let rp_aligned = (rp as usize) % 32 == 0;
+        if len >= NT_THRESHOLD && rp_aligned {
             while i + 32 <= len {
                 _mm_prefetch(ap.add(i + 64).cast::<i8>(), _MM_HINT_T0);
                 _mm_prefetch(bp.add(i + 64).cast::<i8>(), _MM_HINT_T0);
@@ -159,7 +163,11 @@ pub(crate) unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
         let rp = result.as_mut_ptr();
         let mut i = 0;
 
-        if len >= NT_THRESHOLD {
+        // NT stores (_mm256_stream_ps) require 32-byte aligned output.
+        // Vec<f32> default alignment is 4 bytes — only use NT path if aligned.
+        // Fix for #242 SIGSEGV: General Protection Fault from unaligned stream_ps.
+        let rp_aligned = (rp as usize) % 32 == 0;
+        if len >= NT_THRESHOLD && rp_aligned {
             while i + 32 <= len {
                 _mm_prefetch(ap.add(i + 64).cast::<i8>(), _MM_HINT_T0);
                 _mm_prefetch(bp.add(i + 64).cast::<i8>(), _MM_HINT_T0);
