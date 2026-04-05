@@ -2080,6 +2080,14 @@ Each phase writes contracts first, then implements:
 
 [55] J. Chen et al., "Dr. DRAM: Detection of Running Memory Anomalies," 2024. (Memory access pattern anomaly detection for SIMD workloads. Detects strided access, false sharing, and NUMA-remote access patterns at the cache line level.)
 
+[56] R. Jung et al., "Miri: Practical Undefined Behavior Detection for Rust," *POPL*, 2026. https://github.com/rust-lang/miri (MIR interpreter detecting alignment UB, provenance violations, and aliasing errors in unsafe Rust. Strictly superior to valgrind for Rust-specific memory safety. Recommended as Tier 2 SIMD safety check.)
+
+[57] ProfInfer Authors, "ProfInfer: eBPF-based Fine-Grained LLM Inference Profiling," arXiv:2601.20755, January 2026. (eBPF uprobes on llama.cpp inference engine: token-level, graph-level, operator-level metrics. <4% overhead. Relevant for profiling trueno Q4K kernels inside inference pipelines.)
+
+[58] ELANA Authors, "ELANA: Energy and Latency Analyzer for LLMs," arXiv:2512.09946, December 2025. (Joules/token and Joules/prompt metrics via NVML/jtop. First open-source energy-aware LLM profiler. cgp does NOT measure energy — gap identified in Appendix C.)
+
+[59] CodSpeed Authors, "CodSpeed: Deterministic Performance Regression Detection via Instruction Counting," 2025. https://codspeed.io/ (Noise-free CI regression detection using instruction counting instead of wall-clock. Eliminates variance from shared runners. Alternative to cgp's Bootstrap CI approach.)
+
 ---
 
 ## Appendix A: Falsification Results (2026-04-04)
@@ -2564,23 +2572,29 @@ The output should be a flamegraph.svg that shows Rust function → CUDA kernel m
 
 **Effort**: High (requires eBPF integration or perf record post-processing)
 
-### Recommendation 3: SIMD Alignment Static Analyzer (Pre-valgrind)
+### Recommendation 3: SIMD Alignment Verification — Miri + Static Lint (Pre-valgrind)
 
 **Chain of thought:**
 1. #242 SIGSEGV was caused by `_mm256_stream_ps` on unaligned pointer.
 2. Valgrind found it at runtime — but this took WEEKS to diagnose because
    valgrind wasn't in the standard workflow.
-3. A STATIC analyzer could have caught it at COMPILE TIME by checking that
-   every `_stream_ps` / `_store_ps` call site has a provable alignment check.
-4. Existing tools: Clippy has no SIMD alignment lint. cargo-miri can't handle AVX-512.
-5. **Gap**: No compile-time check for SIMD alignment requirements.
+3. **Miri** (Rust MIR interpreter, POPL 2026 [56]) detects alignment UB at the Rust
+   memory model level — strictly superior to valgrind for pure-Rust code because it
+   understands provenance and aliasing, not just raw memory access.
+4. A STATIC analyzer could catch it at COMPILE TIME by scanning for `_stream_ps`
+   / `_store_ps` call sites without alignment guards in the control flow.
+5. **Gap**: cgp mandates valgrind but not Miri. No compile-time SIMD safety lint.
 
-**Recommendation**: Add `cgp lint --simd-safety` that statically scans for `_stream_ps`
-and `_store_ps` call sites and verifies each has an alignment check in its control flow.
-Pattern: `if (ptr % 32 == 0) { stream_ps(...) } else { storeu_ps(...) }`. This can be
-implemented as a simple AST grep — doesn't need full data flow analysis.
+**Recommendation**: Three-tier SIMD safety:
+- **Tier 1 (compile-time)**: `cgp lint --simd-safety` — regex scan for `_stream_ps` sites
+  without `% 32 == 0` guard. Integrated into `cgp explain`. **Effort: Low.**
+- **Tier 2 (Miri)**: `cargo +nightly miri test` for alignment UB detection. Superior to
+  valgrind for Rust-specific UB (provenance, aliasing). Add to `cgp doctor`. Note: Miri
+  does not support AVX-512 intrinsics yet — use for scalar/AVX2 paths. **Effort: Low.**
+- **Tier 3 (valgrind)**: Already mandated (section 4.10). Catches AVX-512 alignment
+  issues that Miri can't handle. **Effort: Already done.**
 
-**Effort**: Low (regex/AST scan of unsafe SIMD blocks, integrated into `cgp explain`)
+**Effort**: Low (Tier 1: AST grep; Tier 2: `cargo miri test` wrapper)
 
 ### Recommendation 4: DHAT Heap Allocation Profiler for SIMD Buffers [54]
 
