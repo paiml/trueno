@@ -411,3 +411,89 @@ pub(super) fn pack_b_block_512(
         }
     }
 }
+
+// ============================================================================
+// 32×6 Packing (Phase 4, Appendix D)
+// ============================================================================
+
+use super::{MR_512V2, NR_512V2};
+
+/// Compute required packed A buffer size for 32×6 microkernel.
+#[cfg(target_arch = "x86_64")]
+#[inline]
+#[allow(dead_code)] // Reserved for column-major 32×6 BLIS path
+pub fn packed_a_size_v2(mc: usize, kc: usize) -> usize {
+    let panels = (mc + MR_512V2 - 1) / MR_512V2;
+    panels * MR_512V2 * kc
+}
+
+/// Compute required packed B buffer size for 32×6 microkernel.
+#[cfg(target_arch = "x86_64")]
+#[inline]
+#[allow(dead_code)] // Reserved for column-major 32×6 BLIS path
+pub fn packed_b_size_v2(kc: usize, nc: usize) -> usize {
+    let panels = (nc + NR_512V2 - 1) / NR_512V2;
+    panels * NR_512V2 * kc
+}
+
+/// Pack A block with MR_512V2=32 micro-panels for 32×6 microkernel.
+#[cfg(target_arch = "x86_64")]
+#[allow(dead_code)] // Reserved for column-major 32×6 BLIS path
+pub(super) fn pack_a_block_v2(
+    a: &[f32],
+    lda: usize,
+    row_start: usize,
+    col_start: usize,
+    rows: usize,
+    cols: usize,
+    packed: &mut [f32],
+) {
+    let mut pack_idx = 0;
+    let panels = (rows + MR_512V2 - 1) / MR_512V2;
+
+    for panel in 0..panels {
+        let ir = panel * MR_512V2;
+        let mr_actual = MR_512V2.min(rows - ir);
+
+        for col in 0..cols {
+            for row in 0..mr_actual {
+                packed[pack_idx + row] = a[(row_start + ir + row) * lda + col_start + col];
+            }
+            for row in mr_actual..MR_512V2 {
+                packed[pack_idx + row] = 0.0;
+            }
+            pack_idx += MR_512V2;
+        }
+    }
+}
+
+/// Pack B block with NR_512V2=6 micro-panels for 32×6 microkernel.
+#[cfg(target_arch = "x86_64")]
+#[allow(dead_code)] // Reserved for column-major 32×6 BLIS path
+pub(super) fn pack_b_block_v2(
+    b: &[f32],
+    ldb: usize,
+    row_start: usize,
+    col_start: usize,
+    rows: usize,
+    cols: usize,
+    packed: &mut [f32],
+) {
+    let panels = (cols + NR_512V2 - 1) / NR_512V2;
+
+    for panel in 0..panels {
+        let jr = panel * NR_512V2;
+        let nr_actual = NR_512V2.min(cols - jr);
+        let dst_base = panel * NR_512V2 * rows;
+
+        for row in 0..rows {
+            let pack_idx = dst_base + row * NR_512V2;
+            for col in 0..nr_actual {
+                packed[pack_idx + col] = b[(row_start + row) * ldb + col_start + jr + col];
+            }
+            for col in nr_actual..NR_512V2 {
+                packed[pack_idx + col] = 0.0;
+            }
+        }
+    }
+}

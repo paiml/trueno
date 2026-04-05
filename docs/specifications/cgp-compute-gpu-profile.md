@@ -2238,41 +2238,40 @@ amortized across K iterations within each thread.
 
 | Library | Crate | Time (ms) | GFLOPS | vs trueno |
 |---------|-------|-----------|--------|-----------|
-| **faer 0.24** | `faer` (gemm 0.19) | **14.67** | **146** | **1.08x** |
-| **trueno 0.17** | `trueno` (BLIS) | **15.86** | **135** | **1.00x** |
-| matrixmultiply 0.3 | `matrixmultiply` | 18.04 | 119 | 0.88x |
-| nalgebra 0.34 | `nalgebra` | 18.58 | 115 | 0.86x |
-| ndarray 0.17 | `ndarray` | 18.17 | 118 | 0.87x |
+| **faer 0.24** | `faer` (gemm 0.19) | **14.99** | **143** | **1.04x** |
+| **trueno 0.17** | `trueno` (BLIS 8x32) | **15.62** | **137** | **1.00x** |
+| matrixmultiply 0.3 | `matrixmultiply` | 18.04 | 119 | 0.87x |
+| nalgebra 0.34 | `nalgebra` | 18.58 | 115 | 0.84x |
+| ndarray 0.17 | `ndarray` | 18.17 | 118 | 0.86x |
 
-**Note**: Initial faer result showed 2x gap because `&a * &b` includes matrix allocation.
-With pre-allocated output (`faer::linalg::matmul::matmul` with `Accum::Replace`),
-faer is only **8% faster** at 1024. Both are near AVX-512 hardware peak (~130-150 GFLOPS).
+**Note**: faer gap closed from 8% to 4% by 8x32 microkernel (Phase 4, Appendix D #1).
 faer uses `nano-gemm` codegen + `pulp` SIMD, trueno uses hand-written BLIS 5-loop + AVX-512
-intrinsics. Gap at smaller sizes is larger (faer 1.3x at 64, 1.3x at 128, 1.3x at 256).
+intrinsics. Remaining gap at small sizes from faer's 64x6 tile with 24 zmm accumulators.
 
-| Size | trueno | faer | Ratio |
-|------|--------|------|-------|
-| 64 | 4.9 µs | 3.7 µs | 1.32x |
-| 128 | 37.8 µs | 28.4 µs | 1.33x |
-| 256 | 287 µs | 224 µs | 1.28x |
-| 512 | 2.01 ms | 1.78 ms | 1.13x |
-| 1024 | 15.86 ms | 14.67 ms | 1.08x |
+| Size | trueno (8x32) | faer | Ratio (before/after) |
+|------|---------------|------|---------------------|
+| 64 | 4.35 µs | 3.68 µs | 1.22x (was 1.32x) |
+| 128 | 34.3 µs | 28.8 µs | 1.22x (was 1.33x) |
+| 256 | 282 µs | 225 µs | 1.25x (was 1.28x) |
+| 512 | 1.91 ms | 1.78 ms | 1.07x (was 1.13x) |
+| 1024 | 15.62 ms | 14.99 ms | **1.04x** (was 1.08x) |
 
 faer's edge narrows as problem size grows (1.33x → 1.08x), suggesting the gap
 is in microkernel efficiency at small tile sizes, not the outer blocking strategy.
 
 **Key findings** (2026-04-05):
-- trueno 1T: 133 GFLOPS = **0.98x C/OpenBLAS**, **1.02x NumPy**, **1.14x ndarray**
+- trueno 1T: 137 GFLOPS (8x32) = **0.99x C/OpenBLAS**, **1.04x NumPy**, **1.15x ndarray**
 - trueno multi: 650 GFLOPS at 16T = **0.95x NumPy**, **0.81x** ideal OpenBLAS scaling
-- **faer 1T: 262 GFLOPS = 1.98x trueno** — new optimization target
-- ndarray/nalgebra/matrixmultiply: all ~110-115 GFLOPS — trueno is 1.14-1.21x faster
+- **faer 1T: 143 GFLOPS = 1.04x trueno** (corrected from initial 1.98x which included alloc)
+- ndarray/nalgebra/matrixmultiply: all ~115-119 GFLOPS — trueno is 1.15-1.19x faster
 - cuBLAS FP32: 43.9 TFLOP/s at 1024 = **67x faster** than best CPU (expected — GPU >> CPU)
 
-**Progress** (4 optimization rounds):
+**Progress** (5 optimization rounds):
 1. AVX-512 8×16 microkernel: 1T 100→128 GFLOPS (+28%), 8T 336→495 (+47%)
 2. Thread cap phys/2: peak 495→567 GFLOPS at 12T (+15%)
 3. Shared-B attempted: REVERTED (316 GFLOPS — cross-core cache miss penalty)
 4. min-of-5 timing + wider thread sweep: peak 567→**650** at 16T (+15%, measurement improvement)
+5. **8×32 microkernel** (Appendix D): NR 16→32, 16 zmm accumulators. 1T 135→**137** (+2% at 1024, +13% at 64). Closed faer gap from 8%→**4%**.
 
 **Remaining gap**: OpenBLAS 12T=6.1× vs trueno 5.1× at 16T → **0.81x**. Root cause:
 hand-tuned x86 assembly microkernels in OpenBLAS [44][45] vs Rust intrinsics.

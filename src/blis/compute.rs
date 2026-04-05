@@ -982,10 +982,12 @@ unsafe fn gemm_blis_avx512_large(
     let track_time = profiler.is_some();
     let start = if track_time { Some(Instant::now()) } else { None };
 
-    let mc = 64_usize.min(m);
+    // Phase 4 (Appendix D): use 8×32 when N >= 32, doubling NR for 2× FMA/K-step.
+    let use_wide = n >= 32;
+    let nr = if use_wide { 32_usize } else { 16_usize };
+    let mc = if use_wide { 96_usize } else { 64_usize }.min(m);
     let nc = 1024_usize.min(n);
     let kc_param = KC;
-    let nr = 16_usize; // AVX-512: 16 columns per tile (zmm width)
     let mr = MR; // MR=8
 
     TL_PACKED_A.with(|tl_a| {
@@ -1008,8 +1010,12 @@ unsafe fn gemm_blis_avx512_large(
                 for pc in (0..k).step_by(kc_param) {
                     let kc_block = kc_param.min(k - pc);
 
-                    // Pack B with NR=16
-                    pack_b_block_nr16(b, n, pc, jc, kc_block, nc_block, &mut packed_b);
+                    // Pack B with NR=16 or NR=32
+                    if use_wide {
+                        pack_b_block_generic(b, n, pc, jc, kc_block, nc_block, 32, &mut packed_b);
+                    } else {
+                        pack_b_block_nr16(b, n, pc, jc, kc_block, nc_block, &mut packed_b);
+                    }
 
                     for ic in (0..m).step_by(mc) {
                         let mc_block = mc.min(m - ic);
@@ -1030,8 +1036,19 @@ unsafe fn gemm_blis_avx512_large(
                                 let a_panel = &packed_a[ir_panel * mr * kc_block..];
                                 let b_panel = &packed_b[jr_panel * nr * kc_block..];
 
-                                if mr_block == 8 && nr_block == 16 {
-                                    // Full 8×16 AVX-512 tile
+                                if mr_block == 8 && nr_block == 32 && use_wide {
+                                    // Full 8×32 AVX-512 tile (Phase 4: 16 accumulators)
+                                    unsafe {
+                                        avx512_microkernel_8x32_rowmajor(
+                                            kc_block,
+                                            a_panel.as_ptr(),
+                                            b_panel.as_ptr(),
+                                            c.as_mut_ptr().add((ic + ir) * n + (jc + jr)),
+                                            n,
+                                        );
+                                    }
+                                } else if mr_block == 8 && nr_block == 16 && !use_wide {
+                                    // Full 8×16 AVX-512 tile (original path)
                                     unsafe {
                                         avx512_microkernel_8x16_rowmajor(
                                             kc_block,
@@ -1127,6 +1144,90 @@ pub(super) unsafe fn avx512_microkernel_8x16_rowmajor(
     _mm512_storeu_ps(c.add(7 * ldc), c7);
 }
 
+/// AVX-512 8×32 microkernel for row-major C (stride = n).
+/// Phase 4 (Appendix D): doubles NR from 16→32 to use 16 zmm accumulators.
+/// Each C row spans 2 zmm (32 f32). 8 rows = 16 zmm accumulators.
+/// B: 2 zmm loads per K step (32 columns). A: 8 scalar broadcasts.
+/// FMAs per K step: 16 (2× the 8×16 kernel).
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f", enable = "fma")]
+pub(super) unsafe fn avx512_microkernel_8x32_rowmajor(
+    k: usize,
+    a: *const f32, // MR=8 packed column-major
+    b: *const f32, // NR=32 packed row-major
+    c: *mut f32,
+    ldc: usize, // row stride = n for row-major
+) {
+    use std::arch::x86_64::*;
+
+    // Load 8 C rows × 2 zmm halves = 16 accumulators
+    let mut c0l = _mm512_loadu_ps(c);
+    let mut c0h = _mm512_loadu_ps(c.add(16));
+    let mut c1l = _mm512_loadu_ps(c.add(ldc));
+    let mut c1h = _mm512_loadu_ps(c.add(ldc + 16));
+    let mut c2l = _mm512_loadu_ps(c.add(2 * ldc));
+    let mut c2h = _mm512_loadu_ps(c.add(2 * ldc + 16));
+    let mut c3l = _mm512_loadu_ps(c.add(3 * ldc));
+    let mut c3h = _mm512_loadu_ps(c.add(3 * ldc + 16));
+    let mut c4l = _mm512_loadu_ps(c.add(4 * ldc));
+    let mut c4h = _mm512_loadu_ps(c.add(4 * ldc + 16));
+    let mut c5l = _mm512_loadu_ps(c.add(5 * ldc));
+    let mut c5h = _mm512_loadu_ps(c.add(5 * ldc + 16));
+    let mut c6l = _mm512_loadu_ps(c.add(6 * ldc));
+    let mut c6h = _mm512_loadu_ps(c.add(6 * ldc + 16));
+    let mut c7l = _mm512_loadu_ps(c.add(7 * ldc));
+    let mut c7h = _mm512_loadu_ps(c.add(7 * ldc + 16));
+
+    for p in 0..k {
+        let bl = _mm512_loadu_ps(b.add(p * 32));
+        let bh = _mm512_loadu_ps(b.add(p * 32 + 16));
+        let ap = a.add(p * 8);
+
+        let a0 = _mm512_set1_ps(*ap);
+        c0l = _mm512_fmadd_ps(a0, bl, c0l);
+        c0h = _mm512_fmadd_ps(a0, bh, c0h);
+        let a1 = _mm512_set1_ps(*ap.add(1));
+        c1l = _mm512_fmadd_ps(a1, bl, c1l);
+        c1h = _mm512_fmadd_ps(a1, bh, c1h);
+        let a2 = _mm512_set1_ps(*ap.add(2));
+        c2l = _mm512_fmadd_ps(a2, bl, c2l);
+        c2h = _mm512_fmadd_ps(a2, bh, c2h);
+        let a3 = _mm512_set1_ps(*ap.add(3));
+        c3l = _mm512_fmadd_ps(a3, bl, c3l);
+        c3h = _mm512_fmadd_ps(a3, bh, c3h);
+        let a4 = _mm512_set1_ps(*ap.add(4));
+        c4l = _mm512_fmadd_ps(a4, bl, c4l);
+        c4h = _mm512_fmadd_ps(a4, bh, c4h);
+        let a5 = _mm512_set1_ps(*ap.add(5));
+        c5l = _mm512_fmadd_ps(a5, bl, c5l);
+        c5h = _mm512_fmadd_ps(a5, bh, c5h);
+        let a6 = _mm512_set1_ps(*ap.add(6));
+        c6l = _mm512_fmadd_ps(a6, bl, c6l);
+        c6h = _mm512_fmadd_ps(a6, bh, c6h);
+        let a7 = _mm512_set1_ps(*ap.add(7));
+        c7l = _mm512_fmadd_ps(a7, bl, c7l);
+        c7h = _mm512_fmadd_ps(a7, bh, c7h);
+    }
+
+    // Store 8 C rows × 2 zmm
+    _mm512_storeu_ps(c, c0l);
+    _mm512_storeu_ps(c.add(16), c0h);
+    _mm512_storeu_ps(c.add(ldc), c1l);
+    _mm512_storeu_ps(c.add(ldc + 16), c1h);
+    _mm512_storeu_ps(c.add(2 * ldc), c2l);
+    _mm512_storeu_ps(c.add(2 * ldc + 16), c2h);
+    _mm512_storeu_ps(c.add(3 * ldc), c3l);
+    _mm512_storeu_ps(c.add(3 * ldc + 16), c3h);
+    _mm512_storeu_ps(c.add(4 * ldc), c4l);
+    _mm512_storeu_ps(c.add(4 * ldc + 16), c4h);
+    _mm512_storeu_ps(c.add(5 * ldc), c5l);
+    _mm512_storeu_ps(c.add(5 * ldc + 16), c5h);
+    _mm512_storeu_ps(c.add(6 * ldc), c6l);
+    _mm512_storeu_ps(c.add(6 * ldc + 16), c6h);
+    _mm512_storeu_ps(c.add(7 * ldc), c7l);
+    _mm512_storeu_ps(c.add(7 * ldc + 16), c7h);
+}
+
 /// Pack B block with NR=16 row-major panels for AVX-512.
 /// Each panel is KC × 16, stored as kc_block × nr contiguous.
 pub(super) fn pack_b_block_nr16(
@@ -1150,6 +1251,33 @@ pub(super) fn pack_b_block_nr16(
             // Zero-pad if nr_local < 16
             for j in nr_local..nr {
                 packed[panel * nr * kc + p * nr + j] = 0.0;
+            }
+        }
+    }
+}
+
+/// Pack B block with generic NR for AVX-512 (NR=32 for 8×32 microkernel).
+pub(super) fn pack_b_block_generic(
+    b: &[f32],
+    ldb: usize,
+    pc: usize,
+    jc: usize,
+    kc: usize,
+    nc: usize,
+    nr: usize,
+    packed: &mut [f32],
+) {
+    let panels = (nc + nr - 1) / nr;
+    for panel in 0..panels {
+        let j_start = panel * nr;
+        let nr_local = nr.min(nc - j_start);
+        for p in 0..kc {
+            let dst_base = panel * nr * kc + p * nr;
+            for j in 0..nr_local {
+                packed[dst_base + j] = b[(pc + p) * ldb + (jc + j_start + j)];
+            }
+            for j in nr_local..nr {
+                packed[dst_base + j] = 0.0;
             }
         }
     }

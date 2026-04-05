@@ -31,7 +31,7 @@ pub use avx2::{
     microkernel_8x8_avx2_fma,
 };
 #[cfg(target_arch = "x86_64")]
-pub use avx512::microkernel_16x8_avx512;
+pub use avx512::{microkernel_16x8_avx512, microkernel_32x6_avx512};
 #[cfg(target_arch = "aarch64")]
 pub use neon::microkernel_8x8_neon;
 

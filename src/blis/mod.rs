@@ -127,6 +127,26 @@ pub const MC_512: usize = 128;
 pub const NC_512: usize = 4096;
 
 // ============================================================================
+// AVX-512 32×6 Microkernel Constants (Phase 4, Appendix D optimization #1)
+// ============================================================================
+
+/// 32×6 microkernel: 2 zmm rows × 6 columns = 12 accumulators.
+/// 1.5× more FMAs per K step than 16×8 (12 vs 8).
+pub const MR_512V2: usize = 32;
+
+/// 6 columns: balances register pressure (12 acc + 2 A load = 14 zmm).
+pub const NR_512V2: usize = 6;
+
+/// Increased KC for 32×6: 32×256×4 = 32 KB fits L1 (32 KB on Zen 4).
+pub const KC_512V2: usize = 256;
+
+/// MC for 32×6: 192 = 6×MR_512V2. Packed A = 192×256×4 = 192 KB fits L2.
+pub const MC_512V2: usize = 192;
+
+/// NC for 32×6: same L3 blocking.
+pub const NC_512V2: usize = 4096;
+
+// ============================================================================
 // Public API
 // ============================================================================
 
