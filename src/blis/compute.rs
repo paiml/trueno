@@ -982,11 +982,14 @@ unsafe fn gemm_blis_avx512_large(
     let track_time = profiler.is_some();
     let start = if track_time { Some(Instant::now()) } else { None };
 
-    // Phase 4 (Appendix D): use 8×32 when N >= 32, doubling NR for 2× FMA/K-step.
-    // Phase 5 (P1c): dynamic cache blocking from /sys/ CPU topology.
-    // Contract: cgp-dynamic-cache-v1.yaml (C-CACHE-001 through C-CACHE-006).
-    let use_wide = n >= 32;
-    let blk = if use_wide {
+    // Phase 4-6: tiered NR selection with dynamic cache blocking.
+    // Contract: cgp-dynamic-cache-v1.yaml, cgp-gemm-codegen-v1.yaml
+    // NR=48 (codegen): 24 FMA/K-step, KC=128 (L1-limited)
+    // NR=32 (hand-written): 16 FMA/K-step, KC=256
+    // NR=16 (hand-written): 8 FMA/K-step, KC=256
+    let blk = if n >= 48 {
+        super::cache_topology::blocking_8x48()
+    } else if n >= 32 {
         super::cache_topology::blocking_8x32()
     } else {
         super::cache_topology::blocking_8x16()
@@ -1003,7 +1006,9 @@ unsafe fn gemm_blis_avx512_large(
             let mut packed_b = tl_b.borrow_mut();
 
             let needed_a = packed_a_size(mc, kc_param);
-            let needed_b = kc_param * nc; // NR=16 packing
+            // packed B: panels * nr * kc, where panels rounds up nc/nr
+            let b_panels = (nc + nr - 1) / nr;
+            let needed_b = b_panels * nr * kc_param;
             if packed_a.len() < needed_a {
                 packed_a.resize(needed_a, 0.0);
             }
@@ -1017,8 +1022,10 @@ unsafe fn gemm_blis_avx512_large(
                 for pc in (0..k).step_by(kc_param) {
                     let kc_block = kc_param.min(k - pc);
 
-                    // Pack B with NR=16 or NR=32
-                    if use_wide {
+                    // Pack B with NR matching the selected microkernel
+                    if nr == 48 {
+                        pack_b_block_generic(b, n, pc, jc, kc_block, nc_block, 48, &mut packed_b);
+                    } else if nr == 32 {
                         pack_b_block_generic(b, n, pc, jc, kc_block, nc_block, 32, &mut packed_b);
                     } else {
                         pack_b_block_nr16(b, n, pc, jc, kc_block, nc_block, &mut packed_b);
@@ -1043,7 +1050,19 @@ unsafe fn gemm_blis_avx512_large(
                                 let a_panel = &packed_a[ir_panel * mr * kc_block..];
                                 let b_panel = &packed_b[jr_panel * nr * kc_block..];
 
-                                if mr_block == 8 && nr_block == 32 && use_wide {
+                                if mr_block == 8 && nr_block == 48 && nr == 48 {
+                                    // Full 8×48 codegen tile (Phase 6: 24 accumulators)
+                                    // Contract: cgp-gemm-codegen-v1.yaml C-CODEGEN-002
+                                    unsafe {
+                                        super::microkernels::codegen::microkernel_8x48_avx512_gen(
+                                            kc_block,
+                                            a_panel.as_ptr(),
+                                            b_panel.as_ptr(),
+                                            c.as_mut_ptr().add((ic + ir) * n + (jc + jr)),
+                                            n,
+                                        );
+                                    }
+                                } else if mr_block == 8 && nr_block == 32 && nr == 32 {
                                     // Full 8×32 AVX-512 tile (Phase 4: 16 accumulators)
                                     unsafe {
                                         avx512_microkernel_8x32_rowmajor(
@@ -1054,7 +1073,7 @@ unsafe fn gemm_blis_avx512_large(
                                             n,
                                         );
                                     }
-                                } else if mr_block == 8 && nr_block == 16 && !use_wide {
+                                } else if mr_block == 8 && nr_block == 16 && nr == 16 {
                                     // Full 8×16 AVX-512 tile (original path)
                                     unsafe {
                                         avx512_microkernel_8x16_rowmajor(

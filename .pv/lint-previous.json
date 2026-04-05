@@ -1,1 +1,1 @@
-[]
+["PV-VAL-001:contracts/cgp-q4k-parallel-threshold-v1.yaml:86afd208b283a0d6","PV-VAL-001:contracts/cgp-perf-targets-v1.yaml:de3be5e0fee37888","PV-VAL-001:contracts/cgp-microkernel-8x32-v1.yaml:a2bf231303642adf","PV-VAL-001:contracts/gemm_blis_1024-1024-v1.yaml:8add3cd35c7d433b","PV-VAL-001:contracts/cgp-gemm-codegen-v1.yaml:4baf9c3c61cac8f3","PV-VAL-001:contracts/cgp-scaling-v1.yaml:3d5c44375bc69ecc","PV-VAL-001:contracts/cgp-dynamic-cache-v1.yaml:04493414924407ed","PV-VAL-001:contracts/cgp-roofline-v1.yaml:12ef1eaec534079d"]

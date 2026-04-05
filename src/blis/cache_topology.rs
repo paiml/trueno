@@ -136,6 +136,26 @@ pub fn blocking_8x32() -> BlisBlocking {
     })
 }
 
+/// Get optimal BLIS blocking for 8×48 codegen microkernel (cached).
+/// 8×48: 24 accumulators, 24 FMAs/K-step (3× the 8×16 kernel).
+/// KC is smaller (L1-limited at NR=48) but more FMAs per K-step may compensate.
+pub fn blocking_8x48() -> BlisBlocking {
+    static BLOCKING_8X48: OnceLock<BlisBlocking> = OnceLock::new();
+    *BLOCKING_8X48.get_or_init(|| {
+        let topo = topology();
+        let mr = 8usize;
+        let nr = 48usize;
+        // KC: l1d / (nr * 4) = 32768 / 192 = 170, round to 128
+        let kc_max = topo.l1d_bytes / (nr * 4);
+        let kc = kc_max.next_power_of_two().min(kc_max).max(64);
+        let mc_max = topo.l2_bytes / (kc * 4);
+        let mc = (mc_max / mr * mr).min(12 * mr).max(mr);
+        let nc_max = topo.l3_bytes / (2 * kc * 4);
+        let nc = (nc_max / nr * nr).min(4096).max(nr);
+        BlisBlocking { mr, nr, mc, kc, nc, dynamic: true }
+    })
+}
+
 /// Get default blocking for 8×16 microkernel (hardcoded, used for small N).
 pub fn blocking_8x16() -> BlisBlocking {
     DEFAULT_BLOCKING_8X16
