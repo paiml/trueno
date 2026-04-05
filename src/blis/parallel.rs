@@ -87,14 +87,16 @@ pub fn gemm_blis_parallel(
     }
 
     // Scale thread count to problem size and cache topology.
-    // cgp profile scaling measurements (2026-04-04, Threadripper 7960X 24C/48T):
+    // cgp profile scaling measurements (2026-04-05, Threadripper 7960X 24C/48T):
     //
-    //   256x256: 1T=28.6, 2T=35.9 (peak), 4T=35.2, 8T=34.4 → cap at 2
-    //   512x512: 1T=82.3, 4T=161.1 (peak), 8T=148.3 → cap at 4
-    //   1024x1024: 1T=105, 8T=485, 16T=541 (peak), 24T=552 → use all cores
+    //   256x256: 1T=27.8, 2T=34.5 (peak), 4T=35.2 → cap at 2
+    //   512x512: 1T=82.6, 4T=176 (peak), 8T=158 → cap at 4
+    //   1024x1024: 1T=106, 8T=489 (peak), 12T=417, 16T=450, 24T=426 → cap at 8
     //
     // Root cause for small-problem regression: L3 contention and thread spawn
     // overhead (~40µs per thread::scope) dominate when compute < 1ms.
+    // Root cause for 1024 12T regression: cross-CCD L3 thrashing. 8T fits
+    // in a single CCD (12 cores, 32MB L3). 12+ threads span both CCDs.
     let phys_cores = num_cpus::get_physical();
     let max_threads = if flops < 64_000_000 {
         // 256³ and below: barely benefits from parallelism
@@ -102,8 +104,12 @@ pub fn gemm_blis_parallel(
     } else if flops < 512_000_000 {
         // 512³ range: 4T is peak, >4 regresses due to L3 contention
         4.min(phys_cores)
+    } else if flops < 4_000_000_000 {
+        // 1024³ range (~2B FLOPs): 8T peak, single CCD L3 (32MB)
+        // Working set 12MB fits single CCD; 12+ threads cross CCD boundary
+        8.min(phys_cores)
     } else {
-        // Very large (1024³+): use all cores, working set exceeds single CCD L3
+        // Very large (>4B FLOPs): use all cores
         phys_cores
     };
 
