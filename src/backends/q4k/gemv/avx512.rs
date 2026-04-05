@@ -51,11 +51,16 @@ pub(crate) unsafe fn matmul_q4k_f32_avx512(
     }
 }
 
-/// Process one Q4K super-block with AVX-512 (16-wide).
+/// Process one Q4K super-block with AVX-512 (16-wide), fully unrolled.
 ///
 /// Each super-block = 256 elements in 4 chunks of 64.
 /// Each chunk: 32 low nibbles + 32 high nibbles.
 /// AVX-512: 16 elements per iteration → 2 iterations per 32 nibbles.
+///
+/// Optimization (Phase 4, 2026-04-05):
+/// - Fully unrolled inner loops (was while loop with 2 iterations)
+/// - Bounds check hoisted out of hot loop (in_dim validated by caller)
+/// - Software prefetch of next superblock's quantized data
 ///
 /// NOTE: Dual-accumulator (low→acc0, high→acc1) was tested (2026-04-05)
 /// but showed NO improvement. Zen 4's OOO engine already hides the FMA
@@ -76,6 +81,13 @@ unsafe fn process_q4k_superblock_avx512(
 
         let (d, dmin, scales, mins) = parse_q4k_header(sb_data);
         let qs = sb_data.get(16..144).expect("Q4_K: need ≥144 bytes for qs");
+        let qs_ptr = qs.as_ptr();
+        let input_ptr = input.as_ptr();
+
+        // Software prefetch: next superblock's header + first quant bytes
+        // Prefetch 2 cache lines ahead (128 bytes = most of next superblock)
+        _mm_prefetch(sb_data.as_ptr().add(SUPER_BLOCK_BYTES) as *const i8, _MM_HINT_T0);
+        _mm_prefetch(sb_data.as_ptr().add(SUPER_BLOCK_BYTES + 64) as *const i8, _MM_HINT_T0);
 
         for chunk_i in 0..4 {
             let chunk_start = chunk_i * 64;
@@ -91,51 +103,61 @@ unsafe fn process_q4k_superblock_avx512(
             let d2_vec = _mm512_set1_ps(d2);
             let dm2_vec = _mm512_set1_ps(dm2);
 
-            // Process low nibbles (32 values) in groups of 16
-            let mut i = 0;
-            while i + 16 <= 32 {
-                let input_base = input_offset + chunk_start + i;
-                if input_base + 16 <= in_dim {
-                    let q_bytes = _mm_loadu_si128(qs.as_ptr().add(q_start + i) as *const __m128i);
-                    let q_i32 = _mm512_cvtepu8_epi32(q_bytes);
-                    let q_low = _mm512_and_si512(q_i32, low_mask);
-                    let q_f32 = _mm512_cvtepi32_ps(q_low);
-                    let x = _mm512_loadu_ps(input.as_ptr().add(input_base));
-                    let dequant = _mm512_fmsub_ps(d1_vec, q_f32, dm1_vec);
-                    *acc = _mm512_fmadd_ps(dequant, x, *acc);
-                }
-                i += 16;
-            }
+            // Low nibbles: 2×16 = 32 elements, fully unrolled
+            let input_base_lo0 = input_offset + chunk_start;
+            if input_base_lo0 + 32 <= in_dim {
+                // First 16 low nibbles
+                let q0 = _mm_loadu_si128(qs_ptr.add(q_start) as *const __m128i);
+                let q0_i32 = _mm512_cvtepu8_epi32(q0);
+                let q0_low = _mm512_and_si512(q0_i32, low_mask);
+                let q0_f32 = _mm512_cvtepi32_ps(q0_low);
+                let x0 = _mm512_loadu_ps(input_ptr.add(input_base_lo0));
+                let dq0 = _mm512_fmsub_ps(d1_vec, q0_f32, dm1_vec);
+                *acc = _mm512_fmadd_ps(dq0, x0, *acc);
 
-            // Process high nibbles (32 values) in groups of 16
-            let mut i = 0;
-            while i + 16 <= 32 {
-                let input_base = input_offset + chunk_start + 32 + i;
-                if input_base + 16 <= in_dim {
-                    let q_bytes = _mm_loadu_si128(qs.as_ptr().add(q_start + i) as *const __m128i);
-                    let q_i32 = _mm512_cvtepu8_epi32(q_bytes);
-                    let q_high = _mm512_srli_epi32(q_i32, 4);
-                    let q_f32 = _mm512_cvtepi32_ps(q_high);
-                    let x = _mm512_loadu_ps(input.as_ptr().add(input_base));
-                    let dequant = _mm512_fmsub_ps(d2_vec, q_f32, dm2_vec);
-                    *acc = _mm512_fmadd_ps(dequant, x, *acc);
-                }
-                i += 16;
+                // Second 16 low nibbles
+                let q1 = _mm_loadu_si128(qs_ptr.add(q_start + 16) as *const __m128i);
+                let q1_i32 = _mm512_cvtepu8_epi32(q1);
+                let q1_low = _mm512_and_si512(q1_i32, low_mask);
+                let q1_f32 = _mm512_cvtepi32_ps(q1_low);
+                let x1 = _mm512_loadu_ps(input_ptr.add(input_base_lo0 + 16));
+                let dq1 = _mm512_fmsub_ps(d1_vec, q1_f32, dm1_vec);
+                *acc = _mm512_fmadd_ps(dq1, x1, *acc);
+
+                // High nibbles: 2×16 = 32 elements, fully unrolled
+                let input_base_hi0 = input_offset + chunk_start + 32;
+
+                // First 16 high nibbles (reuse q0 loaded above)
+                let q0_high = _mm512_srli_epi32(q0_i32, 4);
+                let q0h_f32 = _mm512_cvtepi32_ps(q0_high);
+                let xh0 = _mm512_loadu_ps(input_ptr.add(input_base_hi0));
+                let dqh0 = _mm512_fmsub_ps(d2_vec, q0h_f32, dm2_vec);
+                *acc = _mm512_fmadd_ps(dqh0, xh0, *acc);
+
+                // Second 16 high nibbles (reuse q1 loaded above)
+                let q1_high = _mm512_srli_epi32(q1_i32, 4);
+                let q1h_f32 = _mm512_cvtepi32_ps(q1_high);
+                let xh1 = _mm512_loadu_ps(input_ptr.add(input_base_hi0 + 16));
+                let dqh1 = _mm512_fmsub_ps(d2_vec, q1h_f32, dm2_vec);
+                *acc = _mm512_fmadd_ps(dqh1, xh1, *acc);
             }
         }
     }
 }
 
 /// AVX-512 horizontal sum of 16 f32 lanes.
+/// Uses avx512f-only intrinsics (no avx512dq dependency).
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx512f")]
 unsafe fn hsum_avx512(v: std::arch::x86_64::__m512) -> f32 {
     use std::arch::x86_64::*;
-    // Reduce 512→256→128→scalar
-    let hi256 = _mm512_extractf32x8_ps(v, 1);
+    // Reduce 512→256 using shuffle instead of extractf32x8 (which needs avx512dq)
     let lo256 = _mm512_castps512_ps256(v);
+    // Shift upper 256 bits down: use _mm512_shuffle_f32x4 to bring lanes 8-15 into 0-7
+    let hi_shifted = _mm512_shuffle_f32x4(v, v, 0b_01_00_11_10); // swap upper and lower 256
+    let hi256 = _mm512_castps512_ps256(hi_shifted);
     let sum256 = _mm256_add_ps(lo256, hi256);
-    // Now reduce 256→scalar using AVX2 hsum
+    // Now reduce 256→scalar
     let hi128 = _mm256_extractf128_ps(sum256, 1);
     let lo128 = _mm256_castps256_ps128(sum256);
     let sum128 = _mm_add_ps(lo128, hi128);

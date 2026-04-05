@@ -2275,6 +2275,16 @@ All Q4K sizes are compute-bound: fused dequant+dot overhead (header parsing, 6-b
 decode) limits throughput more than DRAM bandwidth. This confirms the optimization target:
 vectorize super-block header parsing, not memory prefetch.
 
+**Negative result (AVX-512 Q4K unrolling + prefetch):** Phase 4 attempted:
+- Fully unrolled inner loops (2 iterations → explicit)
+- Bounds check hoisted out of hot loop
+- Register reuse (low nibble `q_i32` reused for high nibble shift)
+- Software prefetch of next superblock (2 cache lines ahead)
+Result: **No measurable improvement** (83.4→83.8 GFLOPS, within noise). Zen 4's
+out-of-order engine already hides the FMA dependency chain and loop overhead.
+Code improvement: fixed latent `avx512dq` dependency in `hsum_avx512` (used
+`_mm512_shuffle_f32x4` instead of `_mm512_extractf32x8_ps`).
+
 **Negative result (Q4K parallel threshold):** Lowering threshold from 8M to 2M elements
 regressed attn_qkv (1536×1536, 2.4M) from 17→14 GFLOPS. Thread spawn overhead (~40µs)
 dominates when total compute is <300µs. Contract: `cgp-q4k-parallel-threshold-v1.yaml`.
