@@ -1,8 +1,9 @@
 # GPU GEMM double-buffered shared memory contract
-# Contract-first: defines target before implementation.
+# Status: EXPERIMENT COMPLETED — NEGATIVE RESULT on 32×32 tiles.
 #
-# Current: CTA WMMA at 18.4 TFLOP/s (1024, FP16→FP32), 0.38x cuBLAS.
-# Target: 24+ TFLOP/s (0.5x cuBLAS) via double-buffered shared memory.
+# Measured 2026-04-05: dbuf on 32×32 regressed 0.77-0.98x due to register
+# pressure + PTX code bloat. See cta64 contract for the POSITIVE result
+# (64×64 tiles gave +62% improvement via 2× data reuse).
 #
 # Grounding:
 #   [25] Kerr et al., "CUTLASS," 2023 — double-buffered smem tiling
@@ -25,19 +26,13 @@ hardware:
   tensor_core: "FP16 → FP32 WMMA 16×16×16"
 
 bounds:
-  # Current baseline (single-buffered CTA WMMA)
-  - size: [512, 512, 512]
-    current_us: 17.6
-    current_tflops: 15.3
-    target_tflops: 20.0
-    note: "1.3x improvement target from double-buffering"
-
+  # Measured results (NEGATIVE for 32×32 tiles)
   - size: [1024, 1024, 1024]
-    current_us: 116.7
-    current_tflops: 18.4
-    target_tflops: 24.0
-    target_vs_cublas: 0.50
-    note: "0.5x cuBLAS target (currently 0.38x)"
+    single_us: 117.3
+    dbuf_naive_us: 152.4
+    dbuf_separated_us: 155.1
+    note: "Negative: 0.77x (dbuf naive), 0.79x (separated loads)"
+    root_cause: "Register pressure + PTX 25KB vs 15KB thrashes I-cache"
 
 design:
   approach: |
@@ -54,9 +49,11 @@ falsification:
   - name: FALSIFY-GPU-DBUF-001
     description: "Double-buffered output matches single-buffered within FP16 tolerance"
     check: "max_diff(dbuf, single_buf) < 1e-2"
-  - name: FALSIFY-GPU-DBUF-002
-    description: "Double-buffered must be >= 1.2x faster than single-buffered at 1024"
+  - name: FALSIFY-GPU-DBUF-002-DISPROVEN
+    description: "Double-buffered must be >= 1.2x faster (DISPROVEN on 32×32)"
     check: "dbuf_time < single_buf_time * 0.83"
-  - name: FALSIFY-GPU-DBUF-003
-    description: "Double-buffered must achieve >= 0.45x cuBLAS at 1024"
+    status: "DISPROVEN — measured 0.77-0.79x at 1024"
+  - name: FALSIFY-GPU-DBUF-003-DISPROVEN
+    description: "Double-buffered must achieve >= 0.45x cuBLAS (DISPROVEN on 32×32)"
     check: "dbuf_tflops / cublas_tflops >= 0.45"
+    status: "DISPROVEN — see cgp-gpu-gemm-cta64 contract for POSITIVE result"
