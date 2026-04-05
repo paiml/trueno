@@ -8,6 +8,9 @@ mod scalar;
 #[cfg(target_arch = "x86_64")]
 mod avx2;
 
+#[cfg(target_arch = "x86_64")]
+mod avx512;
+
 use super::{SUPER_BLOCK_BYTES, SUPER_BLOCK_SIZE};
 
 // Re-export public API (preserves exact public surface)
@@ -58,6 +61,15 @@ pub fn matmul_q4k_f32_dispatch(
         let total_work = out_dim * in_dim;
         if total_work >= 8_000_000 {
             return matmul_q4k_f32_parallel(q4k_data, input, out_dim, in_dim);
+        }
+
+        // AVX-512: 16-wide dequant+FMA (2× throughput vs AVX2)
+        // Contract: avx512-q4k-v1.yaml (C-AVX512-Q4K-001, C-AVX512-Q4K-002)
+        if is_x86_feature_detected!("avx512f")
+            && is_x86_feature_detected!("avx512bw")
+            && is_x86_feature_detected!("fma")
+        {
+            return unsafe { avx512::matmul_q4k_f32_avx512(q4k_data, input, out_dim, in_dim) };
         }
 
         if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
@@ -124,6 +136,9 @@ fn matmul_q4k_f32_parallel(
     let row_bytes = num_blocks_per_row * SUPER_BLOCK_BYTES;
 
     let mut output = vec![0.0f32; out_dim];
+    let has_avx512 = is_x86_feature_detected!("avx512f")
+        && is_x86_feature_detected!("avx512bw")
+        && is_x86_feature_detected!("fma");
     let has_avx2 = is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma");
 
     thread::scope(|s| {
@@ -135,9 +150,21 @@ fn matmul_q4k_f32_parallel(
             let start_row = chunk_idx * chunk_size;
 
             s.spawn(move || {
-                if has_avx2 {
-                    // SAFETY: AVX2+FMA availability verified via is_x86_feature_detected!()
-                    // before thread::scope entry; has_avx2 captures that result.
+                if has_avx512 {
+                    // Contract: avx512-q4k-v1.yaml (C-AVX512-Q4K-001)
+                    unsafe {
+                        avx512::compute_chunk_q4k_avx512(
+                            q4k_ref,
+                            input_ref,
+                            chunk,
+                            start_row,
+                            out_dim,
+                            in_dim,
+                            num_blocks_per_row,
+                            row_bytes,
+                        );
+                    }
+                } else if has_avx2 {
                     unsafe {
                         avx2::compute_chunk_q4k_avx2(
                             q4k_ref,

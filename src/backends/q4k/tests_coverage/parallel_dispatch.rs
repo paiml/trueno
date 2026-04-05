@@ -247,7 +247,10 @@ fn test_q4k_parallel_dispatch_single_row() {
 
     assert_eq!(dispatch.len(), 1);
     let diff = (scalar[0] - dispatch[0]).abs();
-    let tol = scalar[0].abs() * 1e-4 + 1e-4;
+    // Tolerance accounts for FP32 reduction order differences between scalar,
+    // AVX2 (8-wide), and AVX-512 (16-wide) accumulation paths.
+    // Contract: avx512-q4k-v1.yaml allows wider tolerance for different SIMD widths.
+    let tol = scalar[0].abs() * 2e-4 + 1e-4;
     assert!(diff < tol, "scalar={}, dispatch={}, diff={}", scalar[0], dispatch[0], diff);
 }
 
