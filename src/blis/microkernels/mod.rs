@@ -22,6 +22,8 @@
 mod avx2;
 #[cfg(target_arch = "x86_64")]
 mod avx512;
+#[cfg(target_arch = "x86_64")]
+pub mod codegen;
 mod neon;
 
 // Re-export all public microkernel functions

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [".", "xtask", "trueno-gpu", "trueno-explain", "crates/cbtop", "crates/cgp", "crates/trueno-quant", "crates/trueno-sparse", "crates/trueno-fft", "crates/trueno-solve", "crates/trueno-rand", "crates/trueno-image", "crates/trueno-tensor", "trueno-cuda-edge", "trueno-ptx-debug"]
+members = [".", "xtask", "trueno-gpu", "trueno-explain", "crates/cbtop", "crates/cgp", "crates/trueno-quant", "crates/trueno-sparse", "crates/trueno-fft", "crates/trueno-solve", "crates/trueno-rand", "crates/trueno-image", "crates/trueno-tensor", "crates/trueno-gemm-codegen", "trueno-cuda-edge", "trueno-ptx-debug"]
 exclude = []
 
 # Workspace-level lints (PMAT best practices)
@@ -143,6 +143,8 @@ wasm-bindgen = { version = "0.2", optional = true }
 trueno-gpu = { version = "0.4.0", path = "trueno-gpu", optional = true }
 # PMAT-336: Provable contracts compile-time enforcement
 provable-contracts-macros = { version = "0.2", path = "../provable-contracts/crates/provable-contracts-macros" }
+# P1a: Sovereign GEMM microkernel codegen (compile-time shape specialization)
+trueno-gemm-codegen = { version = "0.1", path = "crates/trueno-gemm-codegen" }
 # Tracing/profiling support (renacer integration)
 tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"], optional = true }
