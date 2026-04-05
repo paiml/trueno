@@ -920,3 +920,177 @@ fn cta_wmma_dbuf_bench_fp16() {
     }
     eprintln!();
 }
+
+/// 64×64 CTA WMMA (16 warps) vs 32×32 CTA WMMA (4 warps) vs cuBLAS FP16.
+///
+/// PERF-CTA64-001: Measures the improvement from 2× compute-to-load ratio
+/// (32 FLOP/byte vs 16 for 32×32 tiles).
+///
+/// Run: cargo test -p trueno-gpu --features cuda --lib --release -- cta64_vs_cta32 --no-capture
+#[test]
+fn cta64_vs_cta32_vs_cublas_fp16() {
+    use crate::driver::module::CudaModule;
+    use crate::kernels::gemm::basic::tensor_core::cta64_wmma::build_cta64_wmma_fp16;
+    use crate::kernels::gemm::basic::tensor_core::cta_wmma::build_cta_wmma_fp16;
+    use crate::ptx::PtxModule;
+    use std::ffi::c_void;
+    use std::time::Instant;
+
+    let ctx = CudaContext::new(0).expect("CUDA context");
+    let stream = CudaStream::new(&ctx).expect("stream");
+    let handle = CublasHandle::new(&ctx).expect("cuBLAS handle");
+    handle.set_stream(&stream).expect("set_stream");
+
+    eprintln!();
+    eprintln!("=== CTA64 (16-warp 64x64) vs CTA32 (4-warp 32x32) vs cuBLAS — FP16 ===");
+    eprintln!(
+        "{:<8} {:>10} {:>10} {:>10} {:>10} {:>8} {:>8}",
+        "Size", "CTA32(us)", "CTA64(us)", "cuBLAS(us)", "CTA64 TF/s", "64vs32", "vs cuBL"
+    );
+    eprintln!("{}", "-".repeat(80));
+
+    for &n in &[128_usize, 256, 512, 1024] {
+        let m = n;
+        let k = n;
+        let flops = 2.0 * m as f64 * n as f64 * k as f64;
+
+        let a16 = vec![0x3C00u16; m * k];
+        let b16 = vec![0x3C00u16; k * n];
+        let c32 = vec![0.0f32; m * n];
+
+        let a_buf = GpuBuffer::from_host(&ctx, &a16).expect("A");
+        let b_buf = GpuBuffer::from_host(&ctx, &b16).expect("B");
+        let c_buf = GpuBuffer::from_host(&ctx, &c32).expect("C");
+
+        let iters = 50;
+
+        // ─── 32×32 CTA (baseline) ───
+        let kernel_32 = build_cta_wmma_fp16(m as u32, n as u32, k as u32);
+        let ptx_32 = PtxModule::new().add_kernel(kernel_32).emit();
+        let mut mod_32 = match CudaModule::from_ptx(&ctx, &ptx_32) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("{:<8} CTA32 compile failed: {e}", n);
+                continue;
+            }
+        };
+        let cfg_32 = LaunchConfig {
+            grid: (((n + 31) / 32) as u32, ((m + 31) / 32) as u32, 1),
+            block: (128, 1, 1),
+            shared_mem: 2048,
+        };
+
+        let mut a_ptr = a_buf.as_ptr();
+        let mut b_ptr = b_buf.as_ptr();
+        let mut c_ptr = c_buf.as_ptr();
+        let mut m_v = m as u32;
+        let mut n_v = n as u32;
+        let mut k_v = k as u32;
+        let mut args: Vec<*mut c_void> = vec![
+            &mut a_ptr as *mut _ as *mut c_void,
+            &mut b_ptr as *mut _ as *mut c_void,
+            &mut c_ptr as *mut _ as *mut c_void,
+            &mut m_v as *mut _ as *mut c_void,
+            &mut n_v as *mut _ as *mut c_void,
+            &mut k_v as *mut _ as *mut c_void,
+        ];
+
+        for _ in 0..5 {
+            unsafe {
+                stream.launch_kernel(&mut mod_32, "gemm_cta_wmma_fp16", &cfg_32, &mut args).ok();
+            }
+        }
+        stream.synchronize().ok();
+        let start = Instant::now();
+        for _ in 0..iters {
+            unsafe {
+                stream.launch_kernel(&mut mod_32, "gemm_cta_wmma_fp16", &cfg_32, &mut args).ok();
+            }
+        }
+        stream.synchronize().ok();
+        let cta32_us = start.elapsed().as_micros() as f64 / iters as f64;
+
+        // ─── 64×64 CTA ───
+        let kernel_64 = build_cta64_wmma_fp16(m as u32, n as u32, k as u32);
+        let ptx_64 = PtxModule::new().add_kernel(kernel_64).emit();
+        let mut mod_64 = match CudaModule::from_ptx(&ctx, &ptx_64) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("{:<8} CTA64 compile failed: {e}", n);
+                continue;
+            }
+        };
+        let cfg_64 = LaunchConfig {
+            grid: (((n + 63) / 64) as u32, ((m + 63) / 64) as u32, 1),
+            block: (512, 1, 1),
+            shared_mem: 4096,
+        };
+
+        a_ptr = a_buf.as_ptr();
+        b_ptr = b_buf.as_ptr();
+        c_ptr = c_buf.as_ptr();
+        m_v = m as u32;
+        n_v = n as u32;
+        k_v = k as u32;
+
+        for _ in 0..5 {
+            unsafe {
+                stream.launch_kernel(&mut mod_64, "gemm_cta64_wmma_fp16", &cfg_64, &mut args).ok();
+            }
+        }
+        stream.synchronize().ok();
+        let start = Instant::now();
+        for _ in 0..iters {
+            unsafe {
+                stream.launch_kernel(&mut mod_64, "gemm_cta64_wmma_fp16", &cfg_64, &mut args).ok();
+            }
+        }
+        stream.synchronize().ok();
+        let cta64_us = start.elapsed().as_micros() as f64 / iters as f64;
+        let cta64_tflops = flops / (cta64_us * 1e6);
+
+        // ─── cuBLAS reference ───
+        let c16_buf = GpuBuffer::from_host(&ctx, &vec![0u16; m * n]).expect("C16");
+        for _ in 0..5 {
+            handle
+                .gemm_f16_row_major(
+                    m as i32,
+                    n as i32,
+                    k as i32,
+                    1.0,
+                    a_buf.as_ptr(),
+                    b_buf.as_ptr(),
+                    0.0,
+                    c16_buf.as_ptr(),
+                )
+                .ok();
+        }
+        stream.synchronize().ok();
+        let start = Instant::now();
+        for _ in 0..iters {
+            handle
+                .gemm_f16_row_major(
+                    m as i32,
+                    n as i32,
+                    k as i32,
+                    1.0,
+                    a_buf.as_ptr(),
+                    b_buf.as_ptr(),
+                    0.0,
+                    c16_buf.as_ptr(),
+                )
+                .ok();
+        }
+        stream.synchronize().ok();
+        let cublas_us = start.elapsed().as_micros() as f64 / iters as f64;
+
+        let speedup_vs_32 = cta32_us / cta64_us;
+        let vs_cublas = cublas_us / cta64_us;
+
+        eprintln!(
+            "{:<8} {:>10.1} {:>10.1} {:>10.1} {:>10.1} {:>7.2}x {:>7.2}x",
+            n, cta32_us, cta64_us, cublas_us, cta64_tflops, speedup_vs_32, vs_cublas,
+        );
+    }
+    eprintln!();
+}

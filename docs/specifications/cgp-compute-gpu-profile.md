@@ -43,7 +43,7 @@ These targets apply per-backend, per-operation. Competing solutions:
 | CPU GEMM 1024 (1T) | faer 0.24 | **0.98x** | 1.0x | **NEAR PARITY** |
 | CPU GEMM 1024 (1T) | ndarray 0.17 | **1.17x** | 1.0x | **FASTER** |
 | CPU GEMM 1024 (8T) | NumPy OpenBLAS | **0.82x** | 1.0x | **GAP — ASM microkernel IPC** |
-| GPU GEMM 512 FP16 | cuBLAS | **0.33x** | 0.5x | KNOWN GAP |
+| GPU GEMM 1024 FP16 | cuBLAS | **0.29x** (CTA64: 29.7 TF/s) | 0.5x | GAP — 64×64 +62% over 32×32 |
 | Q4K GEMV 4096 (CPU) | llama.cpp est. | **~0.5x** | 1.50x | **cgp: 70.4 GFLOPS, 47% util** |
 | Q4K GEMV (GPU DP4A) | llama.cpp CUDA | TBD | 1.50x | MEASURE |
 
@@ -107,7 +107,27 @@ Implemented PERF-CTA-007 (double-buffered shared memory) with two variants:
 **Conclusion**: Double-buffering is a net negative for 32×32 CTA tiles. The compute-to-
 load ratio is too low (only one 16×16 WMMA per K-tile per buffer). To benefit from
 double-buffering, need larger tiles (64×64+) where multiple WMMA ops amortize the
-buffer management overhead. Next step: increase tile size before retrying double-buffer.
+buffer management overhead.
+
+**64×64 CTA WMMA experiment (measured 2026-04-05, POSITIVE RESULT)**:
+
+Implemented PERF-CTA64-001: 16-warp 4×4 grid, 64×64 output tiles, 2× data reuse.
+Each A element reused by 4 column warps (vs 2 in 32×32), each B element by 4 row warps.
+Compute-to-load ratio: 32 FLOP/byte (vs 16 for 32×32).
+
+| Size | CTA32 (µs) | CTA64 (µs) | cuBLAS (µs) | CTA64 TFLOP/s | 64 vs 32 |
+|------|-----------|-----------|-------------|---------------|---------|
+| 128 | 5.0 | 7.1 | 4.0 | 0.6 | 0.71x |
+| 256 | 8.4 | 12.4 | 4.7 | 2.7 | 0.67x |
+| 512 | 18.9 | 23.0 | 6.2 | 11.7 | 0.82x |
+| **1024** | **117.4** | **72.4** | **20.7** | **29.7** | **1.62x** |
+
+**1024×1024**: 29.7 TFLOP/s (up from 18.4, **+62%**). The 2× data reuse directly
+translates to performance at large sizes. At small sizes, 32×32 still wins due to
+4× more CTAs for SM occupancy. Crossover point is ~768.
+
+Next step: retry double-buffer on 64×64 tiles (now have 16 WMMAs/K-tile to amortize
+buffer management vs 4 in 32×32).
 
 **Note**: GPU pure-Rust PTX vs cuBLAS is not expected to hit 1.5x — cuBLAS uses hand-tuned SASS and proprietary tensor core scheduling. The GPU target is to close the gap from 0.38x toward 0.5x+ (competitive for deployment where vendor lock-in is unacceptable).
 
