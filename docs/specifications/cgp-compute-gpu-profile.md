@@ -63,9 +63,10 @@ These targets apply per-backend, per-operation. Competing solutions:
   large N; axpy keeps sequential B reads and c[] in L1.
 - **Parallel vecmat K-split (2026-04-05)**: Rayon parallelization along K
   dimension (each thread computes partial c, then reduce). Threshold:
-  K*N >= 16M (e.g., 4096×4096). Combined with threshold fix above:
-  - vecmat 4096×4096: 9.3 → 53.9 GFLOPS (**5.8× total improvement**)
-  - vecmat 8192×8192: 9.0 → 50.4 GFLOPS (**5.6× total improvement**)
+  K*N >= 4M (e.g., 2048×2048). Combined with threshold fix above:
+  - vecmat 2048×2048: 30.8 → 52.5 GFLOPS (**1.70× improvement**)
+  - vecmat 4096×4096: 9.3 → 53.9 GFLOPS (**5.80× total improvement**)
+  - vecmat 8192×8192: 9.0 → 50.4 GFLOPS (**5.60× total improvement**)
   Approaches DRAM multi-channel bandwidth saturation on Threadripper 7960X.
 
 Single-thread 1.5x target is **mathematically unreachable** — both libraries hit

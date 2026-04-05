@@ -254,10 +254,10 @@ impl Matrix<f32> {
         let mut result_data = vec![0.0f32; m.cols];
 
         // Parallelize along K dimension for large matrices (DRAM-bound → multi-channel).
-        // Threshold: K * N >= 16M (e.g., 4096×4096). Below this, thread overhead dominates.
+        // Threshold: K * N >= 4M (e.g., 2048×2048). Below this, thread overhead dominates.
         #[cfg(feature = "parallel")]
         {
-            const PARALLEL_THRESHOLD: usize = 16_000_000;
+            const PARALLEL_THRESHOLD: usize = 4_000_000;
             if m.rows * m.cols >= PARALLEL_THRESHOLD {
                 use rayon::prelude::*;
                 let n = m.cols;

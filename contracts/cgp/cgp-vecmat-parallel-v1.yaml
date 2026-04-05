@@ -34,8 +34,10 @@ bounds:
     current_gflops: 54.8
     note: "Below parallel threshold — single-threaded"
   - size: [2048, 2048]
-    current_gflops: 30.8
-    note: "Below parallel threshold — single-threaded"
+    before_gflops: 30.8
+    current_gflops: 52.5
+    speedup: 1.70
+    note: "Parallel enabled (threshold lowered to 4M)"
   - size: [4096, 4096]
     before_gflops: 9.3
     current_gflops: 53.9
@@ -51,7 +53,7 @@ design:
   approach: |
     1. For N > 8192: use tiled kernel (strided B but c[] in registers)
     2. For N <= 8192: use axpy kernel (sequential B reads, c[] in L1)
-    3. For K*N >= 16M: parallelize across 8 threads along K dimension
+    3. For K*N >= 4M: parallelize across 8 threads along K dimension
        - Each thread: partial_c += v[k_slice] * B[k_slice, :]
        - Reduce T partials to final c
     4. Thread cap at 8 avoids DRAM BW saturation / CCD contention
