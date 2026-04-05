@@ -2885,13 +2885,15 @@ stride. trueno unconditionally packs both A and B for every tile.
 | 6 | Broadcast-B (MR=64, NR=6) | 20-30% | **REGRESSED** (47 vs 140 GFLOPS) | **NEGATIVE** — row-major C scatter |
 | 7 | 8×48 (NR=48, KC=128) | 10-20% | **REGRESSED** (41 vs 135 GFLOPS) | **NEGATIVE** — KC too small |
 
-**Conclusion**: Zen 4's OOO engine and LLVM backend are exceptionally good at
-handling the 8×32 loop as-is. Manual K-unrolling at 18 zmm live registers causes
-spills. MC increase adds packing cost that exceeds the L2 reuse benefit at small
-MC blocks. The remaining faer gap (1.04x at 1024, 1.22x at 64) requires
-**proc-macro microkernel codegen** (P1a in Appendix E) — a sovereign implementation
-of the nano-gemm approach that generates shape-specialized code at compile time.
-No external dependencies; trueno owns the codegen.
+**Conclusion (updated 2026-04-05):** After 7 optimization attempts, the 8×32 broadcast-A
+microkernel with SIMD B-packing achieves **0.98x faer** at 1024 and **0.99x** at 512.
+The remaining 2% gap is attributable to faer's column-major C layout (broadcast-B
+avoids C scatter), which trueno cannot adopt without API-breaking layout changes.
+
+Key learnings: SIMD B-packing (+5-8%) was the highest-ROI fix. Wider NR (48) and
+taller MR (64) both regressed due to KC/scatter overhead respectively. Zen 4 OOO
+renders manual K-unrolling and MC tuning counterproductive. The 8×32 tile with
+KC=256 is optimal for row-major C on AVX-512.
 
 Source: `gemm-0.19.0` (faer's GEMM engine), `gemm-common-0.19.0`, `nano-gemm-0.2.2`.
 Analysis via `decy audit` + `pmat query` + direct source comparison.
