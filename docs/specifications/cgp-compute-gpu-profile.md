@@ -42,7 +42,7 @@ These targets apply per-backend, per-operation. Competing solutions:
 | CPU GEMM 1024 (1T) | NumPy OpenBLAS | **0.98x** | 1.0x | **AT HARDWARE PEAK** |
 | CPU GEMM 1024 (12T) | NumPy OpenBLAS | **0.71x** | 1.0x | **GAP — ASM microkernel** |
 | GPU GEMM 512 FP16 | cuBLAS | **0.33x** | 0.5x | KNOWN GAP |
-| Q4K GEMV (CPU) | llama.cpp | TBD | 1.50x | MEASURE |
+| Q4K GEMV 4096 (CPU) | llama.cpp est. | **~0.5x** | 1.50x | **GAP — needs AVX-512** |
 | Q4K GEMV (GPU DP4A) | llama.cpp CUDA | TBD | 1.50x | MEASURE |
 
 **Status (2026-04-05, post AVX-512 + phys/2 cap):**
@@ -2109,10 +2109,22 @@ Shared-B packing tested and disproven — per-thread B packing is faster.
 
 **Roofline gap analysis (2026-04-05, post AVX-512):**
 - CPU BLIS at 1024 1T: 128 GFLOPS / ~130 peak = **98.5%** — at hardware ceiling
-- CPU BLIS at 1024 (8T, capped): 495 GFLOPS / 1024 peak (8×128) = **48.3%**
-- CPU BLIS at 1024 (16T peak): 516 GFLOPS — best parallel throughput
-- GPU CTA WMMA: 11.6 TFLOP/s / 330 peak = 3.5% → larger tiles + double-buffering needed
+- CPU BLIS at 1024 (12T peak): 567 GFLOPS / 1536 peak (12×128) = **36.9%**
+- GPU CTA WMMA: 11.6 TFLOP/s / 330 peak = 3.5% → larger tiles + double-buffering
 - GPU fused K+V DP4A: 170 insn/SB vs 216 separate (21% savings per layer)
+
+**Q4K GEMV measurements (2026-04-05, `benchmark_matrix_suite`, parallel AVX2):**
+
+| Layer | Dimensions | Time | GFLOPS | BW (compressed) |
+|-------|-----------|------|--------|-----------------|
+| ffn_up/gate | 1536→8960 | 429µs | 64.2 | 18.1 GB/s |
+| ffn_down | 8960→1536 | 442µs | 62.3 | 17.5 GB/s |
+| attn_qkv | 1536→1536 | 274µs | 17.2 | 4.8 GB/s |
+| generic_4K | 4096→4096 | 459µs | 73.0 | 20.5 GB/s |
+
+Per-layer estimate for Qwen2.5-1.5B (28 layers): ~2.1ms/layer → ~17 tok/s generation.
+llama.cpp estimated 30-50 tok/s for same model on same hardware → **~0.5x** gap.
+Q4K uses AVX2 path only — adding AVX-512 support could close this gap.
 
 **Implementation status** (2026-04-05): cgp binary fully functional in `crates/cgp/` with 111 unit + 15 falsify + 29 integration = 155 tests.
 
