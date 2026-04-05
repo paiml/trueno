@@ -602,10 +602,10 @@ fn f16_to_f32(low: u32, high: u32) -> f32 {
     }
     if (exp == 31u) {
         if (mantissa == 0u) {
-            if (sign_bit == 1u) { return -1.0 / 0.0; }  // -inf
-            return 1.0 / 0.0;  // +inf
+            if (sign_bit == 1u) { return bitcast<f32>(0xFF800000u); }  // -inf
+            return bitcast<f32>(0x7F800000u);  // +inf
         }
-        return 0.0 / 0.0;  // NaN
+        return bitcast<f32>(0x7FC00000u);  // NaN
     }
     // Normal f16
     let f_exp = f32(i32(exp) - 15 + 127);
