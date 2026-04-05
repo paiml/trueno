@@ -2126,7 +2126,11 @@ Per-layer estimate for Qwen2.5-1.5B (28 layers): ~2.1ms/layer → ~17 tok/s gene
 llama.cpp estimated 30-50 tok/s for same model on same hardware → **~0.5x** gap.
 Q4K uses AVX2 path only — adding AVX-512 support could close this gap.
 
-**Implementation status** (2026-04-05): cgp binary fully functional in `crates/cgp/` with 111 unit + 15 falsify + 29 integration = 155 tests.
+**Negative result (Q4K parallel threshold):** Lowering threshold from 8M to 2M elements
+regressed attn_qkv (1536×1536, 2.4M) from 17→14 GFLOPS. Thread spawn overhead (~40µs)
+dominates when total compute is <300µs. Contract: `cgp-q4k-parallel-threshold-v1.yaml`.
+
+**Implementation status** (2026-04-05): cgp binary fully functional in `crates/cgp/` with 111 unit + 17 falsify + 29 integration = 157 tests.
 
 All 17 CLI subcommands implemented and dogfooded on RTX 4090 + Threadripper 7960X:
 
@@ -2173,7 +2177,7 @@ New in Phase 3 (PMAT-037):
 - **Performance contracts**: First contracts in `contracts/cgp/` (BLIS GEMM + roofline)
 - **Dogfooding**: All measurements regenerated via `cgp profile scaling` (see Appendix A.2)
 
-FALSIFY tests implemented (111 unit + 15 falsify + 29 integration = 155):
+FALSIFY tests implemented (111 unit + 17 falsify + 29 integration = 157):
 - FALSIFY-CGP-010/011/012: Doctor tool detection (doctor.rs + integration)
 - FALSIFY-CGP-020/021: Roofline bandwidth + ridge points (falsify.rs + analysis/roofline.rs)
 - FALSIFY-CGP-030/031/032: Regression detection + improvement detection (falsify.rs)

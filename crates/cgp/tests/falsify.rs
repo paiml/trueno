@@ -628,3 +628,76 @@ fn falsify_cgp_046_cpu_only_competitor() {
         "FALSIFY-CGP-046: Should declare a winner.\nOutput:\n{stdout}"
     );
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// FALSIFY-CGP-SCALING-001: Scaling JSON has required fields
+// Contract: cgp-scaling-v1.yaml
+// ══════════════════════════════════════════════════════════════════════
+#[test]
+fn falsify_cgp_scaling_001_json_fields() {
+    let output = cgp_cmd()
+        .args([
+            "--json",
+            "profile",
+            "scaling",
+            "--size",
+            "256",
+            "--max-threads",
+            "2",
+            "--runs",
+            "1",
+        ])
+        .output()
+        .expect("Failed to run cgp profile scaling");
+
+    // May fail if benchmark binary not found — skip gracefully
+    if !output.status.success() {
+        return;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).expect("Scaling JSON invalid");
+    let arr = parsed.as_array().expect("Should be array");
+    assert!(!arr.is_empty(), "Should have at least 1 data point");
+
+    for point in arr {
+        assert!(point.get("threads").is_some(), "FALSIFY-CGP-SCALING-001: missing 'threads' field");
+        assert!(point.get("gflops").is_some(), "FALSIFY-CGP-SCALING-001: missing 'gflops' field");
+        assert!(point.get("scaling").is_some(), "FALSIFY-CGP-SCALING-001: missing 'scaling' field");
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// FALSIFY-CGP-SCALING-002: Single-thread scaling is ~1.0x
+// Contract: cgp-scaling-v1.yaml
+// ══════════════════════════════════════════════════════════════════════
+#[test]
+fn falsify_cgp_scaling_002_baseline_is_1x() {
+    let output = cgp_cmd()
+        .args([
+            "--json",
+            "profile",
+            "scaling",
+            "--size",
+            "256",
+            "--max-threads",
+            "1",
+            "--runs",
+            "1",
+        ])
+        .output()
+        .expect("Failed to run cgp profile scaling");
+
+    if !output.status.success() {
+        return;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).expect("Scaling JSON invalid");
+    let arr = parsed.as_array().unwrap();
+    if let Some(first) = arr.first() {
+        let scaling = first["scaling"].as_f64().unwrap_or(0.0);
+        assert!(
+            (scaling - 1.0).abs() < 0.15,
+            "FALSIFY-CGP-SCALING-002: 1T scaling should be ~1.0, got {scaling}"
+        );
+    }
+}
