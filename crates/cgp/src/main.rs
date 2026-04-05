@@ -194,11 +194,14 @@ enum ProfileTarget {
     /// Profile quantized CPU kernels (Q4K/Q6K)
     Quant {
         /// Kernel name (q4k_gemv, q6k_gemv, q5k_gemv, q8_gemv, nf4_gemv)
-        #[arg(long)]
-        kernel: String,
+        #[arg(long, required_unless_present = "all")]
+        kernel: Option<String>,
         /// Dimensions (MxNxK format)
+        #[arg(long, required_unless_present = "all")]
+        size: Option<String>,
+        /// Profile all standard LLM layer sizes (ffn_up, ffn_down, attn_qkv, generic_4K)
         #[arg(long)]
-        size: String,
+        all: bool,
     },
     /// Profile scalar baseline
     Scalar {
@@ -388,7 +391,16 @@ fn dispatch_profile(target: ProfileTarget, json: bool) -> Result<()> {
             profilers::simd::profile_simd(&function, size, &arch)
         }
         ProfileTarget::Wasm { function, size } => profilers::wasm::profile_wasm(&function, size),
-        ProfileTarget::Quant { kernel, size } => profilers::quant::profile_quant(&kernel, &size),
+        ProfileTarget::Quant { kernel, size, all } => {
+            if all {
+                profilers::quant::profile_quant_all()
+            } else {
+                profilers::quant::profile_quant(
+                    kernel.as_deref().unwrap_or("q4k_gemv"),
+                    size.as_deref().unwrap_or("4096x1x4096"),
+                )
+            }
+        }
         ProfileTarget::Scalar { function, size } => {
             profilers::scalar::profile_scalar(&function, size)
         }

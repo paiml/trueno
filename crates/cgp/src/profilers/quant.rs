@@ -158,6 +158,97 @@ pub fn profile_quant(kernel_name: &str, size: &str) -> Result<()> {
     Ok(())
 }
 
+/// Standard LLM layer sizes for Q4K sweep.
+const STANDARD_LAYERS: &[(&str, u32, u32)] = &[
+    ("ffn_up/gate (1.5B-7B)", 1536, 8960),
+    ("ffn_down (1.5B-7B)", 8960, 1536),
+    ("attn_qkv (1.5B-7B)", 1536, 1536),
+    ("generic_4K", 4096, 4096),
+    ("ffn_up (13B)", 5120, 13824),
+    ("ffn_down (13B)", 13824, 5120),
+    ("attn_qkv (13B)", 5120, 5120),
+];
+
+/// Profile all standard Q4K LLM layer sizes with summary table.
+pub fn profile_quant_all() -> Result<()> {
+    println!("\n=== CGP Quant Sweep: Q4K GEMV — All Standard LLM Layers ===\n");
+
+    let binary = find_bench_binary();
+    let bench_output = binary.and_then(|b| {
+        std::process::Command::new(&b)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+    });
+
+    println!(
+        "  {:25} {:>6}x{:<6} {:>10} {:>10} {:>10} {:>10}",
+        "Layer", "M", "K", "Time (us)", "GFLOPS", "BW GB/s", "tok/s est"
+    );
+    println!("  {}", "-".repeat(85));
+
+    let mut total_time_us = 0.0;
+    let mut measured_count = 0;
+
+    for (label, out_dim, in_dim) in STANDARD_LAYERS {
+        let timing = bench_output.as_ref().and_then(|stdout| {
+            let pattern = format!("{}x{}", out_dim, in_dim);
+            for line in stdout.lines() {
+                if line.contains("Q4K GEMV") && line.contains(&pattern) {
+                    let time_us = extract_between(line, "...", " us")
+                        .and_then(|s| s.trim().parse::<f64>().ok())?;
+                    let gflops = extract_between(line, "(", " GFLOPS")
+                        .and_then(|s| s.trim().parse::<f64>().ok())?;
+                    let bw_gbps = extract_between(line, "GFLOPS, ", " GB/s")
+                        .and_then(|s| s.trim().parse::<f64>().ok())?;
+                    return Some(Q4kTiming { time_us, gflops, bw_gbps });
+                }
+            }
+            None
+        });
+
+        if let Some(t) = timing {
+            // Token estimation: ~192 GEMVs per token (Llama-7B)
+            let tok_per_sec = 1000.0 / (t.time_us * 192.0 / 1000.0);
+            println!(
+                "  {:25} {:>6}x{:<6} {:>10.1} {:>10.1} {:>10.1} {:>10.1}",
+                label, out_dim, in_dim, t.time_us, t.gflops, t.bw_gbps, tok_per_sec
+            );
+            total_time_us += t.time_us;
+            measured_count += 1;
+        } else {
+            println!(
+                "  {:25} {:>6}x{:<6} {:>10} {:>10} {:>10} {:>10}",
+                label, out_dim, in_dim, "-", "-", "-", "-"
+            );
+        }
+    }
+
+    if measured_count > 0 {
+        println!("  {}", "-".repeat(85));
+        let avg_gflops = STANDARD_LAYERS
+            .iter()
+            .take(4) // Only first 4 are benchmarked by default
+            .count();
+        println!("\n  Summary ({measured_count}/{} layers measured):", STANDARD_LAYERS.len());
+        let _ = avg_gflops;
+        let avg_time = total_time_us / measured_count as f64;
+        let composite_tok_s = 1000.0 / (avg_time * 192.0 / 1000.0);
+        println!("    Avg GEMV time: {:.1} us", avg_time);
+        println!("    Composite tok/s estimate: {:.1}", composite_tok_s);
+        println!("    Total GEMV time (measured layers): {:.1} us", total_time_us);
+    } else {
+        println!("\n  No benchmark data available.");
+        println!(
+            "  Build: cargo build --release --example benchmark_matrix_suite --features parallel"
+        );
+    }
+
+    println!();
+    Ok(())
+}
+
 /// Parsed Q4K timing from benchmark output.
 struct Q4kTiming {
     time_us: f64,
