@@ -576,43 +576,46 @@ fn read_u8(base: u32, byte_offset: u32) -> u32 {
 }
 
 // Convert f16 (stored as u16 in two bytes) to f32
+// PMAT-497 FIX: Use bitwise IEEE 754 construction (matching CPU f16_to_f32).
+// Previous version used pow(2.0, exp) which introduced rounding errors that
+// corrupted every Q4K scale factor, causing loss > random from step 1.
 fn f16_to_f32(low: u32, high: u32) -> f32 {
     let bits = low | (high << 8u);
-    let sign_bit = (bits >> 15u) & 1u;
+    let sign = (bits >> 15u) & 1u;
     let exp = (bits >> 10u) & 0x1Fu;
     let mantissa = bits & 0x3FFu;
 
+    // Sign bit in f32 position
+    var f32_bits = sign << 31u;
+
     if (exp == 0u) {
         if (mantissa == 0u) {
-            if (sign_bit == 1u) { return -0.0; }
-            return 0.0;
+            // Signed zero
+            return bitcast<f32>(f32_bits);
         }
-        // Subnormal — convert to f32
+        // Subnormal f16: normalize mantissa to find implicit leading 1
         var m = mantissa;
         var e = 0i;
         while ((m & 0x400u) == 0u) {
             m = m << 1u;
             e -= 1i;
         }
-        let f_exp = f32(127 - 15 + 1 + e);
-        let f_man = f32(m & 0x3FFu) / 1024.0;
-        var result = (1.0 + f_man) * pow(2.0, f_exp - 127.0);
-        if (sign_bit == 1u) { result = -result; }
-        return result;
+        // Remove implicit leading 1 and construct f32 bits
+        let new_exp = u32(127 - 15 + 1 + e) << 23u;
+        let new_man = (m & 0x3FFu) << 13u;
+        f32_bits = f32_bits | new_exp | new_man;
+        return bitcast<f32>(f32_bits);
     }
     if (exp == 31u) {
-        if (mantissa == 0u) {
-            if (sign_bit == 1u) { return bitcast<f32>(0xFF800000u); }  // -inf
-            return bitcast<f32>(0x7F800000u);  // +inf
-        }
-        return bitcast<f32>(0x7FC00000u);  // NaN
+        // Inf/NaN: exponent all-ones in f32
+        f32_bits = f32_bits | (0xFFu << 23u) | (mantissa << 13u);
+        return bitcast<f32>(f32_bits);
     }
-    // Normal f16
-    let f_exp = f32(i32(exp) - 15 + 127);
-    let f_man = f32(mantissa) / 1024.0;
-    var result = (1.0 + f_man) * pow(2.0, f_exp - 127.0);
-    if (sign_bit == 1u) { result = -result; }
-    return result;
+    // Normal f16: re-bias exponent from f16 (bias=15) to f32 (bias=127)
+    let new_exp = (exp - 15u + 127u) << 23u;
+    let new_man = mantissa << 13u;
+    f32_bits = f32_bits | new_exp | new_man;
+    return bitcast<f32>(f32_bits);
 }
 
 @compute @workgroup_size(256)
