@@ -156,7 +156,9 @@ impl Matrix<f32> {
         let mut result_data = vec![0.0; self.rows];
 
         // Parallel execution for very large matrices (≥4096 rows)
-        // Note: Thread overhead dominates for smaller matrices
+        // Note: Thread overhead dominates for smaller matrices.
+        // Measured 2026-04-05: threshold=2048 regressed 2048×2048 from
+        // 42 → 23 GFLOPS (thread overhead exceeded compute time).
         #[cfg(feature = "parallel")]
         {
             const PARALLEL_THRESHOLD: usize = 4096;
