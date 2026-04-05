@@ -78,9 +78,16 @@ impl Matrix<f32> {
         }
 
         // Allocate output matrix: [seq_len, embed_dim]
+        // Uninit: every element gets written by copy_from_slice below.
         let seq_len = indices.len();
         let embed_dim = self.cols;
-        let mut result = Matrix::zeros_with_backend(seq_len, embed_dim, self.backend);
+        let total = seq_len * embed_dim;
+        let mut data: Vec<f32> = Vec::with_capacity(total);
+        // SAFETY: Loop below writes every element via copy_from_slice.
+        unsafe {
+            data.set_len(total);
+        }
+        let mut result = Matrix { rows: seq_len, cols: embed_dim, data, backend: self.backend };
 
         // Copy rows from embedding table to result
         for (out_row, &idx) in indices.iter().enumerate() {
