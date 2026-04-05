@@ -1939,14 +1939,15 @@ Tested on: RTX 4090, Driver 570.207, ncu 2025.1.1.0, nsys 2025.3.2.367, perf 6.8
 | FALSIFY-CGP-060 | Profile < 30s | **PASS** | 846ms wall time (including JIT) |
 | FALSIFY-CGP-061 | Doctor < 2s | **PASS** | 72ms wall time |
 
-**Summary**: 14 tests executed, 12 PASS, 2 FIXED (arithmetic intensity and coalescing threshold corrected).
+**Summary**: 14 manual tests: 12 PASS, 2 FIXED (arithmetic intensity and coalescing threshold corrected). Plus 12 automated tests in `tests/falsify.rs` (see A.1).
 
-### Appendix A.1: FALSIFY Suite (automated, 2026-04-04)
+### Appendix A.1: FALSIFY Suite (automated, 2026-04-05)
 
-10 end-to-end falsification tests in `tests/falsify.rs`, all passed:
+12 end-to-end falsification tests in `tests/falsify.rs`, all passed:
 
 | Test ID | Claim | Result | Method |
 |---------|-------|--------|--------|
+| FALSIFY-CGP-020 | DRAM BW = 1008 GB/s | **PASS** | JSON roofline, ±5% tolerance |
 | FALSIFY-CGP-021 | Ridge = 330000/1008 = 327.4 | **PASS** | JSON roofline parse, math check |
 | FALSIFY-CGP-030 | Detect 10% regression | **PASS** | Synthetic profiles, bootstrap CI |
 | FALSIFY-CGP-031 | No false positive <2% | **PASS** | 0.9% diff → NO_CHANGE verdict |
@@ -1954,6 +1955,7 @@ Tested on: RTX 4090, Driver 570.207, ncu 2025.1.1.0, nsys 2025.3.2.367, perf 6.8
 | FALSIFY-CGP-043 | Profile binary via nsys | **PASS** | nvidia-smi as test binary |
 | FALSIFY-CGP-045 | Compete normalized table | **PASS** | sleep 0.01 vs 0.02, labels verified |
 | FALSIFY-CGP-047 | Crash handling | **PASS** | `false` binary, no cgp crash |
+| FALSIFY-CGP-060 | Profile < 30s | **PASS** | compare --backends scalar,avx2 |
 | FALSIFY-CGP-061 | Doctor < 2s | **PASS** | 107ms measured |
 | FALSIFY-CGP-062 | Diff < 100ms | **PASS** | 2ms measured (pure JSON analysis) |
 | FALSIFY-CGP-075 | Q4K = 9.44 MB | **PASS** | Compressed size in output |
@@ -1962,16 +1964,18 @@ Tested on: RTX 4090, Driver 570.207, ncu 2025.1.1.0, nsys 2025.3.2.367, perf 6.8
 
 Measured on: Threadripper 7960X (24C/48T, AVX2+FMA+AVX-512) + RTX 4090
 
-**CPU GEMM (trueno BLIS, `benchmark_matrix_suite --features parallel`):**
+**CPU GEMM (trueno BLIS, `benchmark_matrix_suite --features parallel`, 2026-04-05):**
 
 | Size | Single-Thread | GFLOPS | Parallel (8T) | GFLOPS | Per-Core Eff |
 |------|--------------|--------|----------------|--------|-------------|
-| 256 | 0.57 ms | 59.0 | 0.22 ms | 154.9 | 53% |
-| 512 | 3.75 ms | 71.6 | 0.87 ms | 309.2 | 64% |
-| 1024 | 30.14 ms | 71.3 | 4.20 ms | 511.3 | 64% |
+| 256 | 1.21 ms | 27.8 | 0.97 ms | 34.5 | 15% |
+| 512 | 3.25 ms | 82.6 | 1.69 ms | 158.5 | 18% |
+| 1024 | 20.24 ms | 106.1 | 4.64 ms | 462.9 | 52% |
 
 Per-core peak (AVX2+FMA @ 3.5GHz): 112 GFLOPS. Multi-core peak: 2688 GFLOPS.
-Best single-thread efficiency: 64%. Best parallel efficiency: 19%.
+Best single-thread efficiency: 94.7% (1024). Best 8T efficiency: 52% (1024).
+Note: 256 has low parallel efficiency because thread cap is 2 (L2 contention
+dominates at small sizes). 512 cap is 4 (see Phase 3 thread cap tuning).
 
 **Parallel scaling analysis (`cgp profile scaling --size 1024 --runs 5`, 2026-04-04):**
 
@@ -2018,10 +2022,11 @@ amortized across K iterations within each thread.
 | trueno (parallel BLIS) | 184.8 ms | 1.00x |
 | NumPy 2.x (MKL) | 388.3 ms | 2.10x |
 
-**Roofline gap analysis:**
-- CPU BLIS at 1024 (24T): 552 GFLOPS / 2688 peak = 20.5% → NUMA locality + larger tile sizes needed
-- CPU BLIS at 1024 (8T): 485 GFLOPS / 896 peak (8-core) = 54% — CCD-local efficiency is solid
+**Roofline gap analysis (2026-04-05):**
+- CPU BLIS at 1024 (8T): 489 GFLOPS / 896 peak (8-core) = 54.6% — CCD-local efficiency solid
+- CPU BLIS at 1024 (24T): 426 GFLOPS / 2688 peak = 15.9% → NUMA + cross-CCD L3 thrashing
 - GPU CTA WMMA: 11.6 TFLOP/s / 330 peak = 3.5% → larger tiles + double-buffering needed
+- GPU fused K+V DP4A: 170 insn/SB vs 216 separate (21% savings per layer)
 
 **Implementation status** (2026-04-04): cgp binary fully functional in `crates/cgp/` with 111 unit + 12 falsify + 29 integration = 152 tests.
 
