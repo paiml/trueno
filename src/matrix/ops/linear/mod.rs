@@ -250,6 +250,46 @@ impl Matrix<f32> {
         }
 
         let mut result_data = vec![0.0f32; m.cols];
+
+        // Parallelize along K dimension for large matrices (DRAM-bound → multi-channel).
+        // Threshold: K * N >= 16M (e.g., 4096×4096). Below this, thread overhead dominates.
+        #[cfg(feature = "parallel")]
+        {
+            const PARALLEL_THRESHOLD: usize = 16_000_000;
+            if m.rows * m.cols >= PARALLEL_THRESHOLD {
+                use rayon::prelude::*;
+                let n = m.cols;
+                let k = m.rows;
+                let num_threads = rayon::current_num_threads().min(8); // cap at 8 for DRAM BW
+                let k_per = (k + num_threads - 1) / num_threads;
+
+                // Each thread computes partial c for its slice of K rows
+                let partials: Vec<Vec<f32>> = (0..num_threads)
+                    .into_par_iter()
+                    .map(|t| {
+                        let k_start = t * k_per;
+                        let k_end = (k_start + k_per).min(k);
+                        if k_start >= k_end {
+                            return vec![0.0f32; n];
+                        }
+                        let mut local = vec![0.0f32; n];
+                        let v_slice = &v.as_slice()[k_start..k_end];
+                        let b_slice = &m.data[k_start * n..k_end * n];
+                        crate::blis::gemv::gemv(k_end - k_start, n, v_slice, b_slice, &mut local);
+                        local
+                    })
+                    .collect();
+
+                // Reduce partials
+                for p in &partials {
+                    for (i, &v) in p.iter().enumerate() {
+                        result_data[i] += v;
+                    }
+                }
+                return Ok(Vector::from_slice(&result_data));
+            }
+        }
+
         crate::blis::gemv::gemv(m.rows, m.cols, v.as_slice(), &m.data, &mut result_data);
         Ok(Vector::from_slice(&result_data))
     }
