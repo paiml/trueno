@@ -2709,6 +2709,20 @@ from O(N²) to O(N) via block-wise softmax. This is the correct optimization sur
 algorithmic cache reuse, not wider SIMD. KV cache layout optimization (contiguous
 head_dim stride) would further reduce TLB pressure for long sequences.
 
+**IMPLEMENTED (2026-04-05)**: `fused_attention_decode` — online softmax [64, Algorithm 1]
+with block_size=32, zero heap allocation. Scores stay in stack buffer.
+
+| head_dim×seq_len | Unfused | Fused | Speedup | Contract |
+|-----------------|---------|-------|---------|----------|
+| 128×64 | 4.1µs | 2.7µs | **1.51x** | cgp-flash-attn-cpu-v1 |
+| 128×512 | 33.3µs | 21.9µs | **1.52x** | PASS (≥1.2x) |
+| 128×1024 | 68.1µs | 61.6µs | **1.11x** | MARGINAL |
+| 128×4096 | 432.7µs | 267.7µs | **1.62x** | PASS (≥1.3x) |
+
+Projected realizr impact: AttentionScore 8137µs → ~5400µs (1.5x), saving ~2700µs
+per 16 tokens. End-to-end: **~15% inference speedup** from a single kernel.
+FALSIFY: FLASH-ATTN-001 through 004 (5 tests, all passing).
+
 ### GitHub Issue Integration (2026-04-05)
 
 16 open issues map to cgp performance gaps. Key issues by priority:

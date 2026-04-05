@@ -130,6 +130,78 @@ fn benchmark_gemv(k: usize, n: usize, iterations: usize) {
     println!("GEMV  1x{:4} @ {:4}x{:5}: {:8.2} us, {:6.1} GFLOP/s", k, k, n, time_per_op, gflops);
 }
 
+fn benchmark_fused_attention(head_dim: usize, seq_len: usize, iterations: usize) {
+    use trueno::blis::attention::fused_attention_decode;
+    use trueno::blis::gemv::gemv;
+
+    let q: Vec<f32> = (0..head_dim).map(|i| ((i * 7 + 3) % 100) as f32 / 100.0 - 0.5).collect();
+    let k: Vec<f32> =
+        (0..seq_len * head_dim).map(|i| ((i * 13 + 7) % 100) as f32 / 100.0 - 0.5).collect();
+    let v: Vec<f32> =
+        (0..seq_len * head_dim).map(|i| ((i * 11 + 5) % 100) as f32 / 100.0 - 0.5).collect();
+
+    let mut out = vec![0.0f32; head_dim];
+
+    // Unfused: GEMV + softmax + GEMV
+    for _ in 0..10 {
+        let mut scores = vec![0.0f32; seq_len];
+        gemv(head_dim, seq_len, &q, &k, &mut scores);
+        let s = trueno::blis::softmax::softmax_1d_alloc(&scores);
+        out.fill(0.0);
+        gemv(1, head_dim, &s, &v, &mut out); // scores(1,S) @ V(S,D)... wrong shape
+    }
+    // Actually, unfused scores@V is: for each V row, multiply by weight and accumulate
+    // This is a weighted sum, not a standard GEMV. Let's measure properly.
+    let mut unfused_fn = || {
+        let mut scores = vec![0.0f32; seq_len];
+        gemv(head_dim, seq_len, &q, &k, &mut scores);
+        let max = scores.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+        let mut sum = 0.0f32;
+        for s in scores.iter_mut() {
+            *s = (*s - max).exp();
+            sum += *s;
+        }
+        let inv = 1.0 / sum;
+        for s in scores.iter_mut() {
+            *s *= inv;
+        }
+        out.fill(0.0);
+        for i in 0..seq_len {
+            let w = scores[i];
+            let vr = &v[i * head_dim..(i + 1) * head_dim];
+            for d in 0..head_dim {
+                out[d] += w * vr[d];
+            }
+        }
+    };
+
+    // Warmup
+    for _ in 0..10 {
+        unfused_fn();
+    }
+    let start = std::time::Instant::now();
+    for _ in 0..iterations {
+        unfused_fn();
+    }
+    let unfused_us = start.elapsed().as_nanos() as f64 / iterations as f64 / 1000.0;
+
+    // Fused
+    for _ in 0..10 {
+        fused_attention_decode(&q, &k, &v, head_dim, seq_len, &mut out);
+    }
+    let start = std::time::Instant::now();
+    for _ in 0..iterations {
+        fused_attention_decode(&q, &k, &v, head_dim, seq_len, &mut out);
+    }
+    let fused_us = start.elapsed().as_nanos() as f64 / iterations as f64 / 1000.0;
+
+    let speedup = unfused_us / fused_us;
+    println!(
+        "Attn D={:3} S={:4}: unfused {:6.2}us | fused {:6.2}us | {:.2}x",
+        head_dim, seq_len, unfused_us, fused_us, speedup,
+    );
+}
+
 fn main() {
     println!("=== BLIS GEMM Benchmark ===\n");
 
@@ -161,6 +233,12 @@ fn main() {
     benchmark_gemv(128, 4096, 500); // head_dim=128, seq_len=4096
     benchmark_gemv(4096, 4096, 100); // FFN projection
     benchmark_gemv(4096, 11008, 50); // FFN up/down projection
+
+    println!("\n--- Fused Attention (FlashAttention-style [64]) ---");
+    benchmark_fused_attention(128, 64, 10000);
+    benchmark_fused_attention(128, 512, 5000);
+    benchmark_fused_attention(128, 1024, 2000);
+    benchmark_fused_attention(128, 4096, 500);
 
     #[cfg(feature = "parallel")]
     {

@@ -30,6 +30,7 @@
 //! - [`parallel`]: Parallel GEMM with Heijunka scheduling
 //! - [`transpose`]: Matrix transpose operations
 
+pub mod attention;
 pub mod backend_selection;
 pub mod cache_topology;
 pub mod compute;
