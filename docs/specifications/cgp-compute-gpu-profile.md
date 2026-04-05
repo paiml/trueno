@@ -39,9 +39,10 @@ These targets apply per-backend, per-operation. Competing solutions:
 
 | Operation | Competitor | Current | Target | Status |
 |-----------|-----------|---------|--------|--------|
-| CPU GEMM 1024 (1T) | NumPy OpenBLAS | **0.97x** | 1.0x | **AT HARDWARE PEAK** |
-| CPU GEMM 1024 (1T) | ndarray 0.17 | **1.14x** | 1.0x | **FASTER** |
-| CPU GEMM 1024 (16T) | NumPy OpenBLAS | **0.81x** | 1.0x | **GAP — ASM microkernel** |
+| CPU GEMM 1024 (1T) | NumPy OpenBLAS | **1.09x** | 1.0x | **FASTER** (AVX-512 vs AVX2) |
+| CPU GEMM 1024 (1T) | faer 0.24 | **0.98x** | 1.0x | **NEAR PARITY** |
+| CPU GEMM 1024 (1T) | ndarray 0.17 | **1.17x** | 1.0x | **FASTER** |
+| CPU GEMM 1024 (8T) | NumPy OpenBLAS | **0.82x** | 1.0x | **GAP — ASM microkernel IPC** |
 | GPU GEMM 512 FP16 | cuBLAS | **0.33x** | 0.5x | KNOWN GAP |
 | Q4K GEMV 4096 (CPU) | llama.cpp est. | **~0.5x** | 1.50x | **GAP — needs AVX-512** |
 | Q4K GEMV (GPU DP4A) | llama.cpp CUDA | TBD | 1.50x | MEASURE |
@@ -52,7 +53,10 @@ These targets apply per-backend, per-operation. Competing solutions:
 - MT (1024, 8T): **626 GFLOPS** (3.43ms, 4.87x scaling)
 - **vs faer 0.24**: 1024: **0.98x** (was 0.88x), 512: **0.99x** — near parity
 - vs ndarray 0.17: 1024: **1.17x faster**, 512: **1.22x faster**
+- vs NumPy/OpenBLAS (1T): **1.09x faster** (AVX-512 140 vs AVX2-Haswell 129 GFLOPS)
+- vs NumPy/OpenBLAS (8T): **0.82x** (628 vs 763 GFLOPS — ASM IPC gap)
 - SIMD B-packing: 2× zmm load/store for NR=32 panels → +5-8% gain
+- Shared-B parallel: 3rd negative result (398 vs 628 GFLOPS — L2 contention)
 
 Single-thread 1.5x target is **mathematically unreachable** — both libraries hit
 AVX-512 hardware peak (~130 GFLOPS at sustained Zen 4 clocks). The 1.5x target
@@ -2911,11 +2915,12 @@ Analysis via `decy audit` + `pmat query` + direct source comparison.
 
 **GEMM performance (Threadripper 7960X, AVX-512 8x32 microkernel)**:
 
-| Metric | trueno | faer | NumPy | ndarray | C/OpenBLAS |
-|--------|--------|------|-------|---------|------------|
-| 1T GFLOPS (1024) | **137** | 143 | 132 | 118 | 138 |
-| vs trueno | 1.00x | 1.04x | 0.96x | 0.86x | 1.01x |
-| Multi GFLOPS | **645** (8T) | — | 687 | — | 426 |
+| Metric | trueno | faer | NumPy | ndarray | nalgebra |
+|--------|--------|------|-------|---------|----------|
+| 1T GFLOPS (1024) | **140** | 142 | 129 | 119 | 115 |
+| vs trueno | 1.00x | 1.02x | 0.92x | 0.85x | 0.82x |
+| 8T GFLOPS (1024) | **628** | — | 763 | — | — |
+| 1T GFLOPS (512) | **145** | 148 | 137 | 118 | 118 |
 | cuBLAS FP32 (1024) | — | — | — | — | 43,900 |
 
 **Q4K quantized inference**: 14.6 tok/s composite (Llama-7B, 4 layer sizes).

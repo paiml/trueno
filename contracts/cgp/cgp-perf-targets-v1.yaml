@@ -6,14 +6,16 @@ version: "2.0.0"
 kernel: all_operations
 
 bounds:
-  # CPU GEMM 1024 1T vs NumPy/OpenBLAS (measured 2026-04-05)
+  # CPU GEMM 1024 1T vs NumPy/OpenBLAS (measured 2026-04-05, post SIMD B-packing)
   - operation: cpu_gemm_1024_1t
     competitor: numpy_openblas
-    trueno_gflops: 137
-    competitor_gflops: 132
-    ratio: 1.04
+    trueno_ms: 15.39
+    trueno_gflops: 140
+    competitor_ms: 16.65
+    competitor_gflops: 129
+    ratio: 1.09
     status: PASS
-    note: "Both at AVX-512 hardware peak. trueno 8x32 microkernel."
+    note: "trueno AVX-512 beats NumPy/OpenBLAS Haswell AVX2 by 9% at 1T."
 
   # CPU GEMM 1024 1T vs faer (criterion, 2026-04-05 post SIMD B-packing)
   - operation: cpu_gemm_1024_1t
@@ -35,15 +37,17 @@ bounds:
     status: PASS
 
   # CPU GEMM 1024 parallel vs NumPy/OpenBLAS (measured 2026-04-05)
-  # Updated 2026-04-05: 8T cap (was phys/2=12T). 8T peak due to CCD L3 fit.
+  # Updated: 8T cap. OpenBLAS 8T measured at 763 GFLOPS (Haswell AVX2 codegen).
   - operation: cpu_gemm_1024_parallel
     competitor: numpy_openblas
-    trueno_gflops: 626
+    trueno_gflops: 628
     trueno_threads: 8
-    competitor_gflops: 687
-    ratio: 0.91
+    competitor_gflops: 763
+    competitor_threads: 8
+    ratio: 0.82
     status: KNOWN_GAP
-    note: "8T peak (626 GFLOPS). 12T regresses to 559 due to cross-CCD L3 thrashing."
+    note: "OpenBLAS hand-tuned ASM achieves higher IPC even with AVX2 (256-bit).
+      trueno AVX-512 8T=628 vs OpenBLAS AVX2 8T=763. Gap is per-thread IPC, not width."
 
   # Q4K GEMV composite tokens/sec (measured 2026-04-05)
   - operation: q4k_gemv_composite
