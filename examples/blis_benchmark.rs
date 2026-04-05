@@ -104,6 +104,32 @@ fn compare_reference_vs_blis(n: usize) {
     );
 }
 
+fn benchmark_gemv(k: usize, n: usize, iterations: usize) {
+    use trueno::blis::gemv::gemv;
+    let a: Vec<f32> = (0..k).map(|i| ((i % 7) as f32) * 0.1).collect();
+    let b: Vec<f32> = (0..k * n).map(|i| ((i % 11) as f32) * 0.1).collect();
+    let mut c = vec![0.0f32; n];
+
+    // Warmup
+    for _ in 0..10 {
+        c.fill(0.0);
+        gemv(k, n, &a, &b, &mut c);
+    }
+
+    let start = std::time::Instant::now();
+    for _ in 0..iterations {
+        c.fill(0.0);
+        gemv(k, n, &a, &b, &mut c);
+    }
+    let elapsed = start.elapsed();
+
+    let total_flops = 2u64 * (k as u64) * (n as u64) * (iterations as u64);
+    let gflops = total_flops as f64 / elapsed.as_secs_f64() / 1e9;
+    let time_per_op = elapsed.as_nanos() as f64 / iterations as f64 / 1000.0;
+
+    println!("GEMV  1x{:4} @ {:4}x{:5}: {:8.2} us, {:6.1} GFLOP/s", k, k, n, time_per_op, gflops);
+}
+
 fn main() {
     println!("=== BLIS GEMM Benchmark ===\n");
 
@@ -128,6 +154,13 @@ fn main() {
         benchmark_bcast_b(512, 5);
         benchmark_bcast_b(1024, 2);
     }
+
+    println!("\n--- GEMV Performance (attention-critical path) ---");
+    benchmark_gemv(128, 512, 5000); // head_dim=128, seq_len=512
+    benchmark_gemv(128, 1024, 2000); // head_dim=128, seq_len=1024
+    benchmark_gemv(128, 4096, 500); // head_dim=128, seq_len=4096
+    benchmark_gemv(4096, 4096, 100); // FFN projection
+    benchmark_gemv(4096, 11008, 50); // FFN up/down projection
 
     #[cfg(feature = "parallel")]
     {

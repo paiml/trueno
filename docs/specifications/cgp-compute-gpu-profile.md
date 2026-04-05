@@ -2640,6 +2640,11 @@ Before any further optimization work, these retroactive contracts MUST be writte
   Root cause: 8 threads reading same packed_b buffer causes cross-core L2 contention.
   Per-thread independent B packing keeps data in private L1/L2 — zero contention.
   This is the third confirmation that shared-B is wrong for BLIS parallel GEMM. (2026-04-05)
+- **AVX-512 GEMV**: Slower than AVX2 at ALL sizes tested. 128×512: AVX2=74.7 vs
+  AVX-512=61.6 GFLOPS. 4096×4096: AVX2=16.3 vs AVX-512=10.2 GFLOPS.
+  Root cause: GEMV is bandwidth-bound (not compute-bound like GEMM). Zen 4 reduces
+  clock ~10-15% during 512-bit ops, and wider SIMD can't compensate since DRAM bandwidth
+  is the bottleneck. **AVX-512 should only be used for compute-bound kernels (GEMM).** (2026-04-05)
 - Shared-B packing: regressed 495→316 GFLOPS (cross-core L1/L2 cache penalty) [16]
 - Manual K-unrolling: regressed 567→400 GFLOPS (LLVM already unrolls optimally)
 - Q4K parallel threshold 8M→2M: regressed 17→14 GFLOPS (thread overhead at <300µs)
@@ -2653,6 +2658,31 @@ appears to be near the intrinsics-based ceiling. Six optimization attempts
 CPU gains require fundamentally different approaches: Marlin-style weight
 pre-packing (#239) or hand-tuned ASM [45]. The 1.5x vs llama.cpp target
 is more achievable on GPU via half-warp DP4A (#175) and CUDA graphs (#238).
+
+### Realizr Inference Profiling (2026-04-05)
+
+Per-brick breakdown from candle-apr/realizr LLM inference (16 tokens, Llama-7B-like):
+
+| Brick | Time | % | Avg µs | Count | Optimization Target |
+|-------|------|---|--------|-------|---------------------|
+| AttentionScore | 8137µs | 44.3% | 18.2 | 448 | **#1 — GEMV optimization** |
+| QkvProjection | 2563µs | 14.0% | 5.7 | 448 | Q4K GEMV (already AVX-512) |
+| RmsNorm | 1378µs | 7.5% | 1.5 | 912 | Fused kernel opportunity |
+| OutputProjection | 1317µs | 7.2% | 2.9 | 448 | Q4K GEMV |
+| DownProjection | 1292µs | 7.0% | 2.9 | 448 | Q4K GEMV |
+| RopeEmbedding | 1272µs | 6.9% | 2.8 | 448 | Low priority (small) |
+| LmHead | 1170µs | 6.4% | 73.1 | 16 | Full GEMM (dense) |
+| Residual | 1219µs | 6.7% | 1.4 | 896 | Memory-bound add |
+
+**Key finding**: AttentionScore (Q @ K_cache^T) = 44.3% of compute. This is a **GEMV** kernel
+(1×head_dim @ seq_len×head_dim). The gap vs llama.cpp (84 vs 107 µs/layer) is largely in this op.
+
+**Finding: AVX-512 GEMV is a net loss.** Tested AVX-512 tiled GEMV (NT=128, 8 ZMM accumulators,
+4-way K-unroll). Result: slower than AVX2 at all sizes (see negative results). GEMV is
+bandwidth-bound; Zen 4 AVX-512 frequency throttle (~10-15%) dominates.
+
+**Optimization path**: The attention GEMV gain must come from algorithmic improvements
+(flash-attention-style tiling, KV cache layout optimization) rather than wider SIMD.
 
 ### GitHub Issue Integration (2026-04-05)
 
