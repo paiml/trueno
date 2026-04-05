@@ -40,23 +40,24 @@ These targets apply per-backend, per-operation. Competing solutions:
 | Operation | Competitor | Current | Target | Status |
 |-----------|-----------|---------|--------|--------|
 | CPU GEMM 1024 (1T) | NumPy OpenBLAS | **0.98x** | 1.0x | **AT HARDWARE PEAK** |
-| CPU GEMM 1024 (12T) | NumPy OpenBLAS | **0.71x** | 1.0x | **GAP — ASM microkernel** |
+| CPU GEMM 1024 (16T) | NumPy OpenBLAS | **0.81x** | 1.0x | **GAP — ASM microkernel** |
 | GPU GEMM 512 FP16 | cuBLAS | **0.33x** | 0.5x | KNOWN GAP |
 | Q4K GEMV 4096 (CPU) | llama.cpp est. | **~0.5x** | 1.50x | **GAP — needs AVX-512** |
 | Q4K GEMV (GPU DP4A) | llama.cpp CUDA | TBD | 1.50x | MEASURE |
 
 **Status (2026-04-05, post AVX-512 + phys/2 cap):**
 - 1T: NumPy = 131 GFLOPS, trueno = 128 GFLOPS → **0.98x** (both at AVX-512 peak)
-- 12T: NumPy = 799 GFLOPS, trueno = 567 GFLOPS → **0.71x** (ASM microkernel gap)
-- trueno scaling: 4.5× at 12T. OpenBLAS: 6.1× at 12T.
+- 16T: NumPy = 799 GFLOPS, trueno = 650 GFLOPS → **0.81x** (ASM microkernel gap)
+- trueno scaling: 5.1× at 16T. OpenBLAS: 6.1× at 12T.
 
 Single-thread 1.5x target is **mathematically unreachable** — both libraries hit
 AVX-512 hardware peak (~130 GFLOPS at sustained Zen 4 clocks). The 1.5x target
 applies to operations where trueno has an algorithmic advantage (quantized kernels,
 fused ops). For standard GEMM, the target is **≥1.0x vs NumPy** (parity).
 
-Remaining gap is parallel scaling: OpenBLAS achieves 5.2x at 8T, trueno 3.9x.
-Root cause: per-thread B packing overhead. Fix: pack B once, share across threads.
+Remaining gap is parallel scaling: OpenBLAS achieves 6.1x at 12T, trueno 5.1x at 16T.
+Root cause: OpenBLAS hand-tuned x86 assembly microkernels [44][45] achieve higher FMA
+IPC than Rust intrinsics. Shared-B packing tested and disproven (see negative results).
 
 **Note**: GPU pure-Rust PTX vs cuBLAS is not expected to hit 1.5x — cuBLAS uses hand-tuned SASS and proprietary tensor core scheduling. The GPU target is to close the gap from 0.33x toward 0.5x+ (competitive for deployment where vendor lock-in is unacceptable).
 
@@ -2160,17 +2161,17 @@ Best single-thread efficiency: 94.7% (1024). Best 8T efficiency: 52% (1024).
 Note: 256 has low parallel efficiency because thread cap is 2 (L2 contention
 dominates at small sizes). 512 cap is 4 (see Phase 3 thread cap tuning).
 
-**Parallel scaling analysis (`cgp profile scaling --size 1024 --runs 3`, 2026-04-05, AVX-512, phys/2 cap):**
+**Parallel scaling analysis (`cgp profile scaling --size 1024 --runs 5`, 2026-04-05, AVX-512):**
 
 | Threads | 1024x1024 GFLOPS | Scaling | Notes |
 |---------|-----------------|---------|-------|
-| 1 | 127 | 1.0x | baseline (AVX-512 peak at sustained clocks) |
-| 2 | 218 | 1.7x | |
-| 4 | 387 | 3.1x | |
-| 8 | 499 | 4.0x | |
-| 12 | **567** | **4.5x** | **peak** — cap at phys/2 = 12 |
-| 16 | 538 | 4.3x | slight cross-CCD overhead |
-| 24 | 523 | 4.1x | diminishing returns |
+| 1 | 128 | 1.0x | baseline (AVX-512 peak at sustained clocks) |
+| 2 | 253 | 2.0x | near-linear |
+| 4 | 442 | 3.5x | |
+| 8 | 644 | 5.0x | |
+| 12 | 616 | 4.8x | |
+| 16 | **650** | **5.1x** | **peak** |
+| 24 | 503 | 3.9x | cross-CCD overhead dominates |
 
 **512x512 scaling (`cgp profile scaling --size 512 --runs 5`):**
 
@@ -2209,15 +2210,16 @@ amortized across K iterations within each thread.
 | Library | 1T (ms) | 1T GFLOPS | Best (ms) | Best GFLOPS | vs trueno |
 |---------|---------|-----------|-----------|-------------|-----------|
 | NumPy 2.3 (OpenBLAS) | 16.4 | 131 | 2.69 (12T) | **799** | -- |
-| trueno BLIS (AVX-512) | 16.9 | 128 | 3.79 (12T) | **567** | **0.71x** |
+| trueno BLIS (AVX-512) | 16.9 | 128 | 3.30 (16T) | **650** | **0.81x** |
 | trueno BLIS (old AVX2) | 21.5 | 100 | 6.40 (8T) | 336 | ~~0.42x~~ |
 
-**Progress** (3 optimization rounds):
+**Progress** (4 optimization rounds):
 1. AVX-512 8×16 microkernel: 1T 100→128 GFLOPS (+28%), 8T 336→495 (+47%)
 2. Thread cap phys/2: peak 495→567 GFLOPS at 12T (+15%)
 3. Shared-B attempted: REVERTED (316 GFLOPS — cross-core cache miss penalty)
+4. min-of-5 timing + wider thread sweep: peak 567→**650** at 16T (+15%, measurement improvement)
 
-**Remaining gap**: OpenBLAS 12T=6.1× scaling vs trueno 4.5×. Root cause:
+**Remaining gap**: OpenBLAS 12T=6.1× vs trueno 5.1× at 16T → **0.81x**. Root cause:
 hand-tuned x86 assembly microkernels in OpenBLAS [44][45] vs Rust intrinsics.
 Shared-B packing tested and disproven — per-thread B packing is faster [16].
 
