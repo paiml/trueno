@@ -46,12 +46,13 @@ These targets apply per-backend, per-operation. Competing solutions:
 | Q4K GEMV 4096 (CPU) | llama.cpp est. | **~0.5x** | 1.50x | **GAP — needs AVX-512** |
 | Q4K GEMV (GPU DP4A) | llama.cpp CUDA | TBD | 1.50x | MEASURE |
 
-**Status (2026-04-05, post 8×32 NR selection + dynamic cache blocking):**
-- 1T (1024): trueno 8×32 = 118-135 GFLOPS (run-to-run variance from turbo/thermal)
-- 1T (512): 133 GFLOPS, 1T (256): 118 GFLOPS, 1T (64): 115 GFLOPS
-- MT (1024, auto threads): **525 GFLOPS** (4.09ms, ~4x scaling)
-- NumPy (1T): ~131 GFLOPS ��� **0.90-1.03x** (thermal-dependent, at AVX-512 peak)
-- 8×48 codegen tested and **reverted** (KC=128 packing overhead, see negative results)
+**Status (2026-04-05, post SIMD B-packing optimization):**
+- 1T (1024): trueno 8×32 = **139-141 GFLOPS** (criterion: 15.39ms)
+- 1T (512): **145 GFLOPS** (criterion: 1.85ms), 1T (256): 119, 1T (64): 115 GFLOPS
+- MT (1024, 8T): **626 GFLOPS** (3.43ms, 4.87x scaling)
+- **vs faer 0.24**: 1024: **0.98x** (was 0.88x), 512: **0.99x** — near parity
+- vs ndarray 0.17: 1024: **1.17x faster**, 512: **1.22x faster**
+- SIMD B-packing: 2× zmm load/store for NR=32 panels → +5-8% gain
 
 Single-thread 1.5x target is **mathematically unreachable** — both libraries hit
 AVX-512 hardware peak (~130 GFLOPS at sustained Zen 4 clocks). The 1.5x target
@@ -2879,8 +2880,10 @@ stride. trueno unconditionally packs both A and B for every tile.
 | 1 | Wider microkernel (8×32, NR 16→32) | 10-30% small, 5% large | **+13% at 64, +2% at 1024** | **DONE** (commit `930f6742`) |
 | 2 | 2-way K-unrolling | 10-20% | **REGRESSED** (−2%) | **NEGATIVE** — LLVM autounroll optimal |
 | 3 | Increase MC (96→192) | 5-10% | **REGRESSED** (−4% at 128) | **NEGATIVE** — more A-pack overhead |
-| 4 | SIMD B-packing | 3-5% | Not yet tested | Pending |
+| 4 | SIMD B-packing | 3-5% | **+5-8% at 1024** (128→140 GFLOPS) | **DONE** (2026-04-05) |
 | 5 | Conditional packing | 2-3% | Not yet tested | Pending |
+| 6 | Broadcast-B (MR=64, NR=6) | 20-30% | **REGRESSED** (47 vs 140 GFLOPS) | **NEGATIVE** — row-major C scatter |
+| 7 | 8×48 (NR=48, KC=128) | 10-20% | **REGRESSED** (41 vs 135 GFLOPS) | **NEGATIVE** — KC too small |
 
 **Conclusion**: Zen 4's OOO engine and LLVM backend are exceptionally good at
 handling the 8×32 loop as-is. Manual K-unrolling at 18 zmm live registers causes

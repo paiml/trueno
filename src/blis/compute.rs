@@ -1442,6 +1442,8 @@ pub(super) fn pack_b_block_nr16(
 }
 
 /// Pack B block with generic NR for AVX-512 (NR=32 for 8×32 microkernel).
+/// For full NR=32 panels with contiguous source, uses AVX-512 vectorized copy
+/// (2 zmm loads + 2 zmm stores per K step vs 32 scalar copies).
 pub(super) fn pack_b_block_generic(
     b: &[f32],
     ldb: usize,
@@ -1452,6 +1454,15 @@ pub(super) fn pack_b_block_generic(
     nr: usize,
     packed: &mut [f32],
 ) {
+    #[cfg(target_arch = "x86_64")]
+    if nr == 32 && std::arch::is_x86_feature_detected!("avx512f") {
+        // SAFETY: AVX-512 detected, nr=32 = 2 zmm
+        unsafe {
+            pack_b_block_nr32_avx512(b, ldb, pc, jc, kc, nc, packed);
+        }
+        return;
+    }
+
     let panels = (nc + nr - 1) / nr;
     for panel in 0..panels {
         let j_start = panel * nr;
@@ -1463,6 +1474,53 @@ pub(super) fn pack_b_block_generic(
             }
             for j in nr_local..nr {
                 packed[dst_base + j] = 0.0;
+            }
+        }
+    }
+}
+
+/// AVX-512 optimized B packing for NR=32 (2 zmm per K step).
+/// Full panels: 2× _mm512_loadu_ps + 2× _mm512_storeu_ps.
+/// Edge panels: scalar fallback for partial rows.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f")]
+unsafe fn pack_b_block_nr32_avx512(
+    b: &[f32],
+    ldb: usize,
+    pc: usize,
+    jc: usize,
+    kc: usize,
+    nc: usize,
+    packed: &mut [f32],
+) {
+    use std::arch::x86_64::*;
+
+    let nr = 32;
+    let panels = (nc + nr - 1) / nr;
+    for panel in 0..panels {
+        let j_start = panel * nr;
+        let nr_local = nr.min(nc - j_start);
+
+        if nr_local == 32 {
+            // Full panel: SIMD copy — 2 zmm per K step
+            for p in 0..kc {
+                let src = b.as_ptr().add((pc + p) * ldb + jc + j_start);
+                let dst = packed.as_mut_ptr().add(panel * nr * kc + p * nr);
+                let v0 = _mm512_loadu_ps(src);
+                let v1 = _mm512_loadu_ps(src.add(16));
+                _mm512_storeu_ps(dst, v0);
+                _mm512_storeu_ps(dst.add(16), v1);
+            }
+        } else {
+            // Edge panel: scalar with zero-padding
+            for p in 0..kc {
+                let dst_base = panel * nr * kc + p * nr;
+                for j in 0..nr_local {
+                    packed[dst_base + j] = b[(pc + p) * ldb + (jc + j_start + j)];
+                }
+                for j in nr_local..nr {
+                    packed[dst_base + j] = 0.0;
+                }
             }
         }
     }

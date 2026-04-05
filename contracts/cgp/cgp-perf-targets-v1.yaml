@@ -15,23 +15,23 @@ bounds:
     status: PASS
     note: "Both at AVX-512 hardware peak. trueno 8x32 microkernel."
 
-  # CPU GEMM 1024 1T vs faer (criterion, 2026-04-05 post 8×32 fix)
+  # CPU GEMM 1024 1T vs faer (criterion, 2026-04-05 post SIMD B-packing)
   - operation: cpu_gemm_1024_1t
     competitor: faer_024
-    trueno_ms: 16.75
-    trueno_gflops: 128
-    competitor_ms: 14.91
-    competitor_gflops: 144
-    ratio: 0.89
-    status: KNOWN_GAP
-    note: "12% gap. faer 64×6 nano-gemm codegen keeps KC=256 with tall MR."
+    trueno_ms: 15.39
+    trueno_gflops: 140
+    competitor_ms: 15.11
+    competitor_gflops: 142
+    ratio: 0.98
+    status: PASS
+    note: "2% gap (was 12%). SIMD B-packing closed most of the delta."
 
-  # CPU GEMM 1024 1T vs ndarray (criterion, 2026-04-05 post 8×32 fix)
+  # CPU GEMM 1024 1T vs ndarray (criterion, 2026-04-05 post SIMD B-packing)
   - operation: cpu_gemm_1024_1t
     competitor: ndarray_017
-    trueno_ms: 16.75
-    competitor_ms: 18.12
-    ratio: 1.08
+    trueno_ms: 15.39
+    competitor_ms: 18.01
+    ratio: 1.17
     status: PASS
 
   # CPU GEMM 1024 parallel vs NumPy/OpenBLAS (measured 2026-04-05)
