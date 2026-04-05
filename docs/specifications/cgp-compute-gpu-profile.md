@@ -67,7 +67,21 @@ Remaining gap is parallel scaling: OpenBLAS achieves 6.1x at 12T, trueno 5.1x at
 Root cause: OpenBLAS hand-tuned x86 assembly microkernels [44][45] achieve higher FMA
 IPC than Rust intrinsics. Shared-B packing tested and disproven (see negative results).
 
-**Note**: GPU pure-Rust PTX vs cuBLAS is not expected to hit 1.5x — cuBLAS uses hand-tuned SASS and proprietary tensor core scheduling. The GPU target is to close the gap from 0.33x toward 0.5x+ (competitive for deployment where vendor lock-in is unacceptable).
+**GPU GEMM status (measured 2026-04-05, RTX 4090 SM 8.9)**:
+
+| Size | CTA WMMA (µs) | cuBLAS (µs) | CTA TFLOP/s | cuBLAS TFLOP/s | Ratio |
+|------|---------------|-------------|-------------|----------------|-------|
+| 128 | 4.4 | 3.2 | 1.0 | 1.3 | 0.71x |
+| 256 | 7.0 | 3.4 | 4.8 | 9.9 | 0.49x |
+| 512 | 17.6 | 6.2 | 15.3 | 43.3 | 0.35x |
+| 1024 | 116.7 | 44.0 | 18.4 | 48.9 | 0.38x |
+
+**Bottleneck analysis**: CTA WMMA at 18.4 TFLOP/s (22% of FP32 peak) is limited by
+**serialized load-compute**: the K-loop does `bar_sync → load smem → bar_sync → WMMA`
+sequentially [25]. Double-buffered shared memory [48] would overlap load and compute,
+estimated 1.3-1.5× improvement (target: 24+ TFLOP/s = 0.5x cuBLAS).
+
+**Note**: GPU pure-Rust PTX vs cuBLAS is not expected to hit 1.5x — cuBLAS uses hand-tuned SASS and proprietary tensor core scheduling. The GPU target is to close the gap from 0.38x toward 0.5x+ (competitive for deployment where vendor lock-in is unacceptable).
 
 ### What Exists Today (Fragmented)
 
