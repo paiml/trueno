@@ -2032,7 +2032,7 @@ amortized across K iterations within each thread.
 - GPU CTA WMMA: 11.6 TFLOP/s / 330 peak = 3.5% → larger tiles + double-buffering needed
 - GPU fused K+V DP4A: 170 insn/SB vs 216 separate (21% savings per layer)
 
-**Implementation status** (2026-04-04): cgp binary fully functional in `crates/cgp/` with 111 unit + 15 falsify + 29 integration = 155 tests.
+**Implementation status** (2026-04-05): cgp binary fully functional in `crates/cgp/` with 111 unit + 15 falsify + 29 integration = 155 tests.
 
 All 17 CLI subcommands implemented and dogfooded on RTX 4090 + Threadripper 7960X:
 
@@ -2081,25 +2081,77 @@ New in Phase 3 (PMAT-037):
 
 FALSIFY tests implemented (111 unit + 15 falsify + 29 integration = 155):
 - FALSIFY-CGP-010/011/012: Doctor tool detection (doctor.rs + integration)
-- FALSIFY-CGP-020/021: Roofline ridge points, all 4 precisions (analysis/roofline.rs + integration)
-- FALSIFY-CGP-030/031/032: Regression detection — bootstrap CI (analysis/regression.rs)
-- FALSIFY-CGP-040/041/042: Cross-backend comparison — CUDA>scalar, SIMD>scalar, cuBLAS>PTX (analysis/compare.rs)
+- FALSIFY-CGP-020/021: Roofline bandwidth + ridge points (falsify.rs + analysis/roofline.rs)
+- FALSIFY-CGP-030/031/032: Regression detection + improvement detection (falsify.rs)
+- FALSIFY-CGP-040/041/042: Cross-backend — CUDA>scalar, SIMD>scalar, cuBLAS>PTX (falsify.rs)
+- FALSIFY-CGP-043/045/046/047: Binary profiling, compete, CPU-only, crash handling (falsify.rs)
 - FALSIFY-CGP-050: Register spill detection via PTX analysis (analysis/explain.rs)
-- FALSIFY-CGP-062: Diff speed <100ms (analysis/diff.rs + integration)
+- FALSIFY-CGP-060/061/062: Profile speed, doctor speed, diff speed (falsify.rs)
 - FALSIFY-CGP-071: NEON graceful degradation on x86 (profilers/neon.rs + integration)
 - FALSIFY-CGP-072/073: WASM profiler with SIMD128 detection (profilers/wasm.rs + integration)
-- FALSIFY-CGP-074/075: Q4K superblock math (profilers/quant.rs + integration)
+- FALSIFY-CGP-074/075: Q4K superblock math (profilers/quant.rs + falsify.rs)
 - FALSIFY-CGP-077: Metal not available on Linux (integration test)
 - FALSIFY-CGP-079: wgpu web target fallback (profilers/wgpu_profiler.rs + integration)
-- FALSIFY-CGP-080/081/082: Parallel speedup, heijunka score (profilers/rayon_parallel.rs + integration)
-- System health: GPU temp/power/clock/VRAM via nvidia-smi (profilers/system.rs)
-- Energy efficiency: TFLOP/s per watt, joules per inference (profilers/system.rs)
-- ncu CSV parsing, nsys stats parsing, perf stat CSV parsing
-- PTX static analysis, WGSL analysis (analysis/explain.rs)
-- Full binary end-to-end: doctor, roofline, diff, compare, compete, baseline, explain, bench
+- FALSIFY-CGP-080/081/082: Parallel speedup, heijunka score (profilers/rayon_parallel.rs)
+- System health, energy, ncu/nsys/perf CSV parsing, PTX/WGSL analysis (unit tests)
+- Scaling JSON output, contract verification, baseline save/load (integration tests)
 
 **Remaining** (require target hardware, root access, or platform-specific):
+- FALSIFY-CGP-022: Kernel roofline vs ncu (needs root for ncu on this kernel)
+- FALSIFY-CGP-044: Python script profiling (needs nsys + python + torch)
+- FALSIFY-CGP-051: Warp divergence detection (needs ncu with crafted kernel)
 - FALSIFY-CGP-052: Bank conflict detection (needs ncu with real GPU kernel)
+- FALSIFY-CGP-053: Uncoalesced global access (needs ncu with strided kernel)
 - FALSIFY-CGP-070: NEON profiling on ARM host (needs aarch64 hardware)
 - FALSIFY-CGP-076: Metal native profiling (needs macOS host)
 - FALSIFY-CGP-078: WebGPU browser profiling (needs headless Chrome + CDP)
+- FALSIFY-CGP-082: Thread spawn overhead measurement (needs per-thread instrumentation)
+
+---
+
+## Appendix B: Progress Summary (2026-04-05)
+
+### What's Done (Phase 1-3)
+
+| Area | Status | Count |
+|------|--------|-------|
+| CLI subcommands | 17/18 DONE (TUI stub) | 17 working |
+| Unit tests | All passing | 111 |
+| FALSIFY tests | 15/24 automated | 15 passing |
+| Integration tests | All passing | 29 |
+| Performance contracts | 2 created | 6 pass, 0 fail |
+| Source files | Complete | 27 .rs files |
+| Spec FALSIFY IDs covered | 25/~40 total | ~63% |
+
+### Key Performance Results (cgp-driven)
+
+| Metric | Value | Source |
+|--------|-------|--------|
+| 1024 GEMM 1T | 106 GFLOPS (94.7% peak) | `cgp profile scaling` |
+| 1024 GEMM 8T | 471 GFLOPS (52.6% eff) | `cgp profile scaling` |
+| 512 GEMM 4T | 176 GFLOPS (peak) | `cgp profile scaling` |
+| cuBLAS FP16 512 | 34.7 TFLOP/s | `cgp profile compare` |
+| CTA WMMA FP16 512 | 11.6 TFLOP/s | `cgp profile compare` |
+| cgp doctor | 102ms | dogfooding |
+| cgp diff | <2ms | FALSIFY-CGP-062 |
+
+### What's Left
+
+**Phase 4 — TUI & visualization (spec section 5):**
+- `cgp tui` using presentar: roofline chart, timeline, kernel drill-down
+- Currently a stub; blocked on presentar v0.3 integration
+
+**Phase 4 — Hardware-specific FALSIFY tests (9 remaining):**
+- Requires: root access for ncu, aarch64 for NEON, macOS for Metal, Chrome for WebGPU
+- Can be automated in CI with appropriate runners
+
+**Performance gaps to close:**
+- GPU CTA WMMA at 3.5% of FP16 peak → needs larger tiles + double-buffering
+- CPU 24T efficiency at ~17% → cross-CCD NUMA work needed
+- Fused K+V kernel saves 21% insn/SB but not yet profiled end-to-end
+
+**Contracts to add (spec section 11.3 lists 22 total):**
+- 2/22 implemented (gemm-blis-cpu, roofline-model)
+- Remaining 20: ncu-wrapper, nsys-wrapper, cupti-profiler, perf-wrapper,
+  regression, muda, compare, compete, wgpu, metal, wasm, quant, rayon,
+  neon, json-export, tui, contract-verify, vram, system-health, memory
