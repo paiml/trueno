@@ -363,13 +363,14 @@ cgp doctor
   nsys:           2025.3.2.367           [OK]
   CUPTI:          available              [OK]
   perf:           6.8.12                 [OK]  (perf_event_paranoid=1)
+  valgrind:       3.18.1                 [OK]
   criterion:      0.7.x                 [OK]
   renacer:        0.10.x                [OK]
   trueno-explain: 0.2.x                 [OK]
   GPU:            RTX 4090 (SM 8.9)      [OK]
   CPU:            AMD EPYC (AVX2+FMA)    [OK]
   
-  All 11 components available. cgp is fully operational.
+  All 12 components available. cgp is fully operational.
 ```
 
 ---
@@ -916,6 +917,55 @@ pub struct RayonProfile {
 }
 ```
 
+### 4.10 Memory Safety Profiler (Valgrind)
+
+**REQUIRED** — Added after #242 SIGSEGV root cause analysis (2026-04-05).
+
+Valgrind is mandatory for profiling any code path that uses SIMD intrinsics with
+alignment-sensitive instructions (`_mm256_stream_ps`, `_mm512_stream_ps`,
+`_mm256_store_ps`, `_mm512_store_ps`). These require 32/64-byte alignment
+but `Vec<f32>` only guarantees 4-byte alignment.
+
+```rust
+/// Valgrind integration for SIMD alignment safety.
+/// Wraps `valgrind --tool=memcheck` to detect:
+/// - General Protection Faults from unaligned NT stores
+/// - Out-of-bounds reads from unguarded prefetch
+/// - Use-after-free in thread-local SIMD buffers
+pub struct ValgrindProfiler {
+    valgrind_path: PathBuf,
+}
+
+impl ValgrindProfiler {
+    /// Run binary under valgrind memcheck.
+    /// Returns exit code + error summary.
+    pub fn check(&self, binary: &Path, args: &[&str]) -> Result<ValgrindReport>;
+
+    /// Validate that all SIMD store targets are properly aligned.
+    /// Key check: NT stores (_mm256_stream_ps) require 32-byte alignment.
+    pub fn check_alignment(&self, binary: &Path) -> Result<AlignmentReport>;
+}
+```
+
+**When to run valgrind (mandatory in CI):**
+- Before any release that modifies `unsafe` SIMD code
+- After adding new `_mm256_stream_ps` / `_mm512_stream_ps` call sites
+- After modifying buffer allocation or packing routines
+- As part of `cgp contract verify --safety` gate
+
+**Lesson from #242:** The SIGSEGV had been present for weeks across multiple
+optimization sessions but was misdiagnosed as "heap corruption from test
+interaction." Valgrind identified the exact instruction (`avx2::mul` line 167,
+`_mm256_stream_ps` GPF) in seconds. **Every SIMD-heavy crate must run valgrind
+in CI.** The cost is ~10× slower tests but prevents shipping alignment UB.
+
+```bash
+# Required CI gate for trueno
+cgp doctor --check valgrind    # Verify valgrind available
+valgrind --tool=memcheck --error-exitcode=1 \
+  cargo test --lib -- --test-threads=1  # Full suite under memcheck
+```
+
 ---
 
 ## 5. Visualization (Presentar TUI)
@@ -974,6 +1024,7 @@ pub struct RayonProfile {
 | **presentar** (v0.3) | TUI framework | Interactive visualization, charts, tables |
 | **batuta** | Oracle RAG search | "Why is this kernel slow?" natural language queries |
 | **pmat** | Code quality metrics | Correlate TDG grade with performance |
+| **valgrind** (v3.18+) | Memory safety + alignment verification | **REQUIRED** — detects unaligned SIMD stores, UB in unsafe code (#242) |
 | **simular** | Deterministic RNG | Reproducible stress test profiling |
 | **criterion** (v0.7) | Rust benchmarking | Enhanced with hardware counters |
 | **provable-contracts** | Contract verification | Performance contract enforcement in CI |
@@ -1338,6 +1389,29 @@ FALSIFY-CGP-082: Must measure thread spawn overhead
   When: cgp profile parallel --function small_gemm --threads 8
   Then: thread_spawn_overhead_us reported, warns if overhead > 10% of total
   Falsified by: profiling ~100us workload on 8 threads, verifying overhead reported
+```
+
+### 8.14 Memory Safety (Valgrind)
+
+```
+FALSIFY-CGP-100: valgrind must detect unaligned NT store
+  Given: SIMD code using _mm256_stream_ps on unaligned Vec<f32> pointer
+  When: valgrind --tool=memcheck runs the test binary
+  Then: reports General Protection Fault with exact instruction address
+  Falsified by: removing alignment check, running under valgrind, verifying GPF detected
+  Evidence: #242 root cause found in <3 seconds via this exact method
+
+FALSIFY-CGP-101: cgp doctor must detect valgrind availability
+  Given: valgrind installed at /usr/bin/valgrind
+  When: cgp doctor is run
+  Then: valgrind reported as [OK] with version
+  Falsified by: renaming valgrind binary, verifying [MISSING] with install instructions
+
+FALSIFY-CGP-102: Full test suite must pass under valgrind memcheck
+  Given: trueno built in debug mode
+  When: valgrind --tool=memcheck --error-exitcode=1 cargo test --lib -- --test-threads=1
+  Then: exit code 0, ERROR SUMMARY: 0 errors
+  Falsified by: introducing an intentional unaligned store, verifying valgrind catches it
 ```
 
 ---

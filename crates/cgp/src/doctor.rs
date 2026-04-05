@@ -261,6 +261,8 @@ pub fn collect_checks() -> Vec<ToolCheck> {
             }
             check
         },
+        // Memory safety: valgrind required for SIMD alignment verification (#242)
+        check_binary("valgrind", &["--version"], parse_generic_version),
         check_binary("renacer", &["--version"], parse_generic_version),
         check_binary("trueno-explain", &["--version"], parse_generic_version),
         detect_gpu(),
