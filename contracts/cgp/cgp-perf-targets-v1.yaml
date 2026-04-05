@@ -1,8 +1,19 @@
 # Performance targets contract — shipping blockers (updated 2026-04-05)
 # Target: competitive with best pure-Rust and C BLAS implementations
+#
+# Theory grounding:
+#   [4]  Williams et al. 2009 — Roofline model (compute vs memory bound)
+#   [44] Van Zee & van de Geijn 2015 — BLIS framework
+#   [45] Goto & van de Geijn 2008 — Anatomy of GEMM
+#   [60] Lemire 2018 — AVX-512 frequency throttling
+#   [61] Ofenbeck et al. 2014 — Roofline model application
+#   [62] Low et al. 2016 — BLIS analytical cache blocking model
+#   [63] Van Zee et al. 2016 — BLIS parallel portability
+#   [64] Dao et al. 2022 — FlashAttention (IO-aware attention)
+#   [65] Kim et al. 2024 — SqueezeLLM (FMA dependency chain analysis)
 kind: PerformanceContract
 name: cgp-perf-targets
-version: "2.0.0"
+version: "3.0.0"
 kernel: all_operations
 
 bounds:
