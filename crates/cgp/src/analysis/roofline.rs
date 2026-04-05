@@ -522,7 +522,20 @@ pub fn run_roofline(
         ),
     };
 
-    if json && !empirical {
+    // JSON + empirical: output combined JSON only
+    if json && empirical && !target.starts_with("cuda") && target != "wgpu" {
+        let emp = measure_empirical(&model);
+        #[derive(Serialize)]
+        struct EmpiricalJson<'a> {
+            theoretical: &'a RooflineModel,
+            empirical: &'a EmpiricalResult,
+        }
+        let combined = EmpiricalJson { theoretical: &model, empirical: &emp };
+        println!("{}", serde_json::to_string_pretty(&combined)?);
+        return Ok(());
+    }
+
+    if json {
         let json_str = serde_json::to_string_pretty(&model)?;
         println!("{json_str}");
         return Ok(());
@@ -545,16 +558,6 @@ pub fn run_roofline(
             emp.compute_efficiency
         );
         println!("    Empirical Ridge: {:8.1} FLOP/byte", emp.measured_ridge_point);
-
-        if json {
-            #[derive(Serialize)]
-            struct EmpiricalJson<'a> {
-                theoretical: &'a RooflineModel,
-                empirical: &'a EmpiricalResult,
-            }
-            let combined = EmpiricalJson { theoretical: &model, empirical: &emp };
-            println!("\n{}", serde_json::to_string_pretty(&combined)?);
-        }
     } else if empirical {
         println!("\n  (Empirical measurement for GPU targets requires CUDA — use cgp roofline --target avx2 --empirical for CPU)");
     }

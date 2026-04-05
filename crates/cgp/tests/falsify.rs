@@ -735,6 +735,40 @@ fn falsify_cgp_empirical_010_roofline_output() {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// FALSIFY-CGP-EMPIRICAL-013: JSON empirical output has both theoretical + empirical
+// ══════════════════════════════════════════════════════════════════════
+#[test]
+fn falsify_cgp_empirical_013_json_output() {
+    let output = cgp_cmd()
+        .args(["--json", "roofline", "--target", "avx512", "--empirical"])
+        .output()
+        .expect("Failed to run cgp --json roofline --empirical");
+
+    assert!(output.status.success(), "Must succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Must be valid JSON
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("Output must be valid JSON");
+
+    // Must have both theoretical and empirical sections
+    assert!(
+        parsed.get("theoretical").is_some(),
+        "FALSIFY-CGP-EMPIRICAL-013: JSON must have 'theoretical' field.\nGot:\n{stdout}"
+    );
+    assert!(
+        parsed.get("empirical").is_some(),
+        "FALSIFY-CGP-EMPIRICAL-013: JSON must have 'empirical' field.\nGot:\n{stdout}"
+    );
+
+    // Empirical must have measured values
+    let emp = &parsed["empirical"];
+    assert!(emp.get("measured_bandwidth_bps").is_some(), "Must have measured_bandwidth_bps");
+    assert!(emp.get("measured_peak_flops").is_some(), "Must have measured_peak_flops");
+    assert!(emp.get("measured_ridge_point").is_some(), "Must have measured_ridge_point");
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // FALSIFY-CGP-EMPIRICAL-011: Empirical bandwidth must be > 0 GB/s
 // Note: when run via cargo test (debug/unoptimized), STREAM bandwidth
 // is much lower than release. Threshold is lenient; the real validation
