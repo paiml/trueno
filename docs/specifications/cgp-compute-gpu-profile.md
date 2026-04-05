@@ -2281,6 +2281,8 @@ is in microkernel efficiency at small tile sizes, not the outer blocking strateg
 3. Shared-B attempted: REVERTED (316 GFLOPS — cross-core cache miss penalty)
 4. min-of-5 timing + wider thread sweep: peak 567→**650** at 16T (+15%, measurement improvement)
 5. **8×32 microkernel** (Appendix D): NR 16→32, 16 zmm accumulators. 1T 135→**137** (+2% at 1024, +13% at 64). Closed faer gap from 8%→**4%**.
+6. **Dynamic cache blocking** (P1c): `/sys/` CPU topology detection. MC/KC/NC computed from L1D/L2/L3 at runtime. Contract: `cgp-dynamic-cache-v1.yaml`.
+7. **trueno-gemm-codegen** (P1a): Sovereign proc-macro generates shape-specialized microkernels. Validated: 8×32, 8×16, 8×48 (24 acc, 3× FMA/step). Contract: `cgp-gemm-codegen-v1.yaml`.
 
 **Remaining gap**: OpenBLAS 12T=6.1× vs trueno 5.1× at 16T → **0.81x**. Root cause:
 hand-tuned x86 assembly microkernels in OpenBLAS [44][45] vs Rust intrinsics.
