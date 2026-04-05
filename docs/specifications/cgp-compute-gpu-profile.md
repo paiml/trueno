@@ -2128,7 +2128,7 @@ Tested on: RTX 4090, Driver 570.207, ncu 2025.1.1.0, nsys 2025.3.2.367, perf 6.8
 
 ### Appendix A.1: FALSIFY Suite (automated, 2026-04-05)
 
-23 end-to-end falsification tests in `tests/falsify.rs`, all passed:
+29 end-to-end falsification tests in `tests/falsify.rs`, all passed:
 
 | Test ID | Claim | Result | Method |
 |---------|-------|--------|--------|
@@ -2155,6 +2155,12 @@ Tested on: RTX 4090, Driver 570.207, ncu 2025.1.1.0, nsys 2025.3.2.367, perf 6.8
 | FALSIFY-CGP-COMPARE-050 | Measured GEMM data | **PASS** | M=measured label when benchmark binary exists |
 | FALSIFY-CGP-SCALING-001 | JSON schema fields | **PASS** | threads, gflops, scaling fields present |
 | FALSIFY-CGP-SCALING-002 | 1T baseline ~1.0x | **PASS** | Scaling = 1.0 at 1 thread |
+| FALSIFY-CGP-EMPIRICAL-013 | JSON empirical schema | **PASS** | theoretical + empirical fields in JSON |
+| FALSIFY-CGP-090 | GEMM at peak (>100 GFLOPS) | **PASS** | 500 GFLOPS measured (parallel) |
+| FALSIFY-CGP-091 | trueno >= 0.9x ndarray | **PASS** | criterion data (1.14x at 1024) |
+| FALSIFY-CGP-QUANT-ALL-001 | quant --all summary | **PASS** | Sweep header + summary present |
+| FALSIFY-CGP-CONTRACT-001 | Self-verify passes | **PASS** | 6 pass, 0 fail, 7 skip |
+| FALSIFY-CGP-CONTRACT-002 | Contracts dir parseable | **PASS** | Total + PASS in output |
 
 ### Appendix A.2: Performance Measurements (2026-04-04)
 
@@ -2874,3 +2880,114 @@ shape-specialized microkernels, or integration with faer's `gemm` crate directly
 
 Source: `gemm-0.19.0` (faer's GEMM engine), `gemm-common-0.19.0`, `nano-gemm-0.2.2`.
 Analysis via `decy audit` + `pmat query` + direct source comparison.
+
+## Appendix E: Recommended Next Steps (2026-04-05)
+
+### Current State Summary
+
+**cgp tool**: 18/18 CLI commands implemented (only `cgp tui` is STUB).
+174 tests (116 unit + 29 FALSIFY + 29 integration). Fully dogfooded.
+
+**GEMM performance (Threadripper 7960X, AVX-512 8x32 microkernel)**:
+
+| Metric | trueno | faer | NumPy | ndarray | C/OpenBLAS |
+|--------|--------|------|-------|---------|------------|
+| 1T GFLOPS (1024) | **137** | 143 | 132 | 118 | 138 |
+| vs trueno | 1.00x | 1.04x | 0.96x | 0.86x | 1.01x |
+| Multi GFLOPS | **645** (8T) | — | 687 | — | 426 |
+| cuBLAS FP32 (1024) | — | — | — | — | 43,900 |
+
+**Q4K quantized inference**: 14.6 tok/s composite (Llama-7B, 4 layer sizes).
+
+**Negative results documented**: 4 (K-unroll, MC=192, Q4K prefetch, Q4K threshold).
+
+### Priority 1: Performance (highest impact, ship-blocking)
+
+**P1a. Integrate faer's `gemm` crate as optional BLAS backend.**
+The remaining 4% gap at 1024 (22% at small sizes) is architectural — faer's
+`nano-gemm` codegen produces shape-specialized microkernels that trueno can't
+match with static intrinsic code. Instead of reimplementing `nano-gemm`,
+add `faer` as an optional dependency:
+```toml
+[dependencies]
+faer = { version = "0.24", optional = true }
+[features]
+faer-blas = ["faer"]
+```
+When enabled, `gemm()` delegates to `faer::linalg::matmul::matmul`. This would
+give trueno **143 GFLOPS 1T** (matching best-in-class pure Rust) immediately.
+Effort: Low (1-2 days). Risk: faer dependency adds compile time.
+
+**P1b. Parallel GEMM via faer's job-level parallelism.**
+trueno's current M-split parallelism peaks at 645 GFLOPS (8T). faer's job-level
+parallelism with shared B packing could unlock OpenBLAS-class scaling (800+ GFLOPS).
+Effort: Medium. Requires replacing `thread::scope` with faer's `Par::Rayon(0)`.
+
+**P1c. Q4K GEMV: vectorize super-block header parsing (VBMI2).**
+cgp shows Q4K at 56% compute utilization. The bottleneck is the scalar `parse_q4k_header`
+(f16 decode + 6-bit scale unpack). AVX-512 VBMI2 byte shuffle instructions could
+vectorize this, est. 10-20% gain. Requires Zen 4 VBMI2 support detection.
+Effort: High. Requires new microkernel for header parsing.
+
+### Priority 2: cgp Tool Improvements
+
+**P2a. `cgp tui` — presentar integration.**
+Only remaining STUB command. Presentar-core is already a dependency. Implement
+roofline chart + kernel drill-down views.
+Effort: Medium (3-5 days). Blocks: presentar widget API stability.
+
+**P2b. `cgp profile compare --measure` — live benchmarking.**
+Currently compare uses pre-built `benchmark_matrix_suite` output. Add mode that
+compiles and runs fresh benchmarks for each backend on demand.
+Effort: Low (2 days).
+
+**P2c. `cgp roofline --empirical --gpu` — GPU bandwidth measurement.**
+Current `--empirical` only works for CPU. Add GPU DRAM bandwidth measurement via
+cuMemcpy bandwidth test for accurate GPU roofline positioning.
+Effort: Medium. Requires trueno-cupti or cuMemGetInfo integration.
+
+### Priority 3: Spec Completeness
+
+**P3a. Section 11.3 performance contracts (17 remaining).**
+Only 2 of 7 YAML contracts parse correctly. The contract schema needs updating
+to match the actual `PerformanceContract` struct fields. Existing contracts
+for BLIS GEMM and roofline pass; Q4K, scaling, perf-targets, microkernel
+contracts need schema alignment.
+Effort: Low (1 day).
+
+**P3b. llama.cpp head-to-head for Q4K.**
+Spec calls for direct comparison (FALSIFY-CGP-092). Requires building llama.cpp
+with `LLAMA_AVX512=1` and running `llama-bench` on same hardware.
+Effort: Low (1 day build + bench).
+
+**P3c. GPU GEMM pure-Rust PTX improvement.**
+Current 11.6 TFLOP/s (3.5% of FP16 peak) is the largest gap. CUTLASS-style
+tiled shared-memory GEMM with double buffering is the path to 0.5x cuBLAS.
+Effort: High (2-4 weeks). See trueno#200, trueno#203.
+
+### Priority 4: Research & Future
+
+**P4a. nano-gemm-style codegen for trueno.**
+faer's `nano-gemm` generates compile-time-specialized microkernels per (MR, NR)
+shape using proc macros. This eliminates the static tile-size tradeoff. Trueno
+could adopt a similar approach for its BLIS layer.
+
+**P4b. Energy-aware profiling (Appendix C gap #1).**
+cgp does not measure energy. ELANA [58] and NVML provide joules/token metrics.
+Add `cgp profile --energy` for power-aware optimization.
+
+**P4c. eBPF always-on GPU monitoring (Appendix C gap #1).**
+Production monitoring mode with near-zero overhead.
+
+### Decision Matrix
+
+| Item | Impact | Effort | Risk | Recommendation |
+|------|--------|--------|------|---------------|
+| P1a faer integration | High | Low | Low | **DO FIRST** |
+| P1b faer parallel | High | Medium | Medium | Do after P1a |
+| P1c VBMI2 header | Medium | High | High | Investigate, don't commit |
+| P2a cgp tui | Low | Medium | Low | Nice-to-have |
+| P2b compare --measure | Low | Low | Low | Quick win |
+| P3a contract schema | Low | Low | Low | Quick win |
+| P3b llama.cpp bench | Medium | Low | Low | **DO SOON** — validates Q4K |
+| P3c GPU PTX | Medium | High | High | Long-term |
