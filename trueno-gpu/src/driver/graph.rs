@@ -70,6 +70,59 @@ impl CudaGraph {
         self.graph
     }
 
+    /// trueno#243: Add a kernel launch node to the graph (manual construction).
+    ///
+    /// Bypasses stream capture entirely — works even when `cuStreamBeginCapture`
+    /// triggers driver bug code 901 on 570.207.
+    ///
+    /// # Arguments
+    /// * `func` - CUDA function handle from `CudaModule::get_function()`
+    /// * `grid` - Grid dimensions (blocks_x, blocks_y, blocks_z)
+    /// * `block` - Block dimensions (threads_x, threads_y, threads_z)
+    /// * `shared_mem` - Dynamic shared memory bytes
+    /// * `args` - Kernel argument pointers
+    /// * `deps` - Graph nodes this node depends on (empty for first node)
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_kernel_node(
+        &mut self,
+        func: super::sys::CUfunction,
+        grid: (u32, u32, u32),
+        block: (u32, u32, u32),
+        shared_mem: u32,
+        args: &mut [*mut std::ffi::c_void],
+        deps: &[super::sys::CUgraphNode],
+    ) -> Result<super::sys::CUgraphNode, GpuError> {
+        let driver = get_driver()?;
+
+        let params = super::sys::CudaKernelNodeParams {
+            func,
+            grid_dim_x: grid.0,
+            grid_dim_y: grid.1,
+            grid_dim_z: grid.2,
+            block_dim_x: block.0,
+            block_dim_y: block.1,
+            block_dim_z: block.2,
+            shared_mem_bytes: shared_mem,
+            kernel_params: args.as_mut_ptr(),
+            extra: ptr::null_mut(),
+        };
+
+        let mut node: super::sys::CUgraphNode = ptr::null_mut();
+        let result = unsafe {
+            (driver.cuGraphAddKernelNode)(
+                &mut node,
+                self.graph,
+                if deps.is_empty() { ptr::null() } else { deps.as_ptr() },
+                deps.len(),
+                &params,
+            )
+        };
+        CudaDriver::check(result)
+            .map_err(|e| GpuError::GraphCreate(format!("add_kernel_node: {e}")))?;
+
+        Ok(node)
+    }
+
     /// Instantiate the graph for execution
     ///
     /// Creates an executable graph instance that can be launched on streams.

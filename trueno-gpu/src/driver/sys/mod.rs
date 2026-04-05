@@ -77,6 +77,28 @@ pub const CU_GRAPH_EXEC_UPDATE_ERROR: CUgraphExecUpdateResult = 1;
 /// CUDA linker state handle (opaque pointer) — for PTX→cubin compilation
 pub type CUlinkState = *mut c_void;
 
+/// trueno#243: CUDA_KERNEL_NODE_PARAMS for manual graph construction.
+/// Matches CUDA driver API struct layout.
+#[repr(C)]
+pub struct CudaKernelNodeParams {
+    /// Kernel function handle
+    pub func: CUfunction,
+    /// Grid dimensions (x, y, z)
+    pub grid_dim_x: c_uint,
+    pub grid_dim_y: c_uint,
+    pub grid_dim_z: c_uint,
+    /// Block dimensions (x, y, z)
+    pub block_dim_x: c_uint,
+    pub block_dim_y: c_uint,
+    pub block_dim_z: c_uint,
+    /// Dynamic shared memory size in bytes
+    pub shared_mem_bytes: c_uint,
+    /// Kernel parameters (array of pointers to argument values)
+    pub kernel_params: *mut *mut c_void,
+    /// Extra options (must be null for kernel_params path)
+    pub extra: *mut *mut c_void,
+}
+
 // ============================================================================
 // CUDA Error Codes (subset we handle)
 // ============================================================================
@@ -323,6 +345,14 @@ pub struct CudaDriver {
     pub cuGraphExecDestroy: unsafe extern "C" fn(exec: CUgraphExec) -> CUresult,
     /// cuGraphLaunch - Launch graph on stream
     pub cuGraphLaunch: unsafe extern "C" fn(exec: CUgraphExec, stream: CUstream) -> CUresult,
+    /// trueno#243: cuGraphAddKernelNode — add kernel to graph (manual construction)
+    pub cuGraphAddKernelNode: unsafe extern "C" fn(
+        node: *mut CUgraphNode,
+        graph: CUgraph,
+        deps: *const CUgraphNode,
+        num_deps: usize,
+        params: *const CudaKernelNodeParams,
+    ) -> CUresult,
     /// cuGraphExecUpdate - Update graph executable in-place (PMAT-291)
     /// Avoids recapture when only kernel arguments change (same topology).
     /// CUDA 11 API: returns error node + result enum.
@@ -533,6 +563,13 @@ mod loading {
                     *mut CUgraphNode,
                     *mut CUgraphExecUpdateResult,
                 ) -> CUresult;
+                type FnGraphAddKernelNode = unsafe extern "C" fn(
+                    *mut CUgraphNode,
+                    CUgraph,
+                    *const CUgraphNode,
+                    usize,
+                    *const CudaKernelNodeParams,
+                ) -> CUresult;
                 type FnStreamBeginCapture = unsafe extern "C" fn(CUstream, c_uint) -> CUresult;
                 type FnStreamEndCapture = unsafe extern "C" fn(CUstream, *mut CUgraph) -> CUresult;
                 // Event types (PMAT-283)
@@ -618,6 +655,7 @@ mod loading {
                     cuGraphExecDestroy: load_sym!(cuGraphExecDestroy, FnGraphExecDestroy),
                     cuGraphLaunch: load_sym!(cuGraphLaunch, FnGraphLaunch),
                     cuGraphExecUpdate: load_sym!(cuGraphExecUpdate, FnGraphExecUpdate),
+                    cuGraphAddKernelNode: load_sym!(cuGraphAddKernelNode, FnGraphAddKernelNode),
                     cuStreamBeginCapture: load_sym!(cuStreamBeginCapture, FnStreamBeginCapture),
                     cuStreamEndCapture: load_sym!(cuStreamEndCapture, FnStreamEndCapture),
                     // Event functions (PMAT-283)
