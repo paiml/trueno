@@ -50,7 +50,7 @@ These targets apply per-backend, per-operation. Competing solutions:
 **Status (2026-04-05, post SIMD B-packing optimization):**
 - 1T (1024): trueno 8×32 = **139-141 GFLOPS** (criterion: 15.39ms)
 - 1T (512): **145 GFLOPS** (criterion: 1.85ms), 1T (256): 119, 1T (64): 115 GFLOPS
-- MT (1024, 8T): **626 GFLOPS** (3.43ms, 4.87x scaling)
+- MT (1024, 8T): **616 GFLOPS** (3.49ms, 4.7x scaling), peak **655 GFLOPS at 12T** (5.0x)
 - **vs faer 0.24**: 1024: **0.98x** (was 0.88x), 512: **0.99x** — near parity
 - vs ndarray 0.17: 1024: **1.17x faster**, 512: **1.22x faster**
 - vs NumPy/OpenBLAS (1T): **1.09x faster** (AVX-512 140 vs AVX2-Haswell 129 GFLOPS)
@@ -63,7 +63,7 @@ AVX-512 hardware peak (~130 GFLOPS at sustained Zen 4 clocks). The 1.5x target
 applies to operations where trueno has an algorithmic advantage (quantized kernels,
 fused ops). For standard GEMM, the target is **≥1.0x vs NumPy** (parity).
 
-Remaining gap is parallel scaling: OpenBLAS achieves 6.1x at 12T, trueno 5.1x at 16T.
+Remaining gap is parallel scaling: OpenBLAS achieves 6.1x at 12T, trueno 5.0x at 12T.
 Root cause: OpenBLAS hand-tuned x86 assembly microkernels [44][45] achieve higher FMA
 IPC than Rust intrinsics. Shared-B packing tested and disproven (see negative results).
 
