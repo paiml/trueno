@@ -50,9 +50,11 @@ pub fn matmul_q4k_f32_dispatch(
 
     #[cfg(target_arch = "x86_64")]
     {
-        // For large matmuls (total work >= ~8M ops), use parallel execution
-        // This catches FFN layers (8960x1536) and lm_head (151936x1536)
-        // Also catches ffn_down (1536x8960) where out_dim is small but in_dim is large
+        // For large Q4K matmuls (total work >= ~8M elements), use parallel execution.
+        // This catches FFN layers (8960×1536 = 13.7M) and lm_head (151936×1536).
+        // Threshold tested at 2M (2026-04-05) but REGRESSED: 1536×1536 went from
+        // 17→14 GFLOPS because parallel overhead (~40µs) dominates at 277µs total.
+        // Contract: cgp-q4k-parallel-threshold-v1.yaml documents negative result.
         let total_work = out_dim * in_dim;
         if total_work >= 8_000_000 {
             return matmul_q4k_f32_parallel(q4k_data, input, out_dim, in_dim);
