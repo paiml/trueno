@@ -26,6 +26,27 @@
 
 > **Hypothesis**: A unified profiler that correlates CPU scalar, SIMD, wgpu, and CUDA metrics in a single view — with automatic roofline generation, regression detection, and provable performance contracts — will reduce kernel optimization time by 5-10x compared to using nsys/ncu/perf/criterion independently.
 
+### Performance Targets (Mandatory)
+
+> **Minimum**: trueno must be **≥1.5x faster** than the best competing pure-Rust or Python/NumPy solution for every operation it claims to optimize. Any result below 1.5x is a **shipping blocker**.
+>
+> **Stretch goal**: **≥2.0x faster** than the best competing solution. This is the target for v1.0 release quality.
+
+These targets apply per-backend, per-operation. Competing solutions:
+- **CPU GEMM**: NumPy (MKL), ndarray (BLIS/OpenBLAS), faer, nalgebra
+- **GPU GEMM**: cuBLAS (vendor-optimized), CUTLASS (NVIDIA open-source)
+- **Quantized inference**: llama.cpp (GGML), vLLM, TensorRT-LLM
+
+| Operation | Competitor | Current | Target (1.5x) | Stretch (2x) | Status |
+|-----------|-----------|---------|---------------|-------------|--------|
+| CPU GEMM 1024 (parallel) | NumPy MKL | **2.10x** | 1.50x | 2.00x | **PASS** |
+| CPU GEMM 1024 (1T) | ndarray BLIS | TBD | 1.50x | 2.00x | MEASURE |
+| GPU GEMM 512 FP16 | cuBLAS | **0.33x** | N/A | N/A | KNOWN GAP |
+| Q4K GEMV (CPU) | llama.cpp | TBD | 1.50x | 2.00x | MEASURE |
+| Q4K GEMV (GPU DP4A) | llama.cpp CUDA | TBD | 1.50x | 2.00x | MEASURE |
+
+**Note**: GPU pure-Rust PTX vs cuBLAS is not expected to hit 1.5x — cuBLAS uses hand-tuned SASS and proprietary tensor core scheduling. The GPU target is to close the gap from 0.33x toward 0.5x+ (competitive for deployment where vendor lock-in is unacceptable).
+
 ### What Exists Today (Fragmented)
 
 | Tool | Domain | Limitation |
@@ -1087,6 +1108,37 @@ FALSIFY-CGP-042: cuBLAS must be faster than pure-Rust PTX for large GEMM
   Falsified by: measuring both at 4096, comparing TFLOP/s
 ```
 
+### 8.4b Performance Targets (Shipping Blockers)
+
+```
+FALSIFY-CGP-090: CPU GEMM must be >= 1.5x faster than NumPy MKL
+  Given: 1024x1024 GEMM, trueno parallel BLIS vs NumPy (MKL backend)
+  When: cgp compete gemm --ours trueno --theirs numpy --size 1024
+  Then: trueno time <= numpy_time / 1.5
+  Current: 2.10x (PASS). Stretch: 2.0x (PASS).
+  Falsified by: running both on same hardware, comparing wall-clock
+
+FALSIFY-CGP-091: CPU GEMM must be >= 1.5x faster than ndarray
+  Given: 1024x1024 GEMM, trueno vs ndarray (BLIS/OpenBLAS backend)
+  When: cgp compete gemm --ours trueno --theirs ndarray --size 1024
+  Then: trueno time <= ndarray_time / 1.5
+  Current: TBD (MEASURE)
+  Falsified by: building ndarray bench, comparing wall-clock
+
+FALSIFY-CGP-092: Q4K GEMV must be >= 1.5x faster than llama.cpp CPU
+  Given: Q4K dequant+GEMV at 4096x4096, trueno vs llama.cpp (GGML)
+  When: cgp compete q4k --ours trueno --theirs llamacpp --size 4096
+  Then: trueno tokens/sec >= llamacpp_tokens_sec * 1.5
+  Current: TBD (MEASURE)
+  Falsified by: running both on same CPU, comparing throughput
+
+FALSIFY-CGP-093: No operation may regress below 1.5x vs competitor
+  Given: any trueno operation that previously passed 1.5x target
+  When: cgp contract verify --contracts-dir contracts/cgp/ --fail-on-regression
+  Then: all operations maintain >= 1.5x advantage
+  Falsified by: running contract verify after each optimization commit
+```
+
 ### 8.5 Competitor Profiling
 
 ```
@@ -1729,6 +1781,7 @@ Every task in the implementation plan requires a contract FIRST:
 | `cgp-vram-v1.yaml` | GPU VRAM tracking | cuMemGetInfo correctness, peak tracking, fragmentation |
 | `cgp-system-health-v1.yaml` | System health | NVML temp/power/clock, thermal throttle detection |
 | `cgp-memory-v1.yaml` | CPU memory/swap/IO | /proc parse, dhat integration, swap red flag |
+| `cgp-perf-targets-v1.yaml` | **Performance targets** | **≥1.5x vs competitors (min), ≥2.0x (stretch)** |
 
 ### 11.4 Contract Template
 
@@ -2021,10 +2074,10 @@ amortized across K iterations within each thread.
 
 **Head-to-Head (cgp compete, full benchmark suite):**
 
-| Library | Time | vs Best |
-|---------|------|---------|
-| trueno (parallel BLIS) | 184.8 ms | 1.00x |
-| NumPy 2.x (MKL) | 388.3 ms | 2.10x |
+| Library | Time | vs Best | vs 1.5x Target | vs 2.0x Stretch |
+|---------|------|---------|----------------|-----------------|
+| trueno (parallel BLIS) | 184.8 ms | **1.00x** | -- | -- |
+| NumPy 2.x (MKL) | 388.3 ms | 2.10x | **PASS** (>1.5x) | **PASS** (>2.0x) |
 
 **Roofline gap analysis (2026-04-05):**
 - CPU BLIS at 1024 (8T, capped): 471 GFLOPS / 896 peak (8-core) = 52.6% — CCD-local
@@ -2145,10 +2198,15 @@ FALSIFY tests implemented (111 unit + 15 falsify + 29 integration = 155):
 - Requires: root access for ncu, aarch64 for NEON, macOS for Metal, Chrome for WebGPU
 - Can be automated in CI with appropriate runners
 
-**Performance gaps to close:**
-- GPU CTA WMMA at 3.5% of FP16 peak → needs larger tiles + double-buffering
-- CPU 24T efficiency at ~17% → cross-CCD NUMA work needed
-- Fused K+V kernel saves 21% insn/SB but not yet profiled end-to-end
+**Performance gaps to close (vs 1.5x minimum / 2.0x stretch):**
+
+| Gap | Current | 1.5x Target | Action |
+|-----|---------|-------------|--------|
+| CPU GEMM vs NumPy | **2.10x** | **PASS** | Maintain; profile ndarray/faer |
+| CPU Q4K vs llama.cpp | TBD | 1.50x | Benchmark with `cgp compete` |
+| GPU CTA WMMA vs cuBLAS | 0.33x | N/A (known) | Close to 0.5x: larger tiles + double-buffering |
+| GPU DP4A Q4K vs llama.cpp CUDA | TBD | 1.50x | Profile fused K+V end-to-end |
+| CPU 24T parallel eff | 17% | 25%+ | NUMA-aware partitioning |
 
 **Contracts to add (spec section 11.3 lists 22 total):**
 - 2/22 implemented (gemm-blis-cpu, roofline-model)

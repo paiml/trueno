@@ -1,0 +1,66 @@
+# Performance targets contract — shipping blockers
+# Minimum: >=1.5x vs best competing solution per operation
+# Stretch: >=2.0x vs best competing solution
+kind: PerformanceContract
+name: cgp-perf-targets
+version: "1.0.0"
+kernel: all_operations
+
+performance_targets:
+  minimum_speedup: 1.5
+  stretch_speedup: 2.0
+
+bounds:
+  # CPU GEMM 1024 vs NumPy MKL (current: 2.10x — PASS both)
+  - operation: cpu_gemm_1024_parallel
+    competitor: numpy_mkl
+    min_speedup: 1.5
+    stretch_speedup: 2.0
+    current_speedup: 2.10
+    status: PASS
+
+  # CPU GEMM 1024 vs ndarray BLIS (TBD — MEASURE)
+  - operation: cpu_gemm_1024_parallel
+    competitor: ndarray_blis
+    min_speedup: 1.5
+    stretch_speedup: 2.0
+    current_speedup: null
+    status: MEASURE
+
+  # Q4K GEMV CPU vs llama.cpp (TBD — MEASURE)
+  - operation: q4k_gemv_cpu
+    competitor: llamacpp_ggml
+    min_speedup: 1.5
+    stretch_speedup: 2.0
+    current_speedup: null
+    status: MEASURE
+
+  # Q4K GEMV GPU DP4A vs llama.cpp CUDA (TBD — MEASURE)
+  - operation: q4k_gemv_gpu_dp4a
+    competitor: llamacpp_cuda
+    min_speedup: 1.5
+    stretch_speedup: 2.0
+    current_speedup: null
+    status: MEASURE
+
+  # GPU FP16 GEMM — not expected to beat cuBLAS
+  - operation: gpu_gemm_fp16_cta_wmma
+    competitor: cublas
+    min_speedup: null       # cuBLAS uses proprietary SASS — not a fair target
+    current_ratio: 0.33     # 11.6 / 34.7 TFLOP/s
+    goal_ratio: 0.50        # Close the gap, not beat vendor code
+    status: KNOWN_GAP
+
+falsification:
+  - name: FALSIFY-CGP-090
+    description: "CPU GEMM must be >= 1.5x NumPy MKL"
+    check: "cpu_gemm_speedup_vs_numpy >= 1.5"
+  - name: FALSIFY-CGP-091
+    description: "CPU GEMM must be >= 1.5x ndarray BLIS"
+    check: "cpu_gemm_speedup_vs_ndarray >= 1.5"
+  - name: FALSIFY-CGP-092
+    description: "Q4K GEMV must be >= 1.5x llama.cpp"
+    check: "q4k_gemv_speedup_vs_llamacpp >= 1.5"
+  - name: FALSIFY-CGP-093
+    description: "No operation may regress below 1.5x vs competitor"
+    check: "all_operations_above_1_5x"
