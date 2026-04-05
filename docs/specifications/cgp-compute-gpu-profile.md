@@ -126,8 +126,21 @@ Compute-to-load ratio: 32 FLOP/byte (vs 16 for 32×32).
 translates to performance at large sizes. At small sizes, 32×32 still wins due to
 4× more CTAs for SM occupancy. Crossover point is ~768.
 
-Next step: retry double-buffer on 64×64 tiles (now have 16 WMMAs/K-tile to amortize
-buffer management vs 4 in 32×32).
+**64×64 double-buffer experiment (measured 2026-04-05)**:
+
+| Size | CTA64 single (µs) | CTA64 dbuf (µs) | Speedup |
+|------|--------------------|------------------|---------|
+| 128 | 7.1 | 6.9 | 1.02x |
+| 256 | 12.3 | 12.1 | 1.02x |
+| 512 | 22.9 | 22.5 | 1.02x |
+| 1024 | 72.3 | 71.7 | 1.01x |
+
+With 16 WMMAs per K-tile, buffer management overhead is fully amortized (no
+regression — was 0.77x on 32×32). But overlap benefit is minimal because
+loads and stores are still interleaved. To get true overlap, need separated-loads
+on 64×64 tiles OR async copy (`cp.async`) to decouple global→shared transfer.
+
+**Best result so far**: CTA64 at 1024 = **30 TFLOP/s** (vs 18.4 initial → **+63%**).
 
 **Note**: GPU pure-Rust PTX vs cuBLAS is not expected to hit 1.5x — cuBLAS uses hand-tuned SASS and proprietary tensor core scheduling. The GPU target is to close the gap from 0.38x toward 0.5x+ (competitive for deployment where vendor lock-in is unacceptable).
 

@@ -25,12 +25,24 @@ use crate::ptx::{PtxKernel, PtxReg, PtxType, WmmaLayout};
 /// 16 warps (512 threads), 4×4 grid of 16×16 WMMA subtiles.
 /// 2× better compute-to-load ratio than 32×32 CTA kernel.
 pub fn build_cta64_wmma_fp16(_m: u32, n: u32, k: u32) -> PtxKernel {
+    build_cta64_wmma_fp16_impl(_m, n, k, false)
+}
+
+/// Double-buffered 64×64 variant — overlaps load with 16-warp WMMA compute.
+/// With 16 WMMAs per K-tile (vs 4 in 32×32), buffer management overhead is
+/// amortized over 4× more compute. Expected improvement: 1.2-1.5×.
+pub fn build_cta64_wmma_fp16_dbuf(_m: u32, n: u32, k: u32) -> PtxKernel {
+    build_cta64_wmma_fp16_impl(_m, n, k, true)
+}
+
+fn build_cta64_wmma_fp16_impl(_m: u32, n: u32, k: u32, double_buffer: bool) -> PtxKernel {
     let tile_m: u32 = 64;
     let tile_n: u32 = 64;
     let tile_k: u32 = 16;
     let a_smem_bytes = (tile_m * tile_k * 2) as usize; // 2048
     let b_smem_bytes = (tile_k * tile_n * 2) as usize; // 2048
-    let smem_bytes = a_smem_bytes + b_smem_bytes; // 4096
+    let smem_single = a_smem_bytes + b_smem_bytes; // 4096
+    let smem_bytes = if double_buffer { smem_single * 2 } else { smem_single };
     let n_k_tiles = (k + tile_k - 1) / tile_k;
 
     // Cooperative load: 512 threads, 4 elements each = 2048 elements
@@ -157,107 +169,300 @@ pub fn build_cta64_wmma_fp16(_m: u32, n: u32, k: u32) -> PtxKernel {
             // Init WMMA accumulator (per-warp, 16×16 output)
             let frag_c = ctx.wmma_init_c_zero();
 
-            // ═══ K-tile loop ═══
-            let k_tile = ctx.mov_u32_imm(0);
-            ctx.label("k_loop");
-            let k_done = ctx.setp_ge_u32(k_tile, n_k_tiles_reg);
-            ctx.branch_if(k_done, "k_end");
+            if double_buffer {
+                // ═══ DOUBLE-BUFFERED K-LOOP ═══
+                // Prologue → Main loop → Epilogue (same structure as 32×32 dbuf
+                // but with 16 WMMAs per K-tile for 4× amortization)
+                let smem_single_reg = ctx.mov_u32_imm(smem_single as u32);
+                let store_buf_off = ctx.mov_u32_imm(0);
 
-            let k_off = ctx.mul_u32_reg(k_tile, c_16);
-            // k_byte_stride BEFORE branch so defined on both paths
-            let k_byte_stride = ctx.mul_wide_u32(k_off, 2);
+                // ─── Prologue: load tile 0 into buf[0] ───
+                {
+                    let k_off = ctx.mov_u32_imm(0);
+                    let k_byte_stride = ctx.mov_u64_imm(0);
+                    let pro_a: Vec<_> =
+                        a_smem_addrs.iter().map(|&a| ctx.add_u32_reg(a, store_buf_off)).collect();
+                    let pro_b: Vec<_> =
+                        b_smem_addrs.iter().map(|&b| ctx.add_u32_reg(b, store_buf_off)).collect();
 
-            // PERF-CTA64-002: Interior check for this K-tile
-            let k_tile_end = ctx.add_u32_reg(k_off, c_15);
-            let k_ok = ctx.setp_lt_u32(k_tile_end, k_param);
-            let fully_interior = ctx.and_pred(mn_interior, k_ok);
-            ctx.branch_if(fully_interior, "fast_load");
+                    let k_tile_end = ctx.add_u32_reg(k_off, c_15);
+                    let k_ok = ctx.setp_lt_u32(k_tile_end, k_param);
+                    let fully_interior = ctx.and_pred(mn_interior, k_ok);
+                    ctx.branch_if(fully_interior, "pro_fast");
 
-            // === SLOW PATH: boundary-checked loads ===
-            ctx.branch_if_not(is_a_thread, "slow_b");
-            for i in 0..elems_per_thread as usize {
-                ctx.st_shared_f16(a_smem_addrs[i], zero_f16);
-                let skip = format!("ssa{i}");
-                let ar_ok = ctx.setp_lt_u32(a_global_rows[i], m_param);
-                ctx.branch_if_not(ar_ok, &skip);
-                // k_off already folded into a_base_addrs via k_byte_stride
-                let a_addr = ctx.add_u64(a_base_addrs[i], k_byte_stride);
-                let ac_ok = ctx.setp_lt_u32(k_off, k_param);
-                ctx.branch_if_not(ac_ok, &skip);
-                let a_val = ctx.ld_global_f16(a_addr);
-                ctx.st_shared_f16(a_smem_addrs[i], a_val);
-                ctx.label(&skip);
+                    ctx.branch_if_not(is_a_thread, "pro_slow_b");
+                    for i in 0..elems_per_thread as usize {
+                        ctx.st_shared_f16(pro_a[i], zero_f16);
+                        let skip = format!("psa{i}");
+                        let ar_ok = ctx.setp_lt_u32(a_global_rows[i], m_param);
+                        ctx.branch_if_not(ar_ok, &skip);
+                        let a_addr = ctx.add_u64(a_base_addrs[i], k_byte_stride);
+                        let ac_ok = ctx.setp_lt_u32(k_off, k_param);
+                        ctx.branch_if_not(ac_ok, &skip);
+                        let v = ctx.ld_global_f16(a_addr);
+                        ctx.st_shared_f16(pro_a[i], v);
+                        ctx.label(&skip);
+                    }
+                    ctx.branch("pro_done");
+                    ctx.label("pro_slow_b");
+                    for i in 0..elems_per_thread as usize {
+                        let b_gr = ctx.add_u32_reg(k_off, b_row_in_tiles[i]);
+                        ctx.st_shared_f16(pro_b[i], zero_f16);
+                        let skip = format!("psb{i}");
+                        let br_ok = ctx.setp_lt_u32(b_gr, k_param);
+                        ctx.branch_if_not(br_ok, &skip);
+                        let bc_ok = ctx.setp_lt_u32(b_col_globals[i], n_param);
+                        ctx.branch_if_not(bc_ok, &skip);
+                        let b_flat = ctx.mad_lo_u32(b_gr, n_const, b_col_globals[i]);
+                        let b_boff = ctx.mul_wide_u32(b_flat, 2);
+                        let b_addr = ctx.add_u64(b_ptr, b_boff);
+                        let v = ctx.ld_global_f16(b_addr);
+                        ctx.st_shared_f16(pro_b[i], v);
+                        ctx.label(&skip);
+                    }
+                    ctx.branch("pro_done");
+                    ctx.label("pro_fast");
+                    ctx.branch_if_not(is_a_thread, "pro_fb");
+                    for i in 0..elems_per_thread as usize {
+                        let a_addr = ctx.add_u64(a_base_addrs[i], k_byte_stride);
+                        let v = ctx.ld_global_f16(a_addr);
+                        ctx.st_shared_f16(pro_a[i], v);
+                    }
+                    ctx.branch("pro_done");
+                    ctx.label("pro_fb");
+                    for i in 0..elems_per_thread as usize {
+                        let b_gr = ctx.add_u32_reg(k_off, b_row_in_tiles[i]);
+                        let b_flat = ctx.mad_lo_u32(b_gr, n_const, b_col_globals[i]);
+                        let b_boff = ctx.mul_wide_u32(b_flat, 2);
+                        let b_addr = ctx.add_u64(b_ptr, b_boff);
+                        let v = ctx.ld_global_f16(b_addr);
+                        ctx.st_shared_f16(pro_b[i], v);
+                    }
+                    ctx.label("pro_done");
+                }
+                ctx.bar_sync(0);
+
+                // ─── Main loop: tiles 1..n-1 ───
+                let k_tile = ctx.mov_u32_imm(1);
+                ctx.label("k_loop");
+                let k_done = ctx.setp_ge_u32(k_tile, n_k_tiles_reg);
+                ctx.branch_if(k_done, "dbuf_epi");
+
+                // Swap buffer
+                let new_store = ctx.sub_u32_reg(smem_single_reg, store_buf_off);
+                ctx.mov_u32_reg(store_buf_off, new_store);
+                let compute_off = ctx.sub_u32_reg(smem_single_reg, store_buf_off);
+
+                let k_off = ctx.mul_u32_reg(k_tile, c_16);
+                let k_byte_stride = ctx.mul_wide_u32(k_off, 2);
+
+                let lp_a: Vec<_> =
+                    a_smem_addrs.iter().map(|&a| ctx.add_u32_reg(a, store_buf_off)).collect();
+                let lp_b: Vec<_> =
+                    b_smem_addrs.iter().map(|&b| ctx.add_u32_reg(b, store_buf_off)).collect();
+
+                let k_tile_end = ctx.add_u32_reg(k_off, c_15);
+                let k_ok = ctx.setp_lt_u32(k_tile_end, k_param);
+                let fully_interior = ctx.and_pred(mn_interior, k_ok);
+                ctx.branch_if(fully_interior, "fast_load");
+
+                // Slow path
+                ctx.branch_if_not(is_a_thread, "slow_b");
+                for i in 0..elems_per_thread as usize {
+                    ctx.st_shared_f16(lp_a[i], zero_f16);
+                    let skip = format!("ssa{i}");
+                    let ar_ok = ctx.setp_lt_u32(a_global_rows[i], m_param);
+                    ctx.branch_if_not(ar_ok, &skip);
+                    let a_addr = ctx.add_u64(a_base_addrs[i], k_byte_stride);
+                    let ac_ok = ctx.setp_lt_u32(k_off, k_param);
+                    ctx.branch_if_not(ac_ok, &skip);
+                    let v = ctx.ld_global_f16(a_addr);
+                    ctx.st_shared_f16(lp_a[i], v);
+                    ctx.label(&skip);
+                }
+                ctx.branch("load_done");
+                ctx.label("slow_b");
+                for i in 0..elems_per_thread as usize {
+                    let b_gr = ctx.add_u32_reg(k_off, b_row_in_tiles[i]);
+                    ctx.st_shared_f16(lp_b[i], zero_f16);
+                    let skip = format!("ssb{i}");
+                    let br_ok = ctx.setp_lt_u32(b_gr, k_param);
+                    ctx.branch_if_not(br_ok, &skip);
+                    let bc_ok = ctx.setp_lt_u32(b_col_globals[i], n_param);
+                    ctx.branch_if_not(bc_ok, &skip);
+                    let b_flat = ctx.mad_lo_u32(b_gr, n_const, b_col_globals[i]);
+                    let b_boff = ctx.mul_wide_u32(b_flat, 2);
+                    let b_addr = ctx.add_u64(b_ptr, b_boff);
+                    let v = ctx.ld_global_f16(b_addr);
+                    ctx.st_shared_f16(lp_b[i], v);
+                    ctx.label(&skip);
+                }
+                ctx.branch("load_done");
+
+                // Fast path
+                ctx.label("fast_load");
+                ctx.branch_if_not(is_a_thread, "fast_b");
+                for i in 0..elems_per_thread as usize {
+                    let a_addr = ctx.add_u64(a_base_addrs[i], k_byte_stride);
+                    let v = ctx.ld_global_f16(a_addr);
+                    ctx.st_shared_f16(lp_a[i], v);
+                }
+                ctx.branch("load_done");
+                ctx.label("fast_b");
+                for i in 0..elems_per_thread as usize {
+                    let b_gr = ctx.add_u32_reg(k_off, b_row_in_tiles[i]);
+                    let b_flat = ctx.mad_lo_u32(b_gr, n_const, b_col_globals[i]);
+                    let b_boff = ctx.mul_wide_u32(b_flat, 2);
+                    let b_addr = ctx.add_u64(b_ptr, b_boff);
+                    let v = ctx.ld_global_f16(b_addr);
+                    ctx.st_shared_f16(lp_b[i], v);
+                }
+                ctx.label("load_done");
+
+                // WMMA on compute buffer (overlaps with loads to store buffer)
+                {
+                    let smem_base = ctx.shared_base_addr();
+                    let a_sub_bytes = ctx.mul_u32_reg(warp_m_off, c_16);
+                    let a_sub_bytes = ctx.mul_u32_reg(a_sub_bytes, c_2);
+                    let a_sub_buf = ctx.add_u32_reg(a_sub_bytes, compute_off);
+                    let a_sub_off = ctx.cvt_u64_u32(a_sub_buf);
+                    let a_sub_ptr = ctx.add_u64(smem_base, a_sub_off);
+                    let frag_a = ctx.wmma_load_a_f16(a_sub_ptr, 16, WmmaLayout::RowMajor);
+
+                    let b_sub_bytes = ctx.mul_u32_reg(warp_n_off, c_2);
+                    let b_base = ctx.add_u32_reg(c_a_smem, b_sub_bytes);
+                    let b_buf = ctx.add_u32_reg(b_base, compute_off);
+                    let b_off64 = ctx.cvt_u64_u32(b_buf);
+                    let b_sub_ptr = ctx.add_u64(smem_base, b_off64);
+                    let frag_b = ctx.wmma_load_b_f16(b_sub_ptr, 64, WmmaLayout::RowMajor);
+
+                    let frag_d = ctx.wmma_mma_f16_f32_row_row(&frag_a, &frag_b, &frag_c);
+                    for (c_reg, d_reg) in frag_c.iter().zip(frag_d.iter()) {
+                        ctx.mov_f32_reg(*c_reg, *d_reg);
+                    }
+                }
+
+                ctx.bar_sync(0);
+                ctx.add_u32_inplace(k_tile, 1);
+                ctx.branch("k_loop");
+
+                // ─── Epilogue: WMMA on last loaded tile ───
+                ctx.label("dbuf_epi");
+                {
+                    let smem_base = ctx.shared_base_addr();
+                    let a_sub_bytes = ctx.mul_u32_reg(warp_m_off, c_16);
+                    let a_sub_bytes = ctx.mul_u32_reg(a_sub_bytes, c_2);
+                    let a_sub_buf = ctx.add_u32_reg(a_sub_bytes, store_buf_off);
+                    let a_sub_off = ctx.cvt_u64_u32(a_sub_buf);
+                    let a_sub_ptr = ctx.add_u64(smem_base, a_sub_off);
+                    let frag_a = ctx.wmma_load_a_f16(a_sub_ptr, 16, WmmaLayout::RowMajor);
+
+                    let b_sub_bytes = ctx.mul_u32_reg(warp_n_off, c_2);
+                    let b_base = ctx.add_u32_reg(c_a_smem, b_sub_bytes);
+                    let b_buf = ctx.add_u32_reg(b_base, store_buf_off);
+                    let b_off64 = ctx.cvt_u64_u32(b_buf);
+                    let b_sub_ptr = ctx.add_u64(smem_base, b_off64);
+                    let frag_b = ctx.wmma_load_b_f16(b_sub_ptr, 64, WmmaLayout::RowMajor);
+
+                    let frag_d = ctx.wmma_mma_f16_f32_row_row(&frag_a, &frag_b, &frag_c);
+                    for (c_reg, d_reg) in frag_c.iter().zip(frag_d.iter()) {
+                        ctx.mov_f32_reg(*c_reg, *d_reg);
+                    }
+                }
+            } else {
+                // ═══ SINGLE-BUFFER K-LOOP ═══
+                let k_tile = ctx.mov_u32_imm(0);
+                ctx.label("k_loop");
+                let k_done = ctx.setp_ge_u32(k_tile, n_k_tiles_reg);
+                ctx.branch_if(k_done, "k_end");
+
+                let k_off = ctx.mul_u32_reg(k_tile, c_16);
+                let k_byte_stride = ctx.mul_wide_u32(k_off, 2);
+
+                let k_tile_end = ctx.add_u32_reg(k_off, c_15);
+                let k_ok = ctx.setp_lt_u32(k_tile_end, k_param);
+                let fully_interior = ctx.and_pred(mn_interior, k_ok);
+                ctx.branch_if(fully_interior, "fast_load");
+
+                // Slow path
+                ctx.branch_if_not(is_a_thread, "slow_b");
+                for i in 0..elems_per_thread as usize {
+                    ctx.st_shared_f16(a_smem_addrs[i], zero_f16);
+                    let skip = format!("ssa{i}");
+                    let ar_ok = ctx.setp_lt_u32(a_global_rows[i], m_param);
+                    ctx.branch_if_not(ar_ok, &skip);
+                    let a_addr = ctx.add_u64(a_base_addrs[i], k_byte_stride);
+                    let ac_ok = ctx.setp_lt_u32(k_off, k_param);
+                    ctx.branch_if_not(ac_ok, &skip);
+                    let v = ctx.ld_global_f16(a_addr);
+                    ctx.st_shared_f16(a_smem_addrs[i], v);
+                    ctx.label(&skip);
+                }
+                ctx.branch("load_done");
+                ctx.label("slow_b");
+                for i in 0..elems_per_thread as usize {
+                    let b_gr = ctx.add_u32_reg(k_off, b_row_in_tiles[i]);
+                    ctx.st_shared_f16(b_smem_addrs[i], zero_f16);
+                    let skip = format!("ssb{i}");
+                    let br_ok = ctx.setp_lt_u32(b_gr, k_param);
+                    ctx.branch_if_not(br_ok, &skip);
+                    let bc_ok = ctx.setp_lt_u32(b_col_globals[i], n_param);
+                    ctx.branch_if_not(bc_ok, &skip);
+                    let b_flat = ctx.mad_lo_u32(b_gr, n_const, b_col_globals[i]);
+                    let b_boff = ctx.mul_wide_u32(b_flat, 2);
+                    let b_addr = ctx.add_u64(b_ptr, b_boff);
+                    let v = ctx.ld_global_f16(b_addr);
+                    ctx.st_shared_f16(b_smem_addrs[i], v);
+                    ctx.label(&skip);
+                }
+                ctx.branch("load_done");
+
+                // Fast path
+                ctx.label("fast_load");
+                ctx.branch_if_not(is_a_thread, "fast_b");
+                for i in 0..elems_per_thread as usize {
+                    let a_addr = ctx.add_u64(a_base_addrs[i], k_byte_stride);
+                    let v = ctx.ld_global_f16(a_addr);
+                    ctx.st_shared_f16(a_smem_addrs[i], v);
+                }
+                ctx.branch("load_done");
+                ctx.label("fast_b");
+                for i in 0..elems_per_thread as usize {
+                    let b_gr = ctx.add_u32_reg(k_off, b_row_in_tiles[i]);
+                    let b_flat = ctx.mad_lo_u32(b_gr, n_const, b_col_globals[i]);
+                    let b_boff = ctx.mul_wide_u32(b_flat, 2);
+                    let b_addr = ctx.add_u64(b_ptr, b_boff);
+                    let v = ctx.ld_global_f16(b_addr);
+                    ctx.st_shared_f16(b_smem_addrs[i], v);
+                }
+
+                ctx.label("load_done");
+                ctx.bar_sync(0);
+
+                // WMMA
+                let smem_base = ctx.shared_base_addr();
+                let a_sub_bytes = ctx.mul_u32_reg(warp_m_off, c_16);
+                let a_sub_bytes = ctx.mul_u32_reg(a_sub_bytes, c_2);
+                let a_sub_off = ctx.cvt_u64_u32(a_sub_bytes);
+                let a_sub_ptr = ctx.add_u64(smem_base, a_sub_off);
+                let frag_a = ctx.wmma_load_a_f16(a_sub_ptr, 16, WmmaLayout::RowMajor);
+
+                let b_sub_bytes = ctx.mul_u32_reg(warp_n_off, c_2);
+                let b_offset = ctx.add_u32_reg(c_a_smem, b_sub_bytes);
+                let b_off64 = ctx.cvt_u64_u32(b_offset);
+                let b_sub_ptr = ctx.add_u64(smem_base, b_off64);
+                let frag_b = ctx.wmma_load_b_f16(b_sub_ptr, 64, WmmaLayout::RowMajor);
+
+                let frag_d = ctx.wmma_mma_f16_f32_row_row(&frag_a, &frag_b, &frag_c);
+                for (c_reg, d_reg) in frag_c.iter().zip(frag_d.iter()) {
+                    ctx.mov_f32_reg(*c_reg, *d_reg);
+                }
+
+                ctx.bar_sync(1);
+                ctx.add_u32_inplace(k_tile, 1);
+                ctx.branch("k_loop");
+                ctx.label("k_end");
             }
-            ctx.branch("load_done");
-
-            ctx.label("slow_b");
-            for i in 0..elems_per_thread as usize {
-                let b_gr = ctx.add_u32_reg(k_off, b_row_in_tiles[i]);
-                ctx.st_shared_f16(b_smem_addrs[i], zero_f16);
-                let skip = format!("ssb{i}");
-                let br_ok = ctx.setp_lt_u32(b_gr, k_param);
-                ctx.branch_if_not(br_ok, &skip);
-                let bc_ok = ctx.setp_lt_u32(b_col_globals[i], n_param);
-                ctx.branch_if_not(bc_ok, &skip);
-                let b_flat = ctx.mad_lo_u32(b_gr, n_const, b_col_globals[i]);
-                let b_boff = ctx.mul_wide_u32(b_flat, 2);
-                let b_addr = ctx.add_u64(b_ptr, b_boff);
-                let b_val = ctx.ld_global_f16(b_addr);
-                ctx.st_shared_f16(b_smem_addrs[i], b_val);
-                ctx.label(&skip);
-            }
-            ctx.branch("load_done");
-
-            // === FAST PATH: unconditional loads ===
-            ctx.label("fast_load");
-            ctx.branch_if_not(is_a_thread, "fast_b");
-            for i in 0..elems_per_thread as usize {
-                let a_addr = ctx.add_u64(a_base_addrs[i], k_byte_stride);
-                let a_val = ctx.ld_global_f16(a_addr);
-                ctx.st_shared_f16(a_smem_addrs[i], a_val);
-            }
-            ctx.branch("load_done");
-
-            ctx.label("fast_b");
-            for i in 0..elems_per_thread as usize {
-                let b_gr = ctx.add_u32_reg(k_off, b_row_in_tiles[i]);
-                let b_flat = ctx.mad_lo_u32(b_gr, n_const, b_col_globals[i]);
-                let b_boff = ctx.mul_wide_u32(b_flat, 2);
-                let b_addr = ctx.add_u64(b_ptr, b_boff);
-                let b_val = ctx.ld_global_f16(b_addr);
-                ctx.st_shared_f16(b_smem_addrs[i], b_val);
-            }
-
-            ctx.label("load_done");
-            ctx.bar_sync(0);
-
-            // === WMMA per warp (each warp computes its 16×16 subtile) ===
-            let smem_base = ctx.shared_base_addr();
-
-            // A subtile: rows [warp_m_off..+16], stride=16 elements
-            let a_sub_bytes = ctx.mul_u32_reg(warp_m_off, c_16);
-            let a_sub_bytes = ctx.mul_u32_reg(a_sub_bytes, c_2); // * 2 for FP16 bytes
-            let a_sub_off = ctx.cvt_u64_u32(a_sub_bytes);
-            let a_sub_ptr = ctx.add_u64(smem_base, a_sub_off);
-            let frag_a = ctx.wmma_load_a_f16(a_sub_ptr, 16, WmmaLayout::RowMajor);
-
-            // B subtile: cols [warp_n_off..+16], stride=64 elements
-            let b_sub_bytes = ctx.mul_u32_reg(warp_n_off, c_2);
-            let b_offset = ctx.add_u32_reg(c_a_smem, b_sub_bytes);
-            let b_off64 = ctx.cvt_u64_u32(b_offset);
-            let b_sub_ptr = ctx.add_u64(smem_base, b_off64);
-            let frag_b = ctx.wmma_load_b_f16(b_sub_ptr, 64, WmmaLayout::RowMajor);
-
-            // PERF-CTA64-001: row.row MMA layout
-            let frag_d = ctx.wmma_mma_f16_f32_row_row(&frag_a, &frag_b, &frag_c);
-            for (c_reg, d_reg) in frag_c.iter().zip(frag_d.iter()) {
-                ctx.mov_f32_reg(*c_reg, *d_reg);
-            }
-
-            ctx.bar_sync(1);
-            ctx.add_u32_inplace(k_tile, 1);
-            ctx.branch("k_loop");
-            ctx.label("k_end");
 
             // === Store C (FP32, row-major) ===
             let c_row = ctx.add_u32_reg(cta_row, warp_m_off);
@@ -344,10 +549,52 @@ mod tests {
         // B tile is 16×64, so WMMA load stride must be 64
         let kernel = build_cta64_wmma_fp16(256, 256, 256);
         let ptx = PtxModule::new().add_kernel(kernel).emit();
-        // wmma.load.b uses stride 64 → "64" appears in the wmma.load.b line
         assert!(
             ptx.contains("wmma.load.b.sync.aligned.m16n16k16.row.f16"),
             "must have wmma.load.b instruction"
         );
+    }
+
+    // ── Double-buffer FALSIFY tests ──
+
+    #[test]
+    fn test_cta64_dbuf_valid_ptx() {
+        let kernel = build_cta64_wmma_fp16_dbuf(256, 256, 256);
+        let ptx = PtxModule::new().add_kernel(kernel).emit();
+        assert!(ptx.contains(".entry gemm_cta64_wmma_fp16"));
+        assert!(ptx.contains("bar.sync"));
+    }
+
+    #[test]
+    fn test_cta64_dbuf_8kb_shared_memory() {
+        let kernel = build_cta64_wmma_fp16_dbuf(256, 256, 256);
+        let ptx = PtxModule::new().add_kernel(kernel).emit();
+        let extract_smem = |ptx: &str| -> usize {
+            for line in ptx.lines() {
+                if line.contains(".shared") && line.contains("smem[") {
+                    let start = line.find("smem[").unwrap() + 5;
+                    let end = line[start..].find(']').unwrap() + start;
+                    return line[start..end].parse().unwrap();
+                }
+            }
+            panic!("no .shared smem found");
+        };
+        assert_eq!(extract_smem(&ptx), 8192, "64×64 dbuf needs 8192 bytes (2×4096)");
+    }
+
+    #[test]
+    fn test_cta64_dbuf_has_prologue_epilogue() {
+        let kernel = build_cta64_wmma_fp16_dbuf(512, 512, 512);
+        let ptx = PtxModule::new().add_kernel(kernel).emit();
+        assert!(ptx.contains("pro_done"), "must have prologue");
+        assert!(ptx.contains("dbuf_epi"), "must have epilogue");
+    }
+
+    #[test]
+    fn test_cta64_dbuf_two_wmma_mma() {
+        let kernel = build_cta64_wmma_fp16_dbuf(256, 256, 256);
+        let ptx = PtxModule::new().add_kernel(kernel).emit();
+        let mma_count = ptx.matches("wmma.mma.sync.aligned.m16n16k16.row.row.f32.f32").count();
+        assert_eq!(mma_count, 2, "dbuf should have 2 WMMA (loop + epilogue)");
     }
 }
