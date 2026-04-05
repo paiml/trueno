@@ -49,7 +49,13 @@ pub(crate) const SUPER_BLOCK_SIZE: usize = 256;
 pub(crate) const SUPER_BLOCK_BYTES: usize = 144;
 pub(crate) const _SUB_BLOCK_SIZE: usize = 32; // Reserved for future sub-block optimizations
 
-/// Convert f16 bits to f32
+/// Convert f16 bits to f32.
+///
+/// NOTE: F16C hardware instruction (`_mm_cvtph_ps`) was tested (2026-04-05)
+/// but the per-call `is_x86_feature_detected` overhead negated the gain.
+/// The scalar path is already well-optimized by LLVM for typical Q4K scales
+/// (normal f16 values that hit the fast path without subnormal branching).
+/// The Q4K bottleneck is the FMA dependency chain, not header parsing.
 #[inline(always)]
 fn f16_to_f32(bits: u16) -> f32 {
     let sign = ((bits & 0x8000) as u32) << 16;

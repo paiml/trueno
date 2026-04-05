@@ -2337,10 +2337,12 @@ Before any further optimization work, these retroactive contracts MUST be writte
 
 **Suggested optimizations (with literature support):**
 
-1. **Vectorize Q4K header parsing** — AVX-512 Q4K gains were only +5-35% because
-   `parse_q4k_header` (f16 decode, 6-bit scale unpack) is scalar and runs per super-block.
-   Using VBMI2 `vpermb` for scale extraction [47] would eliminate this bottleneck.
-   Issue #239 (Marlin-style pre-packing) tackles the GPU equivalent.
+1. **Q4K FMA dependency chain** — AVX-512 Q4K gains were only +5-35%. Header parsing
+   is NOT the bottleneck (F16C tested 2026-04-05, no improvement). The actual bottleneck
+   is the dequant→FMA dependency chain: each 16-element iteration requires
+   mask+shift+cvt+fmsub before the fmadd, creating a 4-instruction serial dependency.
+   Fix: interleave TWO super-blocks per iteration (software pipelining [34]) to hide
+   the dependency latency. Issue #239 (Marlin-style pre-packing) tackles GPU equivalent.
 
 2. **CUDA graph dispatch** (issue #238) — 430 kernel launches/token × 5µs = 83.2% overhead.
    Capturing the full decode pass as a CUDA graph eliminates per-launch driver cost.
@@ -2367,7 +2369,8 @@ Before any further optimization work, these retroactive contracts MUST be writte
 - Shared-B packing: regressed 495→316 GFLOPS (cross-core L1/L2 cache penalty) [16]
 - Manual K-unrolling: regressed 567→400 GFLOPS (LLVM already unrolls optimally)
 - Q4K parallel threshold 8M→2M: regressed 17→14 GFLOPS (thread overhead at <300µs)
-- AVX-512 Q4K dequant: only +5-35% gain (bottleneck is scalar header parsing, not SIMD width)
+- AVX-512 Q4K dequant: only +5-35% gain (bottleneck is FMA dependency chain, not SIMD width)
+- F16C hardware f16→f32: no improvement (is_x86_feature_detected overhead; LLVM already optimizes scalar path)
 
 ### GitHub Issue Integration (2026-04-05)
 
