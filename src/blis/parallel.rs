@@ -105,13 +105,16 @@ pub fn gemm_blis_parallel(
         // 512³ range: 4T is peak, >4 regresses due to L3 contention
         4.min(phys_cores)
     } else if flops < 4_000_000_000 {
-        // 1024³ range (~2B FLOPs): AVX-512 makes per-thread compute 2× faster,
-        // so more threads can be useful. cgp scaling shows peak at 16T with AVX-512.
-        // Raise cap from 8 to phys_cores/2 to exploit both CCDs partially.
-        (phys_cores / 2).max(8).min(phys_cores)
+        // 1024³ range (~2B FLOPs): 8T is empirical peak (626 GFLOPS).
+        // 12T regresses to 559 GFLOPS due to cross-CCD L3 thrashing — each thread
+        // independently packs B, and 12 copies × ~1MB packed_b exceeds one CCD's
+        // 32MB L3 share. Capping at 8 keeps all threads on one CCD.
+        // Measured 2026-04-05 on Threadripper 7960X (2 CCDs × 12 cores).
+        8.min(phys_cores)
     } else {
-        // Very large (>4B FLOPs): use all cores
-        phys_cores
+        // Very large (>4B FLOPs): use phys_cores/2 (one thread per CCD core).
+        // Beyond phys_cores/2, SMT contention regresses AVX-512 throughput.
+        (phys_cores / 2).max(8).min(phys_cores)
     };
 
     let mut scheduler = HeijunkaScheduler::default();
