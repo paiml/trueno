@@ -2219,53 +2219,101 @@ FALSIFY tests implemented (111 unit + 15 falsify + 29 integration = 155):
 
 ### Key Performance Results (cgp-driven)
 
-| Metric | Value | Source |
-|--------|-------|--------|
-| 1024 GEMM 1T | 106 GFLOPS (94.7% peak) | `cgp profile scaling` |
-| 1024 GEMM 8T | 471 GFLOPS (52.6% eff) | `cgp profile scaling` |
-| 512 GEMM 4T | 176 GFLOPS (peak) | `cgp profile scaling` |
-| cuBLAS FP16 512 | 34.7 TFLOP/s | `cgp profile compare` |
-| CTA WMMA FP16 512 | 11.6 TFLOP/s | `cgp profile compare` |
-| cgp doctor | 102ms | dogfooding |
-| cgp diff | <2ms | FALSIFY-CGP-062 |
+| Metric | Value | Source | Contract? |
+|--------|-------|--------|-----------|
+| 1024 GEMM 1T (AVX-512) | 128 GFLOPS (98.5% peak) | `cgp profile scaling` | **NO** — needs avx512-blis-v1 |
+| 1024 GEMM 12T (AVX-512) | 567 GFLOPS (4.5× scaling) | `cgp profile scaling` | **NO** — needs blis-thread-cap-v1 |
+| Q4K GEMV 4096→4096 | 73 GFLOPS, 20.5 GB/s | `benchmark_matrix_suite` | **NO** — Q4K uses AVX2 only |
+| cuBLAS FP16 512 | 34.7 TFLOP/s | `cgp profile compare` | YES (roofline contract) |
+| CTA WMMA FP16 512 | 11.6 TFLOP/s | `cgp profile compare` | YES (roofline contract) |
+| cgp doctor | 102ms | dogfooding | YES (doctor contract) |
+| cgp diff | <2ms | FALSIFY-CGP-062 | YES |
+
+### Process Violations (2026-04-05 audit)
+
+**CRITICAL**: Multiple Phase 3 changes violated the contract-first pipeline
+defined in spec section 11.1. Code was shipped WITHOUT:
+
+| Commit | Change | Missing Contract | Missing BrickProfiler |
+|--------|--------|-----------------|----------------------|
+| `30d1b9d4` | AVX-512 BLIS 8×16 microkernel | No `avx512-blis-v1.yaml` in provable-contracts | `gemm_blis_avx512_large` has no `profiler` param |
+| `3a26e1b5` | Thread cap phys/2 | No binding update | Parallel dispatch bypasses profiler |
+| `9e644adb` | Thread cap 2/4/8 tuning | No binding update | N/A (tuning only) |
+| `8d83c73a` | `cgp profile scaling` | No `cgp-scaling-v1.yaml` | N/A (cgp, not trueno) |
+| `9763e0f4` | Q4K GEMV benchmark | No contract | N/A (benchmark only) |
+
+**Root cause (five-whys):**
+1. Performance changes shipped without contracts. Why?
+2. The developer (Claude) prioritized measurement and optimization speed. Why?
+3. The cgp dogfooding loop (measure → optimize → re-measure) felt productive. Why?
+4. There was no automated enforcement blocking contractless commits. Why?
+5. **Root**: `build.rs` only checks existing bindings (38/38 pass). It does NOT
+   detect NEW functions that lack bindings. Adding a new code path without a
+   binding is invisible to the build system.
+
+**Specific violations in `src/blis/compute.rs`:**
+- `gemm_blis_avx512_large`: Dispatched when `profiler.is_none()` — intentionally
+  bypasses `BlisProfiler`. This means AVX-512 GEMM is invisible to BrickProfiler.
+- `avx512_microkernel_8x16_rowmajor`: No profiler hooks, no tile-level stats.
+- `pack_b_block_nr16`: New packing routine with no contract equation.
+
+**Specific violations in `src/blis/parallel.rs`:**
+- Thread cap tiers changed 3× without updating `../provable-contracts/contracts/trueno/binding.yaml`.
+- Shared-B experiment was implemented and reverted without a contract for the data-sharing model.
+
+### Remediation Plan (P0)
+
+Before any further optimization work, these retroactive contracts MUST be written:
+
+| Contract | Covers | Key Equations |
+|----------|--------|--------------|
+| `avx512-blis-v1.yaml` | `gemm_blis_avx512_large`, `avx512_microkernel_8x16_rowmajor`, `pack_b_block_nr16` | NR=16 tile arithmetic, zmm register budget (8 accumulators + 1 B + A broadcasts ≤ 32 zmm) |
+| `blis-thread-cap-v1.yaml` | Thread cap policy in `parallel.rs` | FLOPs thresholds → max_threads mapping, cache topology model |
+| `cgp-scaling-v1.yaml` | `cgp profile scaling` command | GEMM output parsing contract, min-of-N timing model |
+
+**BlisProfiler integration required:**
+- Add `profiler: Option<&mut BlisProfiler>` to `gemm_blis_avx512_large`
+- Record tile-level stats (`TileStats`) in the AVX-512 microkernel
+- Wire profiler through the parallel dispatch path (currently only `gemm_blis` has profiling)
+
+**Binding updates required:**
+- Add 3 new bindings to `../provable-contracts/contracts/trueno/binding.yaml`
+- Run `pv verify-bindings` to confirm compliance
+- `build.rs` should report these as implemented (not gaps)
 
 ### What's Left
 
-**Phase 4 — TUI & visualization (spec section 5):**
+**Phase 4a — Contract remediation (P0 BLOCKER):**
+- Write 3 retroactive contracts listed above
+- Add BlisProfiler to AVX-512 path
+- Add bindings to provable-contracts
+- ALL optimization commits going forward MUST have contracts FIRST
+
+**Phase 4b — TUI & visualization (spec section 5):**
 - `cgp tui` using presentar: roofline chart, timeline, kernel drill-down
 - Currently a stub; blocked on presentar v0.3 integration
 
-**Phase 4 — Hardware-specific FALSIFY tests (9 remaining):**
+**Phase 4c — Hardware-specific FALSIFY tests (9 remaining):**
 - Requires: root access for ncu, aarch64 for NEON, macOS for Metal, Chrome for WebGPU
 - Can be automated in CI with appropriate runners
 
 **Performance gaps to close (vs 1.5x minimum / 2.0x stretch):**
 
-| Gap | Current | 1.5x Target | Action | Priority |
-|-----|---------|-------------|--------|----------|
-| CPU GEMM vs NumPy (1T) | **0.98x** | ~~1.50x~~ 1.0x | **DONE** — at hardware peak | **RESOLVED** |
-| CPU GEMM vs NumPy (8T) | **0.73x** | 1.00x | Pack B once, share across threads | **P0** |
-| CPU Q4K vs llama.cpp | TBD | 1.50x | Benchmark with `cgp compete` | P1 |
-| GPU CTA WMMA vs cuBLAS | 0.33x | N/A (known) | Close to 0.5x | P2 |
+| Gap | Current | Target | Action | Priority |
+|-----|---------|--------|--------|----------|
+| CPU GEMM vs NumPy (1T) | **0.98x** | 1.0x | **DONE** — at hardware peak | **RESOLVED** |
+| CPU GEMM vs NumPy (12T) | **0.71x** | 1.0x | ASM microkernel (OpenBLAS gap) | P1 |
+| CPU Q4K vs llama.cpp | **~0.5x** | 1.50x | AVX-512 Q4K path | P1 |
+| GPU CTA WMMA vs cuBLAS | 0.33x | 0.5x | Larger tiles + double-buffering | P2 |
 | GPU DP4A Q4K vs llama.cpp CUDA | TBD | 1.50x | Profile fused K+V end-to-end | P1 |
 
-**Root cause analysis (five-whys) — RESOLVED for 1T:**
-1. trueno 1024 GEMM was 0.76x NumPy at 1T. Why?
-2. trueno used AVX2 8×8 microkernel (256-bit). OpenBLAS uses AVX-512. Why?
-3. AVX-512 path only dispatched for m≤256. Why?
-4. `gemm_blis_nr8_rowmajor_c` hardcoded NR=8 (ymm width). Why?
-5. **Fixed**: new `gemm_blis_avx512_large` with MR=8, NR=16 (zmm width) → 0.98x
+**Negative results documented:**
+- Shared-B packing: regressed 495→316 GFLOPS (cross-core cache penalty)
+- Manual K-unrolling: regressed 567→400 GFLOPS (LLVM already unrolls optimally)
 
-**Remaining: parallel scaling gap (5-whys):**
-1. trueno 8T=495 GFLOPS (3.9×) vs NumPy 8T=679 (5.2×). Why?
-2. Each thread packs B independently in `gemm_blis`. Why?
-3. `gemm_blis` is called per M-partition via `into_par_iter`. Why?
-4. The parallel wrapper doesn't share packed B across threads. Why?
-5. Previous attempt at shared B (prepacked) regressed — but that was
-   AVX2 era. **Retest with AVX-512 path.**
-
-**Contracts to add (spec section 11.3 lists 22 total):**
-- 2/22 implemented (gemm-blis-cpu, roofline-model)
-- Remaining 20: ncu-wrapper, nsys-wrapper, cupti-profiler, perf-wrapper,
+**Contracts to add (spec section 11.3 lists 22+3 total):**
+- 2/25 implemented (gemm-blis-cpu, roofline-model)
+- 3 retroactive: avx512-blis, blis-thread-cap, cgp-scaling
+- 20 remaining: ncu-wrapper, nsys-wrapper, cupti-profiler, perf-wrapper,
   regression, muda, compare, compete, wgpu, metal, wasm, quant, rayon,
   neon, json-export, tui, contract-verify, vram, system-health, memory
