@@ -2,6 +2,62 @@
 use std::time::Instant;
 use trueno::{Matrix, Vector};
 
+/// Benchmark Q4K GEMV at inference-relevant dimensions.
+/// Output format matches cgp quant profiler parsing:
+///   "Q4K GEMV (MxK)...     X.XX us  (Y.Y GFLOPS)"
+fn bench_q4k_gemv() {
+    println!("\n═══════════════════════════════════════════════════════════════════");
+    println!("  Q4K Quantized GEMV Benchmark");
+    println!("═══════════════════════════════════════════════════════════════════\n");
+
+    // Qwen2.5-1.5B dimensions: embed=1536, ffn=8960
+    let configs: &[(usize, usize, &str)] = &[
+        (1536, 8960, "ffn_up/gate"),
+        (8960, 1536, "ffn_down"),
+        (1536, 1536, "attn_qkv"),
+        (4096, 4096, "generic_4K"),
+    ];
+
+    for &(out_dim, in_dim, label) in configs {
+        // Validate in_dim is multiple of 256 (super-block requirement)
+        if in_dim % 256 != 0 {
+            println!("  Skipping {label}: in_dim={in_dim} not multiple of 256");
+            continue;
+        }
+
+        let num_sb = (out_dim * in_dim) / 256;
+        let q4k_bytes = num_sb * 144;
+
+        // Generate test data (pattern doesn't matter for timing)
+        let q4k_data: Vec<u8> = (0..q4k_bytes).map(|i| (i % 256) as u8).collect();
+        let input: Vec<f32> = (0..in_dim).map(|i| (i as f32 * 0.001).sin()).collect();
+
+        // Warmup
+        for _ in 0..3 {
+            let _ =
+                trueno::backends::q4k::matmul_q4k_f32_dispatch(&q4k_data, &input, out_dim, in_dim);
+        }
+
+        // Timed runs — enough iterations for stable measurement
+        let iterations = if out_dim * in_dim > 5_000_000 { 50 } else { 200 };
+        let start = Instant::now();
+        for _ in 0..iterations {
+            let _ =
+                trueno::backends::q4k::matmul_q4k_f32_dispatch(&q4k_data, &input, out_dim, in_dim);
+        }
+        let elapsed = start.elapsed();
+        let per_us = elapsed.as_secs_f64() * 1e6 / iterations as f64;
+        let total_ops = 2.0 * out_dim as f64 * in_dim as f64;
+        let gflops = total_ops / (per_us / 1e6) / 1e9;
+        let bw_gbps = q4k_bytes as f64 / (per_us / 1e6) / 1e9;
+
+        println!(
+            "  Q4K GEMV ({out_dim}x{in_dim}, {label})...{:>10.2} us  ({gflops:.2} GFLOPS, {bw_gbps:.1} GB/s)",
+            per_us
+        );
+    }
+}
+
 fn create_test_matrix(rows: usize, cols: usize, seed_multiplier: usize) -> Matrix<f32> {
     Matrix::from_vec(
         rows,
@@ -127,12 +183,16 @@ fn main() {
         bench_transpose(&matrix_a, rows, cols);
     }
 
+    // Q4K GEMV benchmark — Qwen2.5-1.5B FFN dimensions
+    bench_q4k_gemv();
+
     println!("\n═══════════════════════════════════════════════════════════════════");
     println!("  Optimizations Applied:");
     println!("  * Matrix Multiplication: SIMD + 3-level cache blocking + parallel");
     println!("  * Matrix-Vector: SIMD dot products (AVX2/SSE2)");
     println!("  * Vector-Matrix: SIMD row accumulation (cache-friendly)");
     println!("  * Transpose: Cache-blocked (64x64 blocks)");
+    println!("  * Q4K GEMV: Fused dequant+dot (AVX2), parallel for large layers");
     println!("═══════════════════════════════════════════════════════════════════\n");
 
     #[cfg(feature = "parallel")]
