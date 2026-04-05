@@ -2369,8 +2369,16 @@ Before any further optimization work, these retroactive contracts MUST be writte
 - Shared-B packing: regressed 495→316 GFLOPS (cross-core L1/L2 cache penalty) [16]
 - Manual K-unrolling: regressed 567→400 GFLOPS (LLVM already unrolls optimally)
 - Q4K parallel threshold 8M→2M: regressed 17→14 GFLOPS (thread overhead at <300µs)
-- AVX-512 Q4K dequant: only +5-35% gain (bottleneck is FMA dependency chain, not SIMD width)
-- F16C hardware f16→f32: no improvement (is_x86_feature_detected overhead; LLVM already optimizes scalar path)
+- AVX-512 Q4K dequant: only +5-35% gain (not the 1.5-2× predicted)
+- F16C hardware f16→f32: no improvement (is_x86_feature_detected overhead)
+- Dual-accumulator Q4K: no improvement (Zen 4 OOO already hides FMA deps)
+
+**Conclusion (Q4K CPU ceiling):** Q4K GEMV at ~83 GFLOPS on Zen 4 AVX-512
+appears to be near the intrinsics-based ceiling. Six optimization attempts
+(AVX-512 width, F16C, dual-acc, threshold) yielded only +5-35%. Further
+CPU gains require fundamentally different approaches: Marlin-style weight
+pre-packing (#239) or hand-tuned ASM [45]. The 1.5x vs llama.cpp target
+is more achievable on GPU via half-warp DP4A (#175) and CUDA graphs (#238).
 
 ### GitHub Issue Integration (2026-04-05)
 
