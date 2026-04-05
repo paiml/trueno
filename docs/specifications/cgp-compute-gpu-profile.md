@@ -2726,6 +2726,22 @@ Projected realizr impact: AttentionScore 8137µs → **~2700µs** (3x), saving ~
 per 16 tokens. End-to-end: **~30% inference speedup** from a single kernel.
 FALSIFY: FLASH-ATTN-001 through 004 (5 tests, all passing).
 
+**Post-fusion breakdown (projected)**:
+
+| Brick | Time | New % | Status |
+|-------|------|-------|--------|
+| AttentionScore | 2712µs | 20.1% | **3x from fused AVX2 attention** |
+| QkvProjection | 2563µs | 19.0% | Q4K GEMV — at FMA ceiling [65] |
+| RmsNorm | 1378µs | 10.2% | 0.49µs/call, 99.5 GB/s — at L2 peak |
+| OutputProjection | 1317µs | 9.8% | Q4K GEMV |
+| DownProjection | 1292µs | 9.6% | Q4K GEMV |
+| **Total** | **12923µs** | — | **1.42x vs unfused baseline** |
+
+**Remaining bottleneck**: Q4K GEMVs (QKV+Output+Down = 39% combined). These are
+at the FMA dependency chain ceiling [65]. Further gains require algorithmic changes
+(Marlin-style weight pre-packing, or GPU offload). RmsNorm at 99.5 GB/s is at
+L2 cache bandwidth peak — no kernel optimization possible.
+
 ### GitHub Issue Integration (2026-04-05)
 
 16 open issues map to cgp performance gaps. Key issues by priority:
@@ -2988,12 +3004,12 @@ Analysis via `decy audit` + `pmat query` + direct source comparison.
 
 ## Appendix E: Recommended Next Steps (2026-04-05)
 
-### Current State Summary
+### Current State Summary (updated 2026-04-05)
 
 **cgp tool**: 18/18 CLI commands implemented (only `cgp tui` is STUB).
-174 tests (116 unit + 29 FALSIFY + 29 integration). Fully dogfooded.
+3475 tests passing. 65 peer-reviewed citations [1]-[65]. 10 provable-contracts.
 
-**GEMM performance (Threadripper 7960X, AVX-512 8x32 microkernel)**:
+**GEMM performance (Threadripper 7960X, AVX-512 8×32 microkernel + SIMD B-packing)**:
 
 | Metric | trueno | faer | NumPy | ndarray | nalgebra |
 |--------|--------|------|-------|---------|----------|
@@ -3001,11 +3017,24 @@ Analysis via `decy audit` + `pmat query` + direct source comparison.
 | vs trueno | 1.00x | 1.02x | 0.92x | 0.85x | 0.82x |
 | 8T GFLOPS (1024) | **628** | — | 763 | — | — |
 | 1T GFLOPS (512) | **145** | 148 | 137 | 118 | 118 |
-| cuBLAS FP32 (1024) | — | — | — | — | 43,900 |
+
+**Fused attention (FlashAttention-style [64], AVX2, online softmax)**:
+
+| head_dim×seq_len | Unfused | Fused AVX2 | Speedup |
+|-----------------|---------|------------|---------|
+| 128×512 | 31.7µs | 10.4µs | **3.03x** |
+| 128×4096 | 260.3µs | 90.8µs | **2.87x** |
+
+Projected realizr impact: AttentionScore 44.3% → ~15%. **~30% end-to-end inference speedup.**
 
 **Q4K quantized inference**: 14.6 tok/s composite (Llama-7B, 4 layer sizes).
+Q4K ceiling at ~83 GFLOPS — FMA dependency chain limited [65].
 
-**Negative results documented**: 4 (K-unroll, MC=192, Q4K prefetch, Q4K threshold).
+**Optimization experiments**: 14 total (5 positive, 9 negative).
+Positive: 8×32 NR, SIMD B-packing, 8T cap, fused attention (scalar+AVX2).
+Negative: 8×48 KC, broadcast-B scatter, shared-B parallel (3×), AVX-512 GEMV,
+K-unroll, MC=192, prefetch, Q4K ceiling (6 attempts).
+All grounded with arXiv citations [44][45][60]-[65].
 
 ### Priority 1: Performance (highest impact, ship-blocking)
 

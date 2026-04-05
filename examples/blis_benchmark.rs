@@ -202,6 +202,23 @@ fn benchmark_fused_attention(head_dim: usize, seq_len: usize, iterations: usize)
     );
 }
 
+fn benchmark_rmsnorm(n: usize, iterations: usize) {
+    let input: Vec<f32> = (0..n).map(|i| ((i * 7 + 3) % 100) as f32 / 100.0 - 0.5).collect();
+    let gamma: Vec<f32> = (0..n).map(|i| ((i * 11 + 5) % 100) as f32 / 100.0 + 0.5).collect();
+    let mut output = vec![0.0f32; n];
+
+    for _ in 0..100 {
+        trueno::blis::norms::rms_norm(&input, &gamma, 1e-5, &mut output).unwrap();
+    }
+    let start = std::time::Instant::now();
+    for _ in 0..iterations {
+        trueno::blis::norms::rms_norm(&input, &gamma, 1e-5, &mut output).unwrap();
+    }
+    let us = start.elapsed().as_nanos() as f64 / iterations as f64 / 1000.0;
+    let gbps = (n * 4 * 3) as f64 / (us * 1e-6) / 1e9;
+    println!("RmsNorm  n={:5}: {:6.2} us, {:5.1} GB/s", n, us, gbps);
+}
+
 fn main() {
     println!("=== BLIS GEMM Benchmark ===\n");
 
@@ -226,6 +243,11 @@ fn main() {
         benchmark_bcast_b(512, 5);
         benchmark_bcast_b(1024, 2);
     }
+
+    println!("\n--- RmsNorm Performance ---");
+    benchmark_rmsnorm(128, 100_000); // attention head_dim
+    benchmark_rmsnorm(4096, 50_000); // LLM hidden_dim
+    benchmark_rmsnorm(11008, 20_000); // LLM FFN dim
 
     println!("\n--- GEMV Performance (attention-critical path) ---");
     benchmark_gemv(128, 512, 5000); // head_dim=128, seq_len=512
