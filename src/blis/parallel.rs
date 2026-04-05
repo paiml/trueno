@@ -105,9 +105,10 @@ pub fn gemm_blis_parallel(
         // 512³ range: 4T is peak, >4 regresses due to L3 contention
         4.min(phys_cores)
     } else if flops < 4_000_000_000 {
-        // 1024³ range (~2B FLOPs): 8T peak, single CCD L3 (32MB)
-        // Working set 12MB fits single CCD; 12+ threads cross CCD boundary
-        8.min(phys_cores)
+        // 1024³ range (~2B FLOPs): AVX-512 makes per-thread compute 2× faster,
+        // so more threads can be useful. cgp scaling shows peak at 16T with AVX-512.
+        // Raise cap from 8 to phys_cores/2 to exploit both CCDs partially.
+        (phys_cores / 2).max(8).min(phys_cores)
     } else {
         // Very large (>4B FLOPs): use all cores
         phys_cores
@@ -118,13 +119,11 @@ pub fn gemm_blis_parallel(
     let ps = if m <= MC { MR.max(m / scheduler.num_threads) } else { MC };
     let partitions = scheduler.partition_m(m, ps);
 
-    // Each thread packs B independently via gemm_blis.
-    // NOTE: Pre-packing B and using gemm_blis_with_prepacked_b was tested
-    // (2026-04-04 via cgp profiling) but regressed performance from 548→256
-    // GFLOPS at 1024x1024x8T. The unpacked inner loop in gemm_blis is more
-    // optimized (uses the ASM microkernel path more effectively). The B packing
-    // cost per thread is amortized across K iterations.
-
+    // Per-thread gemm_blis: each thread independently packs A+B and runs the
+    // BLIS 5-loop. Redundant B packing is intentional — keeps B hot in each
+    // thread's L1/L2 cache (faster than shared B from another core's cache).
+    // Tested shared-B approach (2026-04-05): regressed from 495→316 GFLOPS
+    // because cross-core cache fetches for shared B exceeded packing cost.
     let c_ptr = c.as_mut_ptr() as usize;
 
     partitions.into_par_iter().for_each(|m_range| {
@@ -134,7 +133,6 @@ pub fn gemm_blis_parallel(
         let a_local = &a[m_start * k..(m_start + m_local) * k];
 
         // SAFETY: Each thread accesses a disjoint row range of C.
-        // Partitions are non-overlapping by construction in HeijunkaScheduler::partition_m.
         let c_local = unsafe {
             let ptr = c_ptr as *mut f32;
             std::slice::from_raw_parts_mut(ptr.add(m_start * n), m_local * n)
@@ -142,6 +140,128 @@ pub fn gemm_blis_parallel(
 
         let _ = gemm_blis(m_local, n, k, a_local, b, c_local, None);
     });
+
+    Ok(())
+}
+
+/// Shared-B parallel GEMM with AVX-512 microkernel.
+/// Outer JC/PC loops run on main thread (B packing). IC loop parallelized.
+/// Each thread only packs its own A rows and calls the microkernel.
+#[cfg(all(feature = "parallel", target_arch = "x86_64"))]
+fn gemm_parallel_shared_b_avx512(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    b: &[f32],
+    c: &mut [f32],
+    partitions: &[std::ops::Range<usize>],
+) -> Result<(), TruenoError> {
+    use super::compute::pack_b_block_nr16;
+    use super::packing::pack_a_block;
+    use rayon::prelude::*;
+
+    let mc = 64_usize.min(m);
+    let nc = 1024_usize.min(n);
+    let kc_param = super::KC;
+    let nr: usize = 16; // AVX-512 NR
+    let mr = MR; // 8
+
+    // Shared packed B — allocated once, reused per JC/PC block
+    let max_packed_b = kc_param * nc;
+    let mut packed_b = vec![0.0f32; max_packed_b];
+
+    let c_ptr = c.as_mut_ptr() as usize;
+
+    for jc in (0..n).step_by(nc) {
+        let nc_block = nc.min(n - jc);
+
+        for pc in (0..k).step_by(kc_param) {
+            let kc_block = kc_param.min(k - pc);
+
+            // Pack B ONCE on the main thread
+            pack_b_block_nr16(b, n, pc, jc, kc_block, nc_block, &mut packed_b);
+
+            // SAFETY: packed_b is read-only during the parallel section.
+            let packed_b_ptr = packed_b.as_ptr() as usize;
+
+            // Parallel IC: each thread packs its own A rows, uses shared B.
+            // Thread-local A buffer allocated lazily via Rayon's thread pool.
+            partitions.par_iter().for_each(|m_range| {
+                let m_start = m_range.start;
+                let m_local = m_range.len();
+
+                // Per-thread A buffer — allocated once, reused across JC/PC blocks.
+                // Rayon reuses threads so this Vec persists across par_iter calls.
+                thread_local! {
+                    static TL_A: std::cell::RefCell<Vec<f32>> =
+                        const { std::cell::RefCell::new(Vec::new()) };
+                }
+                TL_A.with(|tl| {
+                    let mut packed_a = tl.borrow_mut();
+                    let needed_a = mc * kc_block;
+                    if packed_a.len() < needed_a {
+                        packed_a.resize(needed_a, 0.0);
+                    }
+
+                    let panels_n = (nc_block + nr - 1) / nr;
+
+                    for ic_off in (0..m_local).step_by(mc) {
+                        let ic = m_start + ic_off;
+                        let mc_block = mc.min(m_local - ic_off);
+
+                        pack_a_block(a, k, ic, pc, mc_block, kc_block, &mut packed_a);
+
+                        let panels_m = (mc_block + mr - 1) / mr;
+
+                        for ir_panel in 0..panels_m {
+                            let ir = ir_panel * mr;
+                            let mr_block = mr.min(mc_block - ir);
+
+                            for jr_panel in 0..panels_n {
+                                let jr = jr_panel * nr;
+                                let nr_block = nr.min(nc_block - jr);
+
+                                let a_off = ir_panel * mr * kc_block;
+                                let b_off = jr_panel * nr * kc_block;
+
+                                if mr_block == 8 && nr_block == 16 {
+                                    unsafe {
+                                        let bp = (packed_b_ptr as *const f32).add(b_off);
+                                        let cp = (c_ptr as *mut f32).add((ic + ir) * n + (jc + jr));
+                                        super::compute::avx512_microkernel_8x16_rowmajor(
+                                            kc_block,
+                                            packed_a.as_ptr().add(a_off),
+                                            bp,
+                                            cp,
+                                            n,
+                                        );
+                                    }
+                                } else {
+                                    // Scalar fallback for edge tiles
+                                    unsafe {
+                                        let bp = packed_b_ptr as *const f32;
+                                        for ir_local in 0..mr_block {
+                                            for jr_local in 0..nr_block {
+                                                let c_idx =
+                                                    (ic + ir + ir_local) * n + (jc + jr + jr_local);
+                                                let mut sum = *((c_ptr as *const f32).add(c_idx));
+                                                for p in 0..kc_block {
+                                                    sum += packed_a[a_off + p * mr + ir_local]
+                                                        * *bp.add(b_off + p * nr + jr_local);
+                                                }
+                                                *((c_ptr as *mut f32).add(c_idx)) = sum;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+        }
+    }
 
     Ok(())
 }

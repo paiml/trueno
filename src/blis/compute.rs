@@ -1065,7 +1065,7 @@ unsafe fn gemm_blis_avx512_large(
 /// 8 FMA ops per K step, each processing 16 elements = 2× throughput vs AVX2.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx512f", enable = "fma")]
-unsafe fn avx512_microkernel_8x16_rowmajor(
+pub(super) unsafe fn avx512_microkernel_8x16_rowmajor(
     k: usize,
     a: *const f32, // MR=8 packed column-major
     b: *const f32, // NR=16 packed row-major
@@ -1112,7 +1112,7 @@ unsafe fn avx512_microkernel_8x16_rowmajor(
 
 /// Pack B block with NR=16 row-major panels for AVX-512.
 /// Each panel is KC × 16, stored as kc_block × nr contiguous.
-fn pack_b_block_nr16(
+pub(super) fn pack_b_block_nr16(
     b: &[f32],
     ldb: usize,
     pc: usize,
