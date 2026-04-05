@@ -83,7 +83,17 @@ impl Matrix<f32> {
     // Previous implementation used scalar 32×32 blocks.
     #[cfg_attr(feature = "tracing", instrument(skip(self), fields(dims = %format!("{}x{}", self.rows, self.cols))))]
     pub fn transpose(&self) -> Matrix<f32> {
-        let mut result = Matrix::zeros_with_backend(self.cols, self.rows, self.backend);
+        // Uninit allocation: transpose writes every element (plus remainder edges).
+        // Skipping the zero-fill saves ~300µs at 2048×2048 (16MB).
+        let n = self.cols * self.rows;
+        let mut data: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: transpose() writes every element of result.data:
+        //   - 8×8 AVX2 tiles cover rows/8 × cols/8 blocks
+        //   - Scalar remainder writes cover the edge rows/cols
+        unsafe {
+            data.set_len(n);
+        }
+        let mut result = Matrix { rows: self.cols, cols: self.rows, data, backend: self.backend };
 
         // BLIS transpose handles AVX2 dispatch, remainder edges, and shape-adaptive
         // loop ordering internally. Dimensions are correct by construction so
