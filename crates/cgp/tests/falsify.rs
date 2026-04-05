@@ -1080,3 +1080,47 @@ fn parse_criterion_time(output: &str, bench_name: &str) -> Option<f64> {
     }
     None
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// FALSIFY-CGP-CONTRACT-001: cgp contract verify --self must pass
+// Verifies that cgp's own performance contracts are satisfied.
+// ══════════════════════════════════════════════════════════════════════
+#[test]
+fn falsify_cgp_contract_001_self_verify() {
+    let output = cgp_cmd()
+        .args(["contract", "verify", "--self-verify"])
+        .output()
+        .expect("Failed to run cgp contract verify --self");
+
+    assert!(output.status.success(), "cgp contract verify --self must succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Should not report any failures
+    assert!(
+        !stdout.contains("FAIL"),
+        "FALSIFY-CGP-CONTRACT-001: Self-verify must not have FAILures.\nOutput:\n{stdout}"
+    );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// FALSIFY-CGP-CONTRACT-002: cgp contract verify --contracts-dir works
+// ══════════════════════════════════════════════════════════════════════
+#[test]
+fn falsify_cgp_contract_002_contracts_dir() {
+    let output = cgp_cmd()
+        .args(["contract", "verify", "--contracts-dir", "../../contracts/cgp/"])
+        .output()
+        .expect("Failed to run cgp contract verify");
+
+    assert!(output.status.success(), "cgp contract verify --contracts-dir must succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Should show verification results (PASS/FAIL) and Total line
+    assert!(
+        stdout.contains("Total:"),
+        "FALSIFY-CGP-CONTRACT-002: Must show Total verification summary.\nOutput:\n{stdout}"
+    );
+    // Must have at least 1 passing contract
+    assert!(
+        stdout.contains("PASS"),
+        "FALSIFY-CGP-CONTRACT-002: Must have at least 1 PASS.\nOutput:\n{stdout}"
+    );
+}

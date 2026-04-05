@@ -1,0 +1,55 @@
+# 8x32 AVX-512 Microkernel Performance Contract (2026-04-05)
+# Locks in the baseline after Appendix D optimization.
+kind: PerformanceContract
+name: cgp-microkernel-8x32
+version: "1.0.0"
+kernel: avx512_microkernel_8x32_rowmajor
+hardware:
+  cpu: "AMD Ryzen Threadripper 7960X"
+  isa: "AVX-512F+FMA"
+
+bounds:
+  # Single-thread criterion measurements
+  - size: 64
+    max_time_us: 6.0
+    min_gflops: 85
+    note: "4.35 µs measured = 122 GFLOPS"
+
+  - size: 128
+    max_time_us: 45.0
+    min_gflops: 90
+    note: "34.3 µs measured = 122 GFLOPS"
+
+  - size: 256
+    max_time_us: 350.0
+    min_gflops: 95
+    note: "282 µs measured = 119 GFLOPS"
+
+  - size: 512
+    max_time_us: 2500.0
+    min_gflops: 100
+    note: "1.91 ms measured = 141 GFLOPS"
+
+  - size: 1024
+    max_time_us: 20000.0
+    min_gflops: 100
+    note: "15.62 ms measured = 137 GFLOPS"
+
+  # Parallel performance
+  - size: 1024
+    threads: 8
+    max_time_us: 5000.0
+    min_gflops: 500
+    note: "3.33 ms measured = 645 GFLOPS at 8T"
+
+metrics:
+  # Must not regress below these thresholds (10% tolerance)
+  regression_tolerance_pct: 10
+
+falsification:
+  - name: FALSIFY-MICROKERNEL-001
+    description: "1024 1T must achieve > 100 GFLOPS"
+    check: "gflops_1024_1t > 100"
+  - name: FALSIFY-MICROKERNEL-002
+    description: "faer gap must be < 1.3x at 1024"
+    check: "faer_ratio_1024 < 1.3"

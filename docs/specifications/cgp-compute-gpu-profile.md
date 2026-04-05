@@ -2380,7 +2380,7 @@ Code improvement: fixed latent `avx512dq` dependency in `hsum_avx512` (used
 regressed attn_qkv (1536×1536, 2.4M) from 17→14 GFLOPS. Thread spawn overhead (~40µs)
 dominates when total compute is <300µs. Contract: `cgp-q4k-parallel-threshold-v1.yaml`.
 
-**Implementation status** (2026-04-05): cgp binary fully functional in `crates/cgp/` with 116 unit + 27 falsify + 29 integration = 172 (cgp); 42/42 provable-contracts bindings tests.
+**Implementation status** (2026-04-05): cgp binary fully functional in `crates/cgp/` with 116 unit + 29 falsify + 29 integration = 174 (cgp); 42/42 provable-contracts bindings tests.
 
 All 17 CLI subcommands implemented and dogfooded on RTX 4090 + Threadripper 7960X:
 
@@ -2440,7 +2440,7 @@ New in Phase 4 (PMAT-037 continued):
   - 4096x4096 Q4K: 50.9 GFLOPS, 14.3 GB/s compressed, compute-bound (34% of AVX-512 peak)
   - Token estimation: ~7.9 tok/s for Llama-7B-like model at 4096 dims
 
-FALSIFY tests implemented (116 unit + 23 falsify + 29 integration = 168 (cgp); 42/42 provable-contracts bindings):
+FALSIFY tests implemented (116 unit + 29 falsify + 29 integration = 174 (cgp); 42/42 provable-contracts bindings):
 - FALSIFY-CGP-010/011/012: Doctor tool detection (doctor.rs + integration)
 - FALSIFY-CGP-020/021: Roofline bandwidth + ridge points (falsify.rs + analysis/roofline.rs)
 - FALSIFY-CGP-030/031/032: Regression detection + improvement detection (falsify.rs)
