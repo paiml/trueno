@@ -44,58 +44,41 @@ pub fn fused_attention_decode(
         return;
     }
 
-    let scale = 1.0 / (head_dim as f32).sqrt();
+    #[cfg(target_arch = "x86_64")]
+    if std::arch::is_x86_feature_detected!("avx2") && std::arch::is_x86_feature_detected!("fma") {
+        // SAFETY: AVX2+FMA verified. Slice lengths checked by asserts above.
+        unsafe {
+            fused_attention_decode_avx2(q, k_cache, v_cache, head_dim, seq_len, output);
+        }
+        return;
+    }
 
-    // Online softmax state
+    fused_attention_decode_scalar(q, k_cache, v_cache, head_dim, seq_len, output);
+}
+
+/// Scalar fallback for non-x86 or non-AVX2 platforms.
+fn fused_attention_decode_scalar(
+    q: &[f32],
+    k_cache: &[f32],
+    v_cache: &[f32],
+    head_dim: usize,
+    seq_len: usize,
+    output: &mut [f32],
+) {
+    let scale = 1.0 / (head_dim as f32).sqrt();
     let mut running_max = f32::NEG_INFINITY;
     let mut running_sum = 0.0f32;
-
-    // Output accumulator (pre-softmax-weighted V sum)
     output.fill(0.0);
 
-    // Block size: 32 scores fit on the stack (128 bytes).
-    // Larger blocks amortize loop overhead but use more stack.
-    const BLOCK_SIZE: usize = 32;
-    let mut scores_buf = [0.0f32; BLOCK_SIZE];
-
-    for block_start in (0..seq_len).step_by(BLOCK_SIZE) {
-        let block_end = (block_start + BLOCK_SIZE).min(seq_len);
-        let block_len = block_end - block_start;
-
-        // Step 1: Compute scores for this block: scores[i] = Q · K[block_start+i] / sqrt(D)
-        for i in 0..block_len {
-            let k_row = &k_cache[(block_start + i) * head_dim..(block_start + i + 1) * head_dim];
-            let mut dot = 0.0f32;
-
-            // AVX2-friendly 8-way unrolled dot product
-            let d8 = head_dim / 8 * 8;
-            let mut j = 0;
-            while j < d8 {
-                dot += q[j] * k_row[j]
-                    + q[j + 1] * k_row[j + 1]
-                    + q[j + 2] * k_row[j + 2]
-                    + q[j + 3] * k_row[j + 3]
-                    + q[j + 4] * k_row[j + 4]
-                    + q[j + 5] * k_row[j + 5]
-                    + q[j + 6] * k_row[j + 6]
-                    + q[j + 7] * k_row[j + 7];
-                j += 8;
-            }
-            while j < head_dim {
-                dot += q[j] * k_row[j];
-                j += 1;
-            }
-
-            scores_buf[i] = dot * scale;
+    for s in 0..seq_len {
+        let k_row = &k_cache[s * head_dim..(s + 1) * head_dim];
+        let mut dot = 0.0f32;
+        for d in 0..head_dim {
+            dot += q[d] * k_row[d];
         }
+        let score = dot * scale;
 
-        // Step 2: Find block max
-        let block_max = scores_buf[..block_len].iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
-
-        // Step 3: Online softmax update (Milakov & Gimelshein [64])
-        let new_max = running_max.max(block_max);
-
-        // Rescale previous accumulator: output *= exp(old_max - new_max)
+        let new_max = running_max.max(score);
         if running_max != f32::NEG_INFINITY {
             let correction = (running_max - new_max).exp();
             running_sum *= correction;
@@ -104,27 +87,178 @@ pub fn fused_attention_decode(
             }
         }
 
-        // Step 4: Accumulate exp(scores - new_max) @ V_block into output
-        for i in 0..block_len {
-            let w = (scores_buf[i] - new_max).exp();
-            running_sum += w;
+        let w = (score - new_max).exp();
+        running_sum += w;
 
-            let v_row = &v_cache[(block_start + i) * head_dim..(block_start + i + 1) * head_dim];
-            for d in 0..head_dim {
-                output[d] += w * v_row[d];
-            }
+        let v_row = &v_cache[s * head_dim..(s + 1) * head_dim];
+        for d in 0..head_dim {
+            output[d] += w * v_row[d];
         }
-
         running_max = new_max;
     }
 
-    // Step 5: Normalize by total softmax sum
     if running_sum > 0.0 {
         let inv_sum = 1.0 / running_sum;
         for val in output.iter_mut() {
             *val *= inv_sum;
         }
     }
+}
+
+/// AVX2 fused attention: SIMD dot product, SIMD V accumulation, SIMD rescale.
+///
+/// Three SIMD-accelerated hot paths:
+/// 1. Q·K dot product: 4 ymm accumulators × 8 f32 = 32-wide, hadd reduction
+/// 2. Output rescale (correction *= exp(...)): broadcast + vfmadd
+/// 3. w * V accumulation: broadcast weight, vfmadd per 8 elements
+///
+/// Uses AVX2 (not AVX-512) because attention is bandwidth-bound [60][61]:
+/// Zen 4 throttles clock during 512-bit ops, and GEMV-class workloads
+/// cannot compensate with wider SIMD.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2", enable = "fma")]
+unsafe fn fused_attention_decode_avx2(
+    q: &[f32],
+    k_cache: &[f32],
+    v_cache: &[f32],
+    head_dim: usize,
+    seq_len: usize,
+    output: &mut [f32],
+) {
+    unsafe {
+        use std::arch::x86_64::*;
+
+        let scale = 1.0 / (head_dim as f32).sqrt();
+        let d8 = head_dim / 8 * 8;
+
+        let mut running_max = f32::NEG_INFINITY;
+        let mut running_sum = 0.0f32;
+        output.fill(0.0);
+
+        // Process one K/V row per iteration (online softmax, no blocking needed
+        // since we SIMD the inner dim, not the seq_len dim).
+        for s in 0..seq_len {
+            let k_ptr = k_cache.as_ptr().add(s * head_dim);
+            let q_ptr = q.as_ptr();
+
+            // SIMD dot product: Q · K[s] with 4 ymm accumulators
+            let mut dot0 = _mm256_setzero_ps();
+            let mut dot1 = _mm256_setzero_ps();
+            let mut dot2 = _mm256_setzero_ps();
+            let mut dot3 = _mm256_setzero_ps();
+
+            let mut j = 0;
+            let d32 = head_dim / 32 * 32;
+            while j < d32 {
+                dot0 = _mm256_fmadd_ps(
+                    _mm256_loadu_ps(q_ptr.add(j)),
+                    _mm256_loadu_ps(k_ptr.add(j)),
+                    dot0,
+                );
+                dot1 = _mm256_fmadd_ps(
+                    _mm256_loadu_ps(q_ptr.add(j + 8)),
+                    _mm256_loadu_ps(k_ptr.add(j + 8)),
+                    dot1,
+                );
+                dot2 = _mm256_fmadd_ps(
+                    _mm256_loadu_ps(q_ptr.add(j + 16)),
+                    _mm256_loadu_ps(k_ptr.add(j + 16)),
+                    dot2,
+                );
+                dot3 = _mm256_fmadd_ps(
+                    _mm256_loadu_ps(q_ptr.add(j + 24)),
+                    _mm256_loadu_ps(k_ptr.add(j + 24)),
+                    dot3,
+                );
+                j += 32;
+            }
+            while j < d8 {
+                dot0 = _mm256_fmadd_ps(
+                    _mm256_loadu_ps(q_ptr.add(j)),
+                    _mm256_loadu_ps(k_ptr.add(j)),
+                    dot0,
+                );
+                j += 8;
+            }
+
+            // Horizontal sum: dot0+dot1+dot2+dot3 → scalar
+            dot0 = _mm256_add_ps(_mm256_add_ps(dot0, dot1), _mm256_add_ps(dot2, dot3));
+            // 256-bit → 128-bit: add high and low halves
+            let hi = _mm256_extractf128_ps(dot0, 1);
+            let lo = _mm256_castps256_ps128(dot0);
+            let sum128 = _mm_add_ps(lo, hi);
+            // 128-bit → scalar: hadd twice
+            let sum64 = _mm_hadd_ps(sum128, sum128);
+            let sum32 = _mm_hadd_ps(sum64, sum64);
+            let mut dot_scalar = _mm_cvtss_f32(sum32);
+
+            // Scalar remainder
+            while j < head_dim {
+                dot_scalar += *q.get_unchecked(j) * *k_cache.get_unchecked(s * head_dim + j);
+                j += 1;
+            }
+
+            let score = dot_scalar * scale;
+
+            // Online softmax update
+            let new_max = running_max.max(score);
+            if running_max != f32::NEG_INFINITY {
+                let correction = (running_max - new_max).exp();
+                running_sum *= correction;
+
+                // SIMD rescale output: output[d] *= correction
+                let corr_v = _mm256_set1_ps(correction);
+                let out_ptr = output.as_mut_ptr();
+                let mut d = 0;
+                while d < d8 {
+                    let ov = _mm256_loadu_ps(out_ptr.add(d));
+                    _mm256_storeu_ps(out_ptr.add(d), _mm256_mul_ps(ov, corr_v));
+                    d += 8;
+                }
+                while d < head_dim {
+                    *output.get_unchecked_mut(d) *= correction;
+                    d += 1;
+                }
+            }
+
+            let w = (score - new_max).exp();
+            running_sum += w;
+
+            // SIMD V accumulation: output[d] += w * V[s][d]
+            let w_v = _mm256_set1_ps(w);
+            let v_ptr = v_cache.as_ptr().add(s * head_dim);
+            let out_ptr = output.as_mut_ptr();
+            let mut d = 0;
+            while d < d8 {
+                let ov = _mm256_loadu_ps(out_ptr.add(d));
+                let vv = _mm256_loadu_ps(v_ptr.add(d));
+                _mm256_storeu_ps(out_ptr.add(d), _mm256_fmadd_ps(w_v, vv, ov));
+                d += 8;
+            }
+            while d < head_dim {
+                *output.get_unchecked_mut(d) += w * *v_cache.get_unchecked(s * head_dim + d);
+                d += 1;
+            }
+
+            running_max = new_max;
+        }
+
+        // Final normalization: output /= running_sum
+        if running_sum > 0.0 {
+            let inv_v = _mm256_set1_ps(1.0 / running_sum);
+            let out_ptr = output.as_mut_ptr();
+            let mut d = 0;
+            while d < d8 {
+                let ov = _mm256_loadu_ps(out_ptr.add(d));
+                _mm256_storeu_ps(out_ptr.add(d), _mm256_mul_ps(ov, inv_v));
+                d += 8;
+            }
+            while d < head_dim {
+                *output.get_unchecked_mut(d) /= running_sum;
+                d += 1;
+            }
+        }
+    } // unsafe
 }
 
 /// Unfused reference: separate Q@K^T, softmax, scores@V for validation.

@@ -2712,15 +2712,18 @@ head_dim stride) would further reduce TLB pressure for long sequences.
 **IMPLEMENTED (2026-04-05)**: `fused_attention_decode` — online softmax [64, Algorithm 1]
 with block_size=32, zero heap allocation. Scores stay in stack buffer.
 
-| head_dim×seq_len | Unfused | Fused | Speedup | Contract |
-|-----------------|---------|-------|---------|----------|
-| 128×64 | 4.1µs | 2.7µs | **1.51x** | cgp-flash-attn-cpu-v1 |
-| 128×512 | 33.3µs | 21.9µs | **1.52x** | PASS (≥1.2x) |
-| 128×1024 | 68.1µs | 61.6µs | **1.11x** | MARGINAL |
-| 128×4096 | 432.7µs | 267.7µs | **1.62x** | PASS (≥1.3x) |
+| head_dim×seq_len | Unfused | Scalar Fused | **AVX2 Fused** | Speedup | Contract |
+|-----------------|---------|-------------|----------------|---------|----------|
+| 128×64 | 4.1µs | 2.7µs | **1.3µs** | **3.15x** | cgp-flash-attn-cpu-v1 |
+| 128×512 | 31.7µs | 21.9µs | **10.4µs** | **3.03x** | PASS (≥1.2x) |
+| 128×1024 | 63.2µs | 61.6µs | **21.5µs** | **2.95x** | PASS (≥1.2x) |
+| 128×4096 | 260.3µs | 267.7µs | **90.8µs** | **2.87x** | PASS (≥1.3x) |
 
-Projected realizr impact: AttentionScore 8137µs → ~5400µs (1.5x), saving ~2700µs
-per 16 tokens. End-to-end: **~15% inference speedup** from a single kernel.
+AVX2 SIMD inner loops: 4-accumulator dot product (Q·K), VFMADD V-accumulation,
+broadcast-multiply rescale. Uses AVX2 not AVX-512 (bandwidth-bound [60][61]).
+
+Projected realizr impact: AttentionScore 8137µs → **~2700µs** (3x), saving ~5400µs
+per 16 tokens. End-to-end: **~30% inference speedup** from a single kernel.
 FALSIFY: FLASH-ATTN-001 through 004 (5 tests, all passing).
 
 ### GitHub Issue Integration (2026-04-05)
