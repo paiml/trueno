@@ -742,3 +742,181 @@ fn cta_wmma_vs_cublas_fp16() {
     }
     eprintln!();
 }
+
+/// CTA WMMA double-buffered vs single-buffered vs cuBLAS FP16.
+///
+/// PERF-CTA-007: Measures the speedup from double-buffered shared memory
+/// which overlaps global load of next K-tile with WMMA compute of current tile.
+///
+/// Run: cargo test -p trueno-gpu --features cuda --lib --release -- cta_wmma_dbuf_bench --no-capture
+#[test]
+fn cta_wmma_dbuf_bench_fp16() {
+    use crate::driver::module::CudaModule;
+    use crate::kernels::gemm::basic::tensor_core::cta_wmma::{
+        build_cta_wmma_fp16, build_cta_wmma_fp16_dbuf,
+    };
+    use crate::ptx::PtxModule;
+    use std::ffi::c_void;
+    use std::time::Instant;
+
+    let ctx = CudaContext::new(0).expect("CUDA context");
+    let stream = CudaStream::new(&ctx).expect("stream");
+    let handle = CublasHandle::new(&ctx).expect("cuBLAS handle");
+    handle.set_stream(&stream).expect("set_stream");
+
+    eprintln!();
+    eprintln!("=== CTA WMMA: Single-buf vs Double-buf vs cuBLAS — FP16 ===");
+    eprintln!(
+        "{:<8} {:>10} {:>10} {:>10} {:>8} {:>8} {:>10}",
+        "Size", "Single(us)", "Dbuf(us)", "cuBLAS(us)", "Speedup", "vs cuBL", "Dbuf TFLOP/s"
+    );
+    eprintln!("{}", "-".repeat(78));
+
+    for &n in &[128_usize, 256, 512, 1024] {
+        let m = n;
+        let k = n;
+        let flops = 2.0 * m as f64 * n as f64 * k as f64;
+
+        let a16 = vec![0x3C00u16; m * k];
+        let b16 = vec![0x3C00u16; k * n];
+        let c32 = vec![0.0f32; m * n];
+
+        let a_buf = GpuBuffer::from_host(&ctx, &a16).expect("A");
+        let b_buf = GpuBuffer::from_host(&ctx, &b16).expect("B");
+        let c_buf = GpuBuffer::from_host(&ctx, &c32).expect("C");
+
+        let grid_x = ((n + 31) / 32) as u32;
+        let grid_y = ((m + 31) / 32) as u32;
+
+        // ─── Single-buffer ───
+        let kernel_s = build_cta_wmma_fp16(m as u32, n as u32, k as u32);
+        let ptx_s = PtxModule::new().add_kernel(kernel_s).emit();
+        let mut mod_s = match CudaModule::from_ptx(&ctx, &ptx_s) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("{:<8} Single compile failed: {e}", format!("{n}"));
+                continue;
+            }
+        };
+        let cfg_s =
+            LaunchConfig { grid: (grid_x, grid_y, 1), block: (128, 1, 1), shared_mem: 2048 };
+
+        let mut a_ptr = a_buf.as_ptr();
+        let mut b_ptr = b_buf.as_ptr();
+        let mut c_ptr = c_buf.as_ptr();
+        let mut m_v = m as u32;
+        let mut n_v = n as u32;
+        let mut k_v = k as u32;
+        let mut args: Vec<*mut c_void> = vec![
+            &mut a_ptr as *mut _ as *mut c_void,
+            &mut b_ptr as *mut _ as *mut c_void,
+            &mut c_ptr as *mut _ as *mut c_void,
+            &mut m_v as *mut _ as *mut c_void,
+            &mut n_v as *mut _ as *mut c_void,
+            &mut k_v as *mut _ as *mut c_void,
+        ];
+
+        for _ in 0..5 {
+            unsafe {
+                stream.launch_kernel(&mut mod_s, "gemm_cta_wmma_fp16", &cfg_s, &mut args).ok();
+            }
+        }
+        stream.synchronize().ok();
+        let iters = 50;
+        let start = Instant::now();
+        for _ in 0..iters {
+            unsafe {
+                stream.launch_kernel(&mut mod_s, "gemm_cta_wmma_fp16", &cfg_s, &mut args).ok();
+            }
+        }
+        stream.synchronize().ok();
+        let single_us = start.elapsed().as_micros() as f64 / iters as f64;
+
+        // ─── Double-buffer ───
+        let kernel_d = build_cta_wmma_fp16_dbuf(m as u32, n as u32, k as u32);
+        let ptx_d = PtxModule::new().add_kernel(kernel_d).emit();
+        let mut mod_d = match CudaModule::from_ptx(&ctx, &ptx_d) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("{:<8} Double-buf compile failed: {e}", format!("{n}"));
+                continue;
+            }
+        };
+        let cfg_d =
+            LaunchConfig { grid: (grid_x, grid_y, 1), block: (128, 1, 1), shared_mem: 4096 };
+
+        // Reset args
+        a_ptr = a_buf.as_ptr();
+        b_ptr = b_buf.as_ptr();
+        c_ptr = c_buf.as_ptr();
+        m_v = m as u32;
+        n_v = n as u32;
+        k_v = k as u32;
+
+        for _ in 0..5 {
+            unsafe {
+                stream.launch_kernel(&mut mod_d, "gemm_cta_wmma_fp16", &cfg_d, &mut args).ok();
+            }
+        }
+        stream.synchronize().ok();
+        let start = Instant::now();
+        for _ in 0..iters {
+            unsafe {
+                stream.launch_kernel(&mut mod_d, "gemm_cta_wmma_fp16", &cfg_d, &mut args).ok();
+            }
+        }
+        stream.synchronize().ok();
+        let dbuf_us = start.elapsed().as_micros() as f64 / iters as f64;
+        let dbuf_tflops = flops / (dbuf_us * 1e6);
+
+        // ─── cuBLAS reference ───
+        let c16_buf = GpuBuffer::from_host(&ctx, &vec![0u16; m * n]).expect("C16");
+        for _ in 0..5 {
+            handle
+                .gemm_f16_row_major(
+                    m as i32,
+                    n as i32,
+                    k as i32,
+                    1.0,
+                    a_buf.as_ptr(),
+                    b_buf.as_ptr(),
+                    0.0,
+                    c16_buf.as_ptr(),
+                )
+                .ok();
+        }
+        stream.synchronize().ok();
+        let start = Instant::now();
+        for _ in 0..iters {
+            handle
+                .gemm_f16_row_major(
+                    m as i32,
+                    n as i32,
+                    k as i32,
+                    1.0,
+                    a_buf.as_ptr(),
+                    b_buf.as_ptr(),
+                    0.0,
+                    c16_buf.as_ptr(),
+                )
+                .ok();
+        }
+        stream.synchronize().ok();
+        let cublas_us = start.elapsed().as_micros() as f64 / iters as f64;
+
+        let speedup = single_us / dbuf_us;
+        let vs_cublas = cublas_us / dbuf_us;
+
+        eprintln!(
+            "{:<8} {:>10.1} {:>10.1} {:>10.1} {:>7.2}x {:>7.2}x {:>10.1}",
+            format!("{n}"),
+            single_us,
+            dbuf_us,
+            cublas_us,
+            speedup,
+            vs_cublas,
+            dbuf_tflops,
+        );
+    }
+    eprintln!();
+}

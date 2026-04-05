@@ -78,8 +78,36 @@ IPC than Rust intrinsics. Shared-B packing tested and disproven (see negative re
 
 **Bottleneck analysis**: CTA WMMA at 18.4 TFLOP/s (22% of FP32 peak) is limited by
 **serialized load-compute**: the K-loop does `bar_sync → load smem → bar_sync → WMMA`
-sequentially [25]. Double-buffered shared memory [48] would overlap load and compute,
-estimated 1.3-1.5× improvement (target: 24+ TFLOP/s = 0.5x cuBLAS).
+sequentially [25].
+
+**Double-buffer experiment (measured 2026-04-05, NEGATIVE RESULT)**:
+
+Implemented PERF-CTA-007 (double-buffered shared memory) with two variants:
+1. **Naive double-buffer**: 2× smem, prologue/loop/epilogue, buffer swap per K-tile
+2. **Separated-loads** (PERF-CTA-008): issue all `ld.global` first, then WMMA from
+   compute buffer (tensor core overlaps with in-flight loads), then `st.shared`
+
+| Size | Single (µs) | Dbuf naive (µs) | Dbuf separated (µs) | Speedup |
+|------|-------------|-----------------|----------------------|---------|
+| 128 | 5.0 | 5.2 (0.98x) | **4.7 (1.05x)** | +5% |
+| 256 | 8.4 | 8.7 (0.97x) | **8.0 (1.05x)** | +5% |
+| 512 | 18.9 | 20.7 (0.92x) | 19.8 (0.96x) | −4% |
+| 1024 | 117-122 | 152.4 (0.77x) | 155.1 (0.79x) | −23% |
+
+**Root cause of negative result at large sizes**:
+- **Register pressure**: double-buffer adds ~24 extra registers (buffer offsets,
+  buffered addresses, loaded values) → lower occupancy → fewer concurrent warps
+- **Code bloat**: naive dbuf PTX is 25KB vs 15KB single (1.68×); separated-loads
+  is ~30KB (4 WMMA emissions). SM instruction cache ≈32KB → thrashing at 1024
+- **Naive overlap failure**: interleaved `ld.global → st.shared` stalls each shared
+  store on its global load (~400 cycles), preventing WMMA from starting until all
+  stores complete. Separated loads fix this at small sizes but overhead dominates
+  at large sizes.
+
+**Conclusion**: Double-buffering is a net negative for 32×32 CTA tiles. The compute-to-
+load ratio is too low (only one 16×16 WMMA per K-tile per buffer). To benefit from
+double-buffering, need larger tiles (64×64+) where multiple WMMA ops amortize the
+buffer management overhead. Next step: increase tile size before retrying double-buffer.
 
 **Note**: GPU pure-Rust PTX vs cuBLAS is not expected to hit 1.5x — cuBLAS uses hand-tuned SASS and proprietary tensor core scheduling. The GPU target is to close the gap from 0.38x toward 0.5x+ (competitive for deployment where vendor lock-in is unacceptable).
 
