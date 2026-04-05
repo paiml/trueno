@@ -113,6 +113,43 @@ pub fn profile_quant(kernel_name: &str, size: &str) -> Result<()> {
         println!("    Effective BW: {:.1} GB/s (compressed)", timing.bw_gbps);
         let sbs_per_sec = num_superblocks as f64 / (timing.time_us / 1e6);
         println!("    Super-blocks/sec: {:.0}", sbs_per_sec);
+
+        // Roofline analysis
+        let flops = 2.0 * dims[0] as f64 * dims[2] as f64; // GEMV: 2*M*K FLOPs
+        let ai = flops / compressed_bytes as f64; // FLOP/byte (compressed)
+        println!("\n  Roofline Analysis (compressed):");
+        println!("    Arithmetic Intensity: {:.1} FLOP/byte", ai);
+
+        // Compare against CPU peak (use empirical single-core for now)
+        let peak_bw_gbps = timing.bw_gbps; // Achieved bandwidth
+        let peak_flops = timing.gflops;
+
+        // Theoretical peak for single-core AVX-512: ~150 GFLOP/s FP32
+        let theoretical_peak_gflops = 150.0;
+        let compute_pct = peak_flops / theoretical_peak_gflops * 100.0;
+
+        // DDR5 single-channel practical: ~40 GB/s
+        let theoretical_bw_gbps = 40.0;
+        let bw_pct = peak_bw_gbps / theoretical_bw_gbps * 100.0;
+
+        println!("    Compute util: {:.0}% of AVX-512 peak (~150 GFLOP/s)", compute_pct);
+        println!("    Bandwidth util: {:.0}% of practical DRAM (~40 GB/s)", bw_pct);
+
+        if bw_pct > compute_pct {
+            println!("    Bottleneck: COMPUTE-BOUND (fused dequant+dot overhead)");
+        } else {
+            println!("    Bottleneck: MEMORY-BOUND (limited by DRAM read throughput)");
+        }
+
+        // Token estimation for LLM inference
+        // Llama 7B: ~32 layers, each with 3 GEMV ops (QKV, attention, FFN up+down)
+        // Simplified: ~6 GEMV per layer * 32 layers = 192 GEMV per token
+        let token_time_ms = timing.time_us * 192.0 / 1000.0;
+        let tokens_per_sec = 1000.0 / token_time_ms;
+        println!("\n  LLM Token Estimation (Llama-7B-like, {kernel_name}):");
+        println!("    Per-layer GEMV: {:.1} us", timing.time_us);
+        println!("    Est. 192 GEMVs/token: {:.1} ms", token_time_ms);
+        println!("    Est. tokens/sec: {:.1}", tokens_per_sec);
     } else {
         println!("\n  No timing data (build benchmark: cargo build --release --example benchmark_matrix_suite --features parallel)");
     }

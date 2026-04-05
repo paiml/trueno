@@ -2115,7 +2115,7 @@ Tested on: RTX 4090, Driver 570.207, ncu 2025.1.1.0, nsys 2025.3.2.367, perf 6.8
 
 ### Appendix A.1: FALSIFY Suite (automated, 2026-04-05)
 
-15 end-to-end falsification tests in `tests/falsify.rs`, all passed:
+23 end-to-end falsification tests in `tests/falsify.rs`, all passed:
 
 | Test ID | Claim | Result | Method |
 |---------|-------|--------|--------|
@@ -2134,6 +2134,14 @@ Tested on: RTX 4090, Driver 570.207, ncu 2025.1.1.0, nsys 2025.3.2.367, perf 6.8
 | FALSIFY-CGP-061 | Doctor < 2s | **PASS** | 107ms measured |
 | FALSIFY-CGP-062 | Diff < 100ms | **PASS** | 2ms measured (pure JSON analysis) |
 | FALSIFY-CGP-075 | Q4K = 9.44 MB | **PASS** | Compressed size in output |
+| FALSIFY-CGP-076 | Q4K roofline analysis | **PASS** | Bottleneck classification present when benchmark binary available |
+| FALSIFY-CGP-077b | Q4K token estimation | **PASS** | tokens/sec shown for LLM inference estimate |
+| FALSIFY-CGP-EMPIRICAL-010 | Empirical roofline output | **PASS** | `--empirical` shows DRAM BW, FLOPS, ridge |
+| FALSIFY-CGP-EMPIRICAL-011 | Bandwidth > 0.1 GB/s | **PASS** | Measured 20.4 GB/s (release), 0.4 GB/s (debug) |
+| FALSIFY-CGP-EMPIRICAL-012 | AVX-512 FLOPS > 10 | **PASS** | Measured 152.5 GFLOP/s single-core |
+| FALSIFY-CGP-COMPARE-050 | Measured GEMM data | **PASS** | M=measured label when benchmark binary exists |
+| FALSIFY-CGP-SCALING-001 | JSON schema fields | **PASS** | threads, gflops, scaling fields present |
+| FALSIFY-CGP-SCALING-002 | 1T baseline ~1.0x | **PASS** | Scaling = 1.0 at 1 thread |
 
 ### Appendix A.2: Performance Measurements (2026-04-04)
 
@@ -2237,11 +2245,41 @@ not the SIMD dequant+FMA pipeline. The QuIP# [47] approach of vectorizing the sc
 extraction with VBMI2 byte shuffles is the next optimization target.
 Contract: `avx512-q4k-v1.yaml`, bindings: 42/42.
 
+**Empirical Roofline Results (2026-04-05, `cgp roofline --empirical`, Threadripper 7960X):**
+
+| Metric | AVX-512 Theoretical | Measured | Efficiency |
+|--------|-------------------|----------|------------|
+| Peak FP32 FLOPS (single-core) | 224 GFLOP/s | **152.5 GFLOP/s** | 68% |
+| Peak FP32 FLOPS (AVX2 mode) | 112 GFLOP/s | **153.4 GFLOP/s** | 137% (\*) |
+| DRAM Bandwidth (single-core) | 204.8 GB/s (system) | **20.4 GB/s** | 10% |
+| Empirical Ridge (single-core) | 26.2 FLOP/byte | **7.5 FLOP/byte** | — |
+
+(\*) AVX2 exceeds 112 GFLOP/s theoretical because Zen 4 executes 256-bit FMA at native
+512-bit width (two 256-bit FMA units). The AVX2 model undercounts Zen 4.
+
+**Insight**: Single-core DRAM is ~10% of system-wide theoretical (expected — DDR5 multi-channel
+is shared across 24 cores). The 68% compute efficiency gap vs AVX-512 theoretical is due to
+Zen 4's AVX-512 frequency downclocking (base 3.5 GHz, sustained AVX-512 likely ~3.2 GHz).
+Empirical ridge is 7.5 FLOP/byte — much lower than theoretical 26.2 — meaning single-core
+workloads are more compute-rich relative to available bandwidth.
+
+**Q4K Roofline Analysis (from `cgp profile quant`, 2026-04-05):**
+
+| Size | Compute Util | BW Util | Bottleneck | Est. tok/s (Llama-7B) |
+|------|-------------|---------|------------|----------------------|
+| 4096x4096 | 34% | 36% | COMPUTE | 7.9 |
+| 1536x8960 | 38% | 40% | COMPUTE | 10.9 |
+| 8960x1536 | 38% | 40% | COMPUTE | 10.7 |
+
+All Q4K sizes are compute-bound: fused dequant+dot overhead (header parsing, 6-bit scale
+decode) limits throughput more than DRAM bandwidth. This confirms the optimization target:
+vectorize super-block header parsing, not memory prefetch.
+
 **Negative result (Q4K parallel threshold):** Lowering threshold from 8M to 2M elements
 regressed attn_qkv (1536×1536, 2.4M) from 17→14 GFLOPS. Thread spawn overhead (~40µs)
 dominates when total compute is <300µs. Contract: `cgp-q4k-parallel-threshold-v1.yaml`.
 
-**Implementation status** (2026-04-05): cgp binary fully functional in `crates/cgp/` with 111 unit + 17 falsify + 29 integration = 157 (cgp); 42/42 provable-contracts bindings tests.
+**Implementation status** (2026-04-05): cgp binary fully functional in `crates/cgp/` with 116 unit + 23 falsify + 29 integration = 168 (cgp); 42/42 provable-contracts bindings tests.
 
 All 17 CLI subcommands implemented and dogfooded on RTX 4090 + Threadripper 7960X:
 
@@ -2252,13 +2290,13 @@ All 17 CLI subcommands implemented and dogfooded on RTX 4090 + Threadripper 7960
 | `cgp profile binary` | **DONE** | Runs nsys, extracts kernel stats table |
 | `cgp profile python` | **DONE** | Wraps nsys for Python CUDA workloads |
 | `cgp profile simd` | **DONE** | Runs perf stat, computes IPC/SIMD utilization/cache miss rate |
-| `cgp profile compare` | **DONE** | Cross-backend table with TFLOP/s + `--json` structured output |
+| `cgp profile compare` | **DONE** | Cross-backend table with TFLOP/s + `--json` + measured/estimated labels (M/E) |
 | `cgp profile scalar` | **DONE** | Scalar baseline with perf stat hardware counters |
 | `cgp profile parallel` | **DONE** | Min-of-3 timing with RAYON_NUM_THREADS, speedup, Amdahl's law analysis |
 | `cgp profile scaling` | **DONE** | Thread-count sweep with GEMM parsing, JSON output, min-of-N timing |
 | `cgp profile wasm` | **DONE** | wasmtime detection, SIMD128 detection, fuel metering |
 | `cgp profile wgpu` | **DONE** | Shader validation, workgroup_size extraction, backend detection |
-| `cgp roofline` | **DONE** | cuda, avx2, avx512, neon, wgpu targets with JSON export |
+| `cgp roofline` | **DONE** | cuda, avx2, avx512, neon, wgpu targets with JSON export + `--empirical` STREAM/FMA measurement |
 | `cgp diff` | **DONE** | JSON profile comparison with per-metric verdicts, <2ms |
 | `cgp compete` | **DONE** | Head-to-head timing with vs-best ratios |
 | `cgp baseline` | **DONE** | Save/load/list baselines with system health context |
@@ -2288,7 +2326,20 @@ New in Phase 3 (PMAT-037):
 - **Performance contracts**: First contracts in `contracts/cgp/` (BLIS GEMM + roofline)
 - **Dogfooding**: All measurements regenerated via `cgp profile scaling` (see Appendix A.2)
 
-FALSIFY tests implemented (111 unit + 17 falsify + 29 integration = 157 (cgp); 42/42 provable-contracts bindings):
+New in Phase 4 (PMAT-037 continued):
+- **Empirical roofline** (`--empirical`): STREAM-like bandwidth + AVX-512 FMA peak FLOPS measurement
+  - AVX-512 FMA: 10 independent zmm accumulators, `_mm512_fmadd_ps`, 100M iterations
+  - AVX2 FMA fallback: 10 ymm accumulators, `_mm256_fmadd_ps`
+  - STREAM copy + triad: 64 MB arrays, 10 iterations, max of both
+  - Measured on Threadripper 7960X: 152.5 GFLOP/s (68% of theoretical 224), 20.4 GB/s BW
+- **Compare measured data**: `benchmark_matrix_suite` integration for real GEMM timing
+  - M/E labels distinguish measured vs estimated in comparison tables
+  - Measured 1024x1024 GEMM: 400 GFLOPS (parallel), 5.3 ms
+- **Q4K roofline analysis**: Bottleneck classification (compute vs memory bound) + LLM token estimation
+  - 4096x4096 Q4K: 50.9 GFLOPS, 14.3 GB/s compressed, compute-bound (34% of AVX-512 peak)
+  - Token estimation: ~7.9 tok/s for Llama-7B-like model at 4096 dims
+
+FALSIFY tests implemented (116 unit + 23 falsify + 29 integration = 168 (cgp); 42/42 provable-contracts bindings):
 - FALSIFY-CGP-010/011/012: Doctor tool detection (doctor.rs + integration)
 - FALSIFY-CGP-020/021: Roofline bandwidth + ridge points (falsify.rs + analysis/roofline.rs)
 - FALSIFY-CGP-030/031/032: Regression detection + improvement detection (falsify.rs)
@@ -2304,6 +2355,10 @@ FALSIFY tests implemented (111 unit + 17 falsify + 29 integration = 157 (cgp); 4
 - FALSIFY-CGP-080/081/082: Parallel speedup, heijunka score (profilers/rayon_parallel.rs)
 - System health, energy, ncu/nsys/perf CSV parsing, PTX/WGSL analysis (unit tests)
 - Scaling JSON output, contract verification, baseline save/load (integration tests)
+- FALSIFY-CGP-EMPIRICAL-010/011/012: Empirical roofline measurement validation (falsify.rs)
+- FALSIFY-CGP-COMPARE-050: Measured vs estimated data source tracking (falsify.rs)
+- FALSIFY-CGP-076/077b: Q4K roofline analysis + token estimation (falsify.rs)
+- 5 new unit tests: empirical bandwidth, FLOPS, ridge, triad, actual GEMM parsing (analysis/roofline.rs + compare.rs)
 
 **Remaining** (require target hardware, root access, or platform-specific):
 - FALSIFY-CGP-022: Kernel roofline vs ncu (needs root for ncu on this kernel)

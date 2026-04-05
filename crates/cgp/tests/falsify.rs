@@ -701,3 +701,198 @@ fn falsify_cgp_scaling_002_baseline_is_1x() {
         );
     }
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// FALSIFY-CGP-EMPIRICAL-010: Empirical roofline must produce output
+// Spec section 3.1: --empirical flag measures actual bandwidth and FLOPS.
+// ══════════════════════════════════════════════════════════════════════
+#[test]
+fn falsify_cgp_empirical_010_roofline_output() {
+    let output = cgp_cmd()
+        .args(["roofline", "--target", "avx512", "--empirical"])
+        .output()
+        .expect("Failed to run cgp roofline --empirical");
+
+    assert!(output.status.success(), "cgp roofline --empirical must succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        stdout.contains("Empirical Measurement"),
+        "FALSIFY-CGP-EMPIRICAL-010: Must show empirical section.\nOutput:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("DRAM Bandwidth"),
+        "FALSIFY-CGP-EMPIRICAL-010: Must show measured bandwidth.\nOutput:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Peak FP32 FLOPS"),
+        "FALSIFY-CGP-EMPIRICAL-010: Must show measured FLOPS.\nOutput:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Empirical Ridge"),
+        "FALSIFY-CGP-EMPIRICAL-010: Must show empirical ridge point.\nOutput:\n{stdout}"
+    );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// FALSIFY-CGP-EMPIRICAL-011: Empirical bandwidth must be > 0 GB/s
+// Note: when run via cargo test (debug/unoptimized), STREAM bandwidth
+// is much lower than release. Threshold is lenient; the real validation
+// is via `cgp roofline --empirical` in release mode (20+ GB/s).
+// ══════════════════════════════════════════════════════════════════════
+#[test]
+fn falsify_cgp_empirical_011_bandwidth_sanity() {
+    let output = cgp_cmd()
+        .args(["roofline", "--target", "avx512", "--empirical"])
+        .output()
+        .expect("Failed to run cgp roofline --empirical");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Parse "DRAM Bandwidth:      XX.X GB/s"
+    for line in stdout.lines() {
+        if line.contains("DRAM Bandwidth:") {
+            let bw_str = line
+                .split("DRAM Bandwidth:")
+                .nth(1)
+                .and_then(|s| s.split("GB/s").next())
+                .map(|s| s.trim());
+            if let Some(bw_val) = bw_str.and_then(|s| s.parse::<f64>().ok()) {
+                assert!(
+                    bw_val > 0.1,
+                    "FALSIFY-CGP-EMPIRICAL-011: Bandwidth {bw_val} GB/s must be > 0.1 GB/s"
+                );
+                return;
+            }
+        }
+    }
+    panic!("FALSIFY-CGP-EMPIRICAL-011: Could not parse bandwidth from output");
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// FALSIFY-CGP-EMPIRICAL-012: Empirical AVX-512 FLOPS > 10 GFLOP/s
+// Any AVX-512 capable CPU should exceed 10 GFLOP/s single-core FP32.
+// ══════════════════════════════════════════════════════════════════════
+#[test]
+fn falsify_cgp_empirical_012_flops_sanity() {
+    let output = cgp_cmd()
+        .args(["roofline", "--target", "avx512", "--empirical"])
+        .output()
+        .expect("Failed to run cgp roofline --empirical");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    for line in stdout.lines() {
+        if line.contains("Peak FP32 FLOPS:") {
+            let flops_str = line
+                .split("Peak FP32 FLOPS:")
+                .nth(1)
+                .and_then(|s| s.split("GFLOP/s").next())
+                .map(|s| s.trim());
+            if let Some(flops_val) = flops_str.and_then(|s| s.parse::<f64>().ok()) {
+                assert!(
+                    flops_val > 10.0,
+                    "FALSIFY-CGP-EMPIRICAL-012: FLOPS {flops_val} GFLOP/s must be > 10"
+                );
+                return;
+            }
+        }
+    }
+    // Skip if not on AVX-512 hardware
+    if !stdout.contains("AVX-512") {
+        return;
+    }
+    panic!("FALSIFY-CGP-EMPIRICAL-012: Could not parse FLOPS from output");
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// FALSIFY-CGP-COMPARE-050: Measured GEMM must be available
+// When benchmark_matrix_suite binary exists, compare should use real data.
+// ══════════════════════════════════════════════════════════════════════
+#[test]
+fn falsify_cgp_compare_050_measured_data() {
+    let output = cgp_cmd()
+        .args(["profile", "compare", "--kernel", "gemm", "--size", "1024", "--backends", "avx512"])
+        .output()
+        .expect("Failed to run cgp profile compare");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // If benchmark binary exists, should show M (measured) not E (estimated)
+    let bench_exists = std::path::Path::new(
+        "/mnt/nvme-raid0/targets/trueno/release/examples/benchmark_matrix_suite",
+    )
+    .exists();
+
+    if bench_exists {
+        assert!(
+            stdout.contains("M"),
+            "FALSIFY-CGP-COMPARE-050: With benchmark binary, should show M=measured.\nOutput:\n{stdout}"
+        );
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// FALSIFY-CGP-QUANT-076: Q4K roofline analysis present
+// cgp profile quant must show roofline analysis with bottleneck classification.
+// ══════════════════════════════════════════════════════════════════════
+#[test]
+fn falsify_cgp_quant_076_roofline_analysis() {
+    let output = cgp_cmd()
+        .args(["profile", "quant", "--kernel", "q4k_gemv", "--size", "4096x1x4096"])
+        .output()
+        .expect("Failed to run cgp profile quant");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Must always show structural info
+    assert!(stdout.contains("Super-block:"), "Must show super-block info");
+    assert!(stdout.contains("Compression ratio:"), "Must show compression ratio");
+
+    // If benchmark binary exists, should show roofline
+    let bench_exists = std::path::Path::new(
+        "/mnt/nvme-raid0/targets/trueno/release/examples/benchmark_matrix_suite",
+    )
+    .exists();
+    if bench_exists {
+        assert!(
+            stdout.contains("Roofline Analysis"),
+            "FALSIFY-CGP-QUANT-076: Must show roofline analysis when timing available.\nOutput:\n{stdout}"
+        );
+        assert!(
+            stdout.contains("Bottleneck:"),
+            "FALSIFY-CGP-QUANT-076: Must classify bottleneck.\nOutput:\n{stdout}"
+        );
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// FALSIFY-CGP-QUANT-077: Token estimation present for LLM workloads
+// ══════════════════════════════════════════════════════════════════════
+#[test]
+fn falsify_cgp_quant_077_token_estimation() {
+    let output = cgp_cmd()
+        .args(["profile", "quant", "--kernel", "q4k_gemv", "--size", "4096x1x4096"])
+        .output()
+        .expect("Failed to run cgp profile quant");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    let bench_exists = std::path::Path::new(
+        "/mnt/nvme-raid0/targets/trueno/release/examples/benchmark_matrix_suite",
+    )
+    .exists();
+    if bench_exists {
+        assert!(
+            stdout.contains("Token Estimation"),
+            "FALSIFY-CGP-QUANT-077: Must show LLM token estimation.\nOutput:\n{stdout}"
+        );
+        assert!(
+            stdout.contains("tokens/sec"),
+            "FALSIFY-CGP-QUANT-077: Must show tokens/sec.\nOutput:\n{stdout}"
+        );
+    }
+}

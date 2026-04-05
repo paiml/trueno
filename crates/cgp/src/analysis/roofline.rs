@@ -223,43 +223,251 @@ pub struct KernelRooflinePoint {
     pub distance_to_ridge: f64,
 }
 
-/// Run the `cgp roofline` command.
-pub fn run_roofline(
-    target: &str,
-    _kernels: Option<&str>,
-    export: Option<&str>,
-    _empirical: bool,
-    json: bool,
-) -> Result<()> {
-    let model = match target {
-        "cuda" => RooflineModel::rtx_4090(),
-        "avx2" => {
-            let cores = num_cpus::get_physical();
-            RooflineModel::cpu_avx2(3.5, cores, 204.8)
-        }
-        "avx512" => {
-            let cores = num_cpus::get_physical();
-            RooflineModel::cpu_avx512(3.5, cores, 204.8)
-        }
-        "neon" => {
-            let cores = num_cpus::get_physical();
-            RooflineModel::cpu_neon(3.0, cores, 51.2)
-        }
-        "wgpu" => RooflineModel::rtx_4090(), // wgpu uses same GPU hardware
-        other => anyhow::bail!(
-            "Unknown roofline target: {other}. Supported: cuda, avx2, avx512, neon, wgpu"
-        ),
-    };
+/// Empirical roofline measurement results.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmpiricalResult {
+    /// Measured DRAM bandwidth (bytes/s) via STREAM-like test
+    pub measured_bandwidth_bps: f64,
+    /// Measured peak FLOPS via tight FMA loop
+    pub measured_peak_flops: f64,
+    /// Empirical ridge point (FLOP/byte)
+    pub measured_ridge_point: f64,
+    /// Theoretical vs empirical bandwidth ratio
+    pub bandwidth_efficiency: f64,
+    /// Theoretical vs empirical compute ratio
+    pub compute_efficiency: f64,
+}
 
-    if json {
-        let json_str = serde_json::to_string_pretty(&model)?;
-        println!("{json_str}");
-        return Ok(());
+/// Measure actual DRAM bandwidth via STREAM-like copy test.
+/// Allocates 64 MB arrays, performs timed copy, returns bytes/s.
+fn measure_bandwidth() -> f64 {
+    const N: usize = 16 * 1024 * 1024; // 16M f32 = 64 MB
+    const ITERS: usize = 10;
+
+    let a: Vec<f32> = vec![1.0f32; N];
+    let mut b: Vec<f32> = vec![0.0f32; N];
+
+    // Warmup
+    b.copy_from_slice(&a);
+
+    let start = std::time::Instant::now();
+    for _ in 0..ITERS {
+        b.copy_from_slice(&a);
+        // Prevent dead-code elimination
+        std::hint::black_box(&b);
+    }
+    let elapsed = start.elapsed().as_secs_f64();
+
+    // Each iteration reads N f32 and writes N f32 = 2 * N * 4 bytes
+    let bytes = 2.0 * N as f64 * 4.0 * ITERS as f64;
+    bytes / elapsed
+}
+
+/// Measure actual DRAM bandwidth via STREAM-like triad: a[i] = b[i] + s * c[i].
+/// More representative than copy — exercises FMA pipeline and memory subsystem together.
+fn measure_bandwidth_triad() -> f64 {
+    const N: usize = 16 * 1024 * 1024; // 16M f32 = 64 MB per array
+    const ITERS: usize = 10;
+
+    let b: Vec<f32> = vec![1.0f32; N];
+    let c: Vec<f32> = vec![2.0f32; N];
+    let mut a: Vec<f32> = vec![0.0f32; N];
+    let s = 3.0f32;
+
+    // Warmup
+    for i in 0..N {
+        a[i] = b[i] + s * c[i];
     }
 
+    let start = std::time::Instant::now();
+    for _ in 0..ITERS {
+        for i in 0..N {
+            a[i] = b[i] + s * c[i];
+        }
+        std::hint::black_box(&a);
+    }
+    let elapsed = start.elapsed().as_secs_f64();
+
+    // Triad: reads 2 arrays, writes 1 = 3 * N * 4 bytes per iteration
+    let bytes = 3.0 * N as f64 * 4.0 * ITERS as f64;
+    bytes / elapsed
+}
+
+/// Measure peak single-core FP32 FLOPS using AVX-512/AVX2 FMA intrinsics.
+/// Falls back to scalar if SIMD not available.
+fn measure_peak_flops_single_core() -> f64 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if std::arch::is_x86_feature_detected!("avx512f") {
+            // SAFETY: avx512f detected above
+            return unsafe { measure_peak_flops_avx512() };
+        }
+        if std::arch::is_x86_feature_detected!("avx2") && std::arch::is_x86_feature_detected!("fma")
+        {
+            // SAFETY: avx2+fma detected above
+            return unsafe { measure_peak_flops_avx2() };
+        }
+    }
+    measure_peak_flops_scalar()
+}
+
+/// Scalar fallback for peak FLOPS measurement.
+fn measure_peak_flops_scalar() -> f64 {
+    const ITERS: u64 = 500_000_000;
+    let mut a0 = 1.0f32;
+    let mut a1 = 1.1f32;
+    let mut a2 = 1.2f32;
+    let mut a3 = 1.3f32;
+    let m = 1.0000001f32;
+    let add = 0.0000001f32;
+
+    let start = std::time::Instant::now();
+    for _ in 0..ITERS {
+        a0 = a0.mul_add(m, add);
+        a1 = a1.mul_add(m, add);
+        a2 = a2.mul_add(m, add);
+        a3 = a3.mul_add(m, add);
+    }
+    let elapsed = start.elapsed().as_secs_f64();
+    std::hint::black_box(a0 + a1 + a2 + a3);
+    // 4 FMA = 8 FLOP per iteration
+    ITERS as f64 * 8.0 / elapsed
+}
+
+/// AVX2 FMA peak: 2 FMA units * 8 FP32/vec * 2 ops/FMA = 32 FLOP/cycle.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
+unsafe fn measure_peak_flops_avx2() -> f64 {
+    use std::arch::x86_64::*;
+
+    const ITERS: u64 = 100_000_000;
+
+    // 10 independent accumulators to saturate both FMA ports
+    let mut v0 = _mm256_set1_ps(1.0);
+    let mut v1 = _mm256_set1_ps(1.1);
+    let mut v2 = _mm256_set1_ps(1.2);
+    let mut v3 = _mm256_set1_ps(1.3);
+    let mut v4 = _mm256_set1_ps(1.4);
+    let mut v5 = _mm256_set1_ps(1.5);
+    let mut v6 = _mm256_set1_ps(1.6);
+    let mut v7 = _mm256_set1_ps(1.7);
+    let mut v8 = _mm256_set1_ps(1.8);
+    let mut v9 = _mm256_set1_ps(1.9);
+    let mul = _mm256_set1_ps(1.0000001);
+    let add = _mm256_set1_ps(0.0000001);
+
+    let start = std::time::Instant::now();
+    for _ in 0..ITERS {
+        // 10 vfmadd231ps: each = 8 FMA = 16 FLOP → 160 FLOP/iter
+        v0 = _mm256_fmadd_ps(v0, mul, add);
+        v1 = _mm256_fmadd_ps(v1, mul, add);
+        v2 = _mm256_fmadd_ps(v2, mul, add);
+        v3 = _mm256_fmadd_ps(v3, mul, add);
+        v4 = _mm256_fmadd_ps(v4, mul, add);
+        v5 = _mm256_fmadd_ps(v5, mul, add);
+        v6 = _mm256_fmadd_ps(v6, mul, add);
+        v7 = _mm256_fmadd_ps(v7, mul, add);
+        v8 = _mm256_fmadd_ps(v8, mul, add);
+        v9 = _mm256_fmadd_ps(v9, mul, add);
+    }
+    let elapsed = start.elapsed().as_secs_f64();
+    // Prevent dead-code elimination
+    let sum = _mm256_add_ps(v0, v1);
+    let sum = _mm256_add_ps(sum, v2);
+    let sum = _mm256_add_ps(sum, v3);
+    let sum = _mm256_add_ps(sum, v4);
+    let sum = _mm256_add_ps(sum, v5);
+    let sum = _mm256_add_ps(sum, v6);
+    let sum = _mm256_add_ps(sum, v7);
+    let sum = _mm256_add_ps(sum, v8);
+    let sum = _mm256_add_ps(sum, v9);
+    std::hint::black_box(sum);
+
+    // 10 FMAs * 8 elements * 2 ops(mul+add) = 160 FLOP per iteration
+    ITERS as f64 * 160.0 / elapsed
+}
+
+/// AVX-512 FMA peak: 2 FMA units * 16 FP32/vec * 2 ops/FMA = 64 FLOP/cycle.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f")]
+unsafe fn measure_peak_flops_avx512() -> f64 {
+    use std::arch::x86_64::*;
+
+    const ITERS: u64 = 100_000_000;
+
+    // 10 independent accumulators to saturate both FMA512 ports
+    let mut v0 = _mm512_set1_ps(1.0);
+    let mut v1 = _mm512_set1_ps(1.1);
+    let mut v2 = _mm512_set1_ps(1.2);
+    let mut v3 = _mm512_set1_ps(1.3);
+    let mut v4 = _mm512_set1_ps(1.4);
+    let mut v5 = _mm512_set1_ps(1.5);
+    let mut v6 = _mm512_set1_ps(1.6);
+    let mut v7 = _mm512_set1_ps(1.7);
+    let mut v8 = _mm512_set1_ps(1.8);
+    let mut v9 = _mm512_set1_ps(1.9);
+    let mul = _mm512_set1_ps(1.0000001);
+    let add = _mm512_set1_ps(0.0000001);
+
+    let start = std::time::Instant::now();
+    for _ in 0..ITERS {
+        // 10 vfmadd231ps zmm: each = 16 FMA = 32 FLOP → 320 FLOP/iter
+        v0 = _mm512_fmadd_ps(v0, mul, add);
+        v1 = _mm512_fmadd_ps(v1, mul, add);
+        v2 = _mm512_fmadd_ps(v2, mul, add);
+        v3 = _mm512_fmadd_ps(v3, mul, add);
+        v4 = _mm512_fmadd_ps(v4, mul, add);
+        v5 = _mm512_fmadd_ps(v5, mul, add);
+        v6 = _mm512_fmadd_ps(v6, mul, add);
+        v7 = _mm512_fmadd_ps(v7, mul, add);
+        v8 = _mm512_fmadd_ps(v8, mul, add);
+        v9 = _mm512_fmadd_ps(v9, mul, add);
+    }
+    let elapsed = start.elapsed().as_secs_f64();
+    let sum = _mm512_add_ps(v0, v1);
+    let sum = _mm512_add_ps(sum, v2);
+    let sum = _mm512_add_ps(sum, v3);
+    let sum = _mm512_add_ps(sum, v4);
+    let sum = _mm512_add_ps(sum, v5);
+    let sum = _mm512_add_ps(sum, v6);
+    let sum = _mm512_add_ps(sum, v7);
+    let sum = _mm512_add_ps(sum, v8);
+    let sum = _mm512_add_ps(sum, v9);
+    std::hint::black_box(sum);
+
+    // 10 FMAs * 16 elements * 2 ops = 320 FLOP per iteration
+    ITERS as f64 * 320.0 / elapsed
+}
+
+/// Run empirical roofline measurement and return enhanced model.
+pub fn measure_empirical(theoretical: &RooflineModel) -> EmpiricalResult {
+    let bw_copy = measure_bandwidth();
+    let bw_triad = measure_bandwidth_triad();
+    // Use the better of copy and triad as the bandwidth number
+    let measured_bw = bw_copy.max(bw_triad);
+    let measured_flops = measure_peak_flops_single_core();
+
+    let theoretical_bw = theoretical.peak_bandwidth.get(&MemoryLevel::Dram).copied().unwrap_or(1.0);
+    let theoretical_flops = theoretical.peak_compute.get(&Precision::Fp32).copied().unwrap_or(1.0);
+
+    // For single-core measurement, divide theoretical by core count
+    // The theoretical model includes all cores, so single-core peak = theoretical / cores
+    let cores = num_cpus::get_physical() as f64;
+    let single_core_theoretical = theoretical_flops / cores;
+
+    EmpiricalResult {
+        measured_bandwidth_bps: measured_bw,
+        measured_peak_flops: measured_flops,
+        measured_ridge_point: measured_flops / measured_bw,
+        bandwidth_efficiency: measured_bw / theoretical_bw * 100.0,
+        compute_efficiency: measured_flops / single_core_theoretical * 100.0,
+    }
+}
+
+/// Print roofline model to stdout in human-readable format.
+fn print_roofline(model: &RooflineModel) {
     println!("\n=== cgp Roofline: {} ===\n", model.target);
 
-    // Print peak compute per precision
     println!("  Peak Compute:");
     let mut precisions: Vec<_> = model.peak_compute.iter().collect();
     precisions.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -283,6 +491,72 @@ pub fn run_roofline(
         if let Some(ridge) = model.ridge_point(**prec, MemoryLevel::Dram) {
             println!("    {prec:15}: {:8.1} FLOP/byte", ridge);
         }
+    }
+}
+
+/// Run the `cgp roofline` command.
+pub fn run_roofline(
+    target: &str,
+    _kernels: Option<&str>,
+    export: Option<&str>,
+    empirical: bool,
+    json: bool,
+) -> Result<()> {
+    let model = match target {
+        "cuda" => RooflineModel::rtx_4090(),
+        "avx2" => {
+            let cores = num_cpus::get_physical();
+            RooflineModel::cpu_avx2(3.5, cores, 204.8)
+        }
+        "avx512" => {
+            let cores = num_cpus::get_physical();
+            RooflineModel::cpu_avx512(3.5, cores, 204.8)
+        }
+        "neon" => {
+            let cores = num_cpus::get_physical();
+            RooflineModel::cpu_neon(3.0, cores, 51.2)
+        }
+        "wgpu" => RooflineModel::rtx_4090(),
+        other => anyhow::bail!(
+            "Unknown roofline target: {other}. Supported: cuda, avx2, avx512, neon, wgpu"
+        ),
+    };
+
+    if json && !empirical {
+        let json_str = serde_json::to_string_pretty(&model)?;
+        println!("{json_str}");
+        return Ok(());
+    }
+
+    print_roofline(&model);
+
+    if empirical && !target.starts_with("cuda") && target != "wgpu" {
+        println!("\n  --- Empirical Measurement (single-core) ---\n");
+        let emp = measure_empirical(&model);
+
+        println!(
+            "    DRAM Bandwidth:  {:8.1} GB/s  ({:.0}% of theoretical)",
+            emp.measured_bandwidth_bps / 1e9,
+            emp.bandwidth_efficiency
+        );
+        println!(
+            "    Peak FP32 FLOPS: {:8.1} GFLOP/s (single-core, {:.0}% of theoretical)",
+            emp.measured_peak_flops / 1e9,
+            emp.compute_efficiency
+        );
+        println!("    Empirical Ridge: {:8.1} FLOP/byte", emp.measured_ridge_point);
+
+        if json {
+            #[derive(Serialize)]
+            struct EmpiricalJson<'a> {
+                theoretical: &'a RooflineModel,
+                empirical: &'a EmpiricalResult,
+            }
+            let combined = EmpiricalJson { theoretical: &model, empirical: &emp };
+            println!("\n{}", serde_json::to_string_pretty(&combined)?);
+        }
+    } else if empirical {
+        println!("\n  (Empirical measurement for GPU targets requires CUDA — use cgp roofline --target avx2 --empirical for CPU)");
     }
 
     if let Some(path) = export {
@@ -393,5 +667,43 @@ mod tests {
             "DRAM bandwidth {:.1} GB/s != 1008.0 GB/s",
             dram / 1e9
         );
+    }
+
+    /// FALSIFY-CGP-EMPIRICAL-001: Empirical bandwidth must be > 0 and < theoretical.
+    #[test]
+    fn test_empirical_bandwidth_positive() {
+        let bw = measure_bandwidth();
+        assert!(bw > 0.0, "Measured bandwidth must be positive, got {bw}");
+        // Single-core bandwidth should be less than full system theoretical
+        assert!(bw < 500.0e9, "Single-core bandwidth {:.1} GB/s suspiciously high", bw / 1e9);
+    }
+
+    /// FALSIFY-CGP-EMPIRICAL-002: Empirical FLOPS must be > 0.
+    #[test]
+    fn test_empirical_flops_positive() {
+        let flops = measure_peak_flops_single_core();
+        assert!(flops > 0.0, "Measured FLOPS must be positive, got {flops}");
+        // Single-core should be at least 1 GFLOP/s on any modern CPU
+        assert!(flops > 1.0e9, "Single-core FLOPS {:.1} GFLOP/s suspiciously low", flops / 1e9);
+    }
+
+    /// FALSIFY-CGP-EMPIRICAL-003: Empirical ridge point must be plausible.
+    #[test]
+    fn test_empirical_ridge_plausible() {
+        let model = RooflineModel::cpu_avx512(3.5, 24, 204.8);
+        let emp = measure_empirical(&model);
+        // Ridge point should be > 0 and < 1000 FLOP/byte for any CPU
+        assert!(
+            emp.measured_ridge_point > 0.0 && emp.measured_ridge_point < 1000.0,
+            "Empirical ridge {:.1} FLOP/byte implausible",
+            emp.measured_ridge_point
+        );
+    }
+
+    /// FALSIFY-CGP-EMPIRICAL-004: Triad bandwidth should be > 0.
+    #[test]
+    fn test_triad_bandwidth_positive() {
+        let bw = measure_bandwidth_triad();
+        assert!(bw > 0.0, "Triad bandwidth must be positive, got {bw}");
     }
 }

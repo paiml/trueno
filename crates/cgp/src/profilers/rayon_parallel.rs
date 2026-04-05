@@ -215,7 +215,10 @@ pub fn profile_scaling(
     }
 
     // Find peak
-    if let Some(peak) = results.iter().max_by(|a, b| a.gflops.partial_cmp(&b.gflops).unwrap()) {
+    if let Some(peak) = results
+        .iter()
+        .max_by(|a, b| a.gflops.partial_cmp(&b.gflops).unwrap_or(std::cmp::Ordering::Equal))
+    {
         if !json {
             println!(
                 "\n  Peak: {:.1} GFLOPS at {}T ({:.1}x scaling)",
@@ -291,7 +294,7 @@ fn parse_gemm_time(binary: &str, size: u32, threads: usize, runs: usize) -> Opti
                 // Parse "... X.XX ms  (Y.YY GFLOPS)"
                 if let Some(ms_str) = extract_between(line, "...", " ms") {
                     if let Ok(ms) = ms_str.trim().parse::<f64>() {
-                        if best_time_ms.is_none() || ms < best_time_ms.unwrap() {
+                        if best_time_ms.is_none_or(|best| ms < best) {
                             best_time_ms = Some(ms);
                             // Parse GFLOPS
                             if let Some(gf_str) = extract_between(line, "(", " GFLOPS)") {

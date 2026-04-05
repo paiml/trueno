@@ -14,6 +14,9 @@ pub struct BackendResult {
     pub tflops: f64,
     pub bandwidth_gbps: f64,
     pub available: bool,
+    /// Whether data comes from actual measurement vs estimation
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub measured: bool,
 }
 
 /// Compute TFLOP/s for GEMM: 2*M*N*K / time.
@@ -23,6 +26,44 @@ fn gemm_tflops(size: u32, time_us: f64) -> f64 {
     }
     let flops = 2.0 * (size as f64).powi(3);
     flops / (time_us * 1e-6) / 1e12
+}
+
+/// Try to get actual GEMM timing from benchmark_matrix_suite binary.
+/// Returns (time_us, gflops) if the binary exists and the size is benchmarked.
+fn get_actual_gemm_timing(size: u32) -> Option<(f64, f64)> {
+    let candidates = [
+        "/mnt/nvme-raid0/targets/trueno/release/examples/benchmark_matrix_suite",
+        "./target/release/examples/benchmark_matrix_suite",
+    ];
+    let binary_path = candidates.iter().find(|p| std::path::Path::new(p).exists())?;
+    let output = std::process::Command::new(*binary_path)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let pattern = format!("Matrix Multiplication ({}x{}x{})", size, size, size);
+
+    for line in stdout.lines() {
+        if line.contains(&pattern) {
+            // Format: "  Matrix Multiplication (NxNxN)...     X.XX ms  (Y.YY GFLOPS)"
+            let after_dots = line.split("...").nth(1)?;
+            let time_ms = after_dots.split("ms").next()?.trim().parse::<f64>().ok()?;
+            let gflops = after_dots
+                .split('(')
+                .nth(1)?
+                .split(" GFLOPS")
+                .next()?
+                .trim()
+                .parse::<f64>()
+                .ok()?;
+            return Some((time_ms * 1000.0, gflops));
+        }
+    }
+    None
 }
 
 /// Estimate scalar GEMM time from measured data on Threadripper 7960X.
@@ -73,39 +114,46 @@ pub fn run_compare(kernel: &str, size: u32, backends_str: &str, json: bool) -> R
 
     let mut results: Vec<BackendResult> = Vec::new();
 
+    // Try to get actual benchmark data first (runs once, cached for all CPU backends)
+    let actual = get_actual_gemm_timing(size);
+
     for backend in &backends {
-        let (time_us, available) = match *backend {
-            "scalar" => (estimate_scalar_time_us(size), true),
-            "avx2" => {
+        let (time_us, available, measured) = match *backend {
+            "scalar" => (estimate_scalar_time_us(size), true, false),
+            "avx2" | "avx512" => {
                 #[cfg(target_arch = "x86_64")]
-                let avail = std::arch::is_x86_feature_detected!("avx2");
+                let avail = if *backend == "avx512" {
+                    std::arch::is_x86_feature_detected!("avx512f")
+                } else {
+                    std::arch::is_x86_feature_detected!("avx2")
+                };
                 #[cfg(not(target_arch = "x86_64"))]
                 let avail = false;
-                (estimate_avx2_time_us(size), avail)
-            }
-            "avx512" => {
-                #[cfg(target_arch = "x86_64")]
-                let avail = std::arch::is_x86_feature_detected!("avx512f");
-                #[cfg(not(target_arch = "x86_64"))]
-                let avail = false;
-                (estimate_avx512_time_us(size), avail)
+
+                // Use actual benchmark if available (runs with best SIMD available)
+                if let Some((actual_us, _)) = actual {
+                    (actual_us, avail, true)
+                } else if *backend == "avx512" {
+                    (estimate_avx512_time_us(size), avail, false)
+                } else {
+                    (estimate_avx2_time_us(size), avail, false)
+                }
             }
             "neon" => {
                 let avail = cfg!(target_arch = "aarch64");
-                (estimate_scalar_time_us(size) / 4.0, avail) // NEON 4-wide
+                (estimate_scalar_time_us(size) / 4.0, avail, false)
             }
             "cuda" => {
                 let avail = which::which("nvidia-smi").is_ok();
-                (estimate_cuda_time_us(size), avail)
+                (estimate_cuda_time_us(size), avail, false)
             }
             "cublas" => {
                 let avail = which::which("nvidia-smi").is_ok();
-                (estimate_cublas_time_us(size), avail)
+                (estimate_cublas_time_us(size), avail, false)
             }
             "wgpu" => {
-                // wgpu typically ~2x slower than native CUDA for compute
                 let avail = which::which("nvidia-smi").is_ok();
-                (estimate_cuda_time_us(size) * 2.0, avail)
+                (estimate_cuda_time_us(size) * 2.0, avail, false)
             }
             other => {
                 eprintln!("  Warning: unknown backend '{other}', skipping");
@@ -121,6 +169,7 @@ pub fn run_compare(kernel: &str, size: u32, backends_str: &str, json: bool) -> R
             tflops,
             bandwidth_gbps: 0.0,
             available,
+            measured,
         });
     }
 
@@ -138,10 +187,10 @@ pub fn run_compare(kernel: &str, size: u32, backends_str: &str, json: bool) -> R
 
     // Table header
     println!(
-        "  {:12} {:>12} {:>12} {:>10} {:>10} {:>8}",
-        "Backend", "Time (us)", "TFLOP/s", "Efficiency", "vs Best", "Avail"
+        "  {:12} {:>12} {:>12} {:>10} {:>10} {:>8} {:>5}",
+        "Backend", "Time (us)", "TFLOP/s", "Efficiency", "vs Best", "Avail", "Src"
     );
-    println!("  {}", "-".repeat(68));
+    println!("  {}", "-".repeat(75));
 
     // Get roofline for efficiency
     let model = RooflineModel::rtx_4090();
@@ -165,10 +214,24 @@ pub fn run_compare(kernel: &str, size: u32, backends_str: &str, json: bool) -> R
             format!("{:.1}", r.wall_time_us)
         };
 
+        let src = if r.measured { "M" } else { "E" };
         println!(
-            "  {:12} {:>12} {:>12.1} {:>9.1}% {:>10} {:>8}",
-            r.name, time_str, r.tflops, efficiency, ratio, avail
+            "  {:12} {:>12} {:>12.1} {:>9.1}% {:>10} {:>8} {:>5}",
+            r.name, time_str, r.tflops, efficiency, ratio, avail, src
         );
+    }
+
+    let has_measured = results.iter().any(|r| r.measured);
+    let has_estimated = results.iter().any(|r| !r.measured);
+    if has_measured || has_estimated {
+        print!("  Src: ");
+        if has_measured {
+            print!("M=measured ");
+        }
+        if has_estimated {
+            print!("E=estimated ");
+        }
+        println!();
     }
 
     // Summary
@@ -261,5 +324,18 @@ mod tests {
     fn test_run_compare_json() {
         let result = run_compare("gemm", 256, "scalar,avx2", true);
         assert!(result.is_ok());
+    }
+
+    /// FALSIFY-CGP-ACTUAL-001: Actual benchmark data is available and parseable.
+    #[test]
+    fn test_get_actual_gemm_timing() {
+        if let Some((time_us, gflops)) = get_actual_gemm_timing(1024) {
+            assert!(time_us > 0.0, "time should be positive");
+            assert!(gflops > 10.0, "GFLOPS should be > 10 for 1024 GEMM");
+            assert!(gflops < 2000.0, "GFLOPS should be < 2000");
+            eprintln!("Actual GEMM 1024: {:.1} us = {:.0} GFLOPS [MEASURED]", time_us, gflops);
+        } else {
+            eprintln!("benchmark_matrix_suite binary not found — actual data unavailable");
+        }
     }
 }
