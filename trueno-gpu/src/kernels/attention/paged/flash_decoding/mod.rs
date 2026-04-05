@@ -27,12 +27,21 @@ pub use reduce_kernel::FlashDecodingReduceKernel;
 /// Chunk size for Flash Decoding split-K attention.
 ///
 /// PMAT-040: Reduced from 128 to 32 to enable actual parallelism at typical
-/// decode sequence lengths (32-256 tokens). With chunk_size=128, sequences <128
-/// got only 1 chunk = zero parallelism (Flash Decoding degenerated to sequential).
+/// decode sequence lengths (32-256 tokens).
 ///
-/// Trade-offs at chunk_size=32:
-/// - seq_len=64: 2 chunks (2x parallelism vs 1x with 128)
-/// - seq_len=128: 4 chunks × 28 heads = 112 blocks → 88% SM util on 4090
-/// - max_seq_len=4096: 128 chunks → partials buffer ~945KB (negligible)
-/// - Reduction overhead: max 128 iterations in reduce kernel (single block)
-pub const FLASH_DECODE_CHUNK_SIZE: u32 = 32;
+/// trueno#246: Further reduced from 32 to 16 after NCU profiling showed 2.15%
+/// occupancy on RTX 4090 at M=1 decode. Doubling block count improves
+/// inter-SM parallelism:
+/// - short ctx (~160): 329 → 354 tok/s (+7.4%)
+/// - long ctx (~420): 232 → 339 tok/s (+45.8%)
+///
+/// Trade-offs at chunk_size=16:
+/// - seq_len=32: 2 chunks (vs 1 with 32)
+/// - seq_len=128: 8 chunks × 28 heads = 224 blocks → 175% SM util on 4090
+/// - seq_len=500: 32 chunks × 28 heads = 896 blocks (oversubscribed, good)
+/// - max_seq_len=4096: 256 chunks → partials buffer ~1.9MB (still negligible)
+/// - Reduction overhead: max 256 iterations in reduce kernel
+/// - chunk_size=8 tested: no better than 16 (overhead dominates)
+///
+/// Reference: candle-vs-apr spec v14.x §Phase 2b context scaling
+pub const FLASH_DECODE_CHUNK_SIZE: u32 = 16;
