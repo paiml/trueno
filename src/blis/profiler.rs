@@ -153,6 +153,23 @@ impl BlisProfiler {
         }
     }
 
+    /// Record AVX-512 BLIS macro-level timing.
+    /// Contract: avx512-blis-v1.yaml (C-AVX512-PROF-001)
+    pub fn record_avx512_blis(
+        &mut self,
+        m: usize,
+        n: usize,
+        k: usize,
+        duration: std::time::Duration,
+    ) {
+        if !self.enabled {
+            return;
+        }
+        let flops = 2 * m as u64 * n as u64 * k as u64;
+        let duration_ns = duration.as_nanos() as u64;
+        self.macro_stats.record(duration_ns, flops);
+    }
+
     /// Get total GFLOP/s
     pub fn total_gflops(&self) -> f64 {
         let total_ns = self.macro_stats.total_ns;
