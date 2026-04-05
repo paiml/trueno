@@ -170,6 +170,28 @@ Design: 16 warps × 4 elements/thread, ONE 8-byte cp.async per thread per K-tile
 true async (WMMA runs while cp.async completes in background), double-buffer
 with 8KB shared memory (2× 4KB buffers). Requires sm_80+ target module.
 
+**cp.async follow-up experiments (all NEGATIVE, 2026-04-05)**:
+
+1. **max_regs tuning** — tried forcing register limits:
+   - max_regs(64): 40.5 → 32.3 TFLOP/s (-20%, register spills)
+   - max_regs(96): 40.5 → 38.2 TFLOP/s (-5%)
+   - Default (no max_regs) is optimal for this kernel.
+
+2. **Warp-uniform branching (vs selp)** — replaced `selp_u64(is_a_thread, a_addr, b_addr)`
+   with explicit branch on warp role. Expected saving: ~5 insts/thread.
+   - Result: 40.5 → 35.1 TFLOP/s (-13%). Branches prevent ptxas instruction
+     reordering that `selp` allows.
+
+3. **3-stage cp.async pipeline** — 2 cp.async prefetch ahead, 3 buffers (12KB smem),
+   wait_group(2) for oldest tile, epilogue drains 2 tiles:
+   - Result: +3% at 512, -3% at 1024 (NEUTRAL). cp.async latency is NOT the
+     bottleneck — WMMA compute-bound. Deeper pipeline adds cycle overhead
+     (mod arithmetic, 2 epilogue WMMA instead of 1).
+
+**Conclusion**: At 40.5 TFLOP/s the kernel is **compute-bound on WMMA instruction
+throughput**, not memory-bound. Further gains require larger tiles (128×128+) or
+FP16 accumulation for 2× tensor core throughput.
+
 **Note**: GPU pure-Rust PTX vs cuBLAS is not expected to hit 1.5x — cuBLAS uses hand-tuned SASS and proprietary tensor core scheduling. The GPU target is to close the gap from 0.38x toward 0.5x+ (competitive for deployment where vendor lock-in is unacceptable).
 
 ### What Exists Today (Fragmented)
