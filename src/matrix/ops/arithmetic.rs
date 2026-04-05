@@ -78,6 +78,7 @@ impl Matrix<f32> {
             return self.matmul_vector_matrix(other);
         }
 
+        // NOTE: zeros required — BLIS GEMM accumulates (c += A*B) via load_c_tile.
         let mut result = Matrix::zeros_with_backend(self.rows, other.cols, self.backend);
 
         #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
@@ -161,6 +162,7 @@ impl Matrix<f32> {
             )));
         }
 
+        // NOTE: zeros required — gemm_blis accumulates (c += A*B) via load_c_tile.
         let mut output = vec![0.0f32; batch * out_stride];
 
         // KAIZEN-039: Call gemm_blis directly on sub-slices instead of
@@ -237,6 +239,7 @@ impl Matrix<f32> {
             )));
         }
 
+        // NOTE: zeros required — gemm_blis accumulates (c += A*B) via load_c_tile.
         let mut output = vec![0.0f32; total_heads * out_head_stride];
 
         // KAIZEN-039: Call gemm_blis directly — eliminates 2 × total_heads
@@ -279,6 +282,7 @@ impl Matrix<f32> {
 
         let k = self.cols;
         let n = other.cols;
+        // NOTE: zeros required — gemv accumulates (c[j] += a[k]*b[k*n+j]).
         let mut c = vec![0.0f32; n];
 
         crate::blis::gemv::gemv(k, n, &self.data, &other.data, &mut c);

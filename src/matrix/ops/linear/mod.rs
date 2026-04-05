@@ -163,7 +163,15 @@ impl Matrix<f32> {
 
         let v_slice = v.as_slice();
 
-        let mut result_data = vec![0.0; self.rows];
+        // Uninit allocation: every element is SET (not accumulated) by
+        // `*result = dispatch_dot!(...)` or parallel `*out = dispatch_dot!(...)`.
+        let n = self.rows;
+        let mut result_data: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Both serial and parallel paths write every element via
+        // `*out = dispatch_dot!(...)` (SET, not accumulate). No reads before writes.
+        unsafe {
+            result_data.set_len(n);
+        }
 
         // Parallel execution for very large matrices (≥4096 rows)
         // Note: Thread overhead dominates for smaller matrices.

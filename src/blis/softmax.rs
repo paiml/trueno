@@ -61,8 +61,12 @@ fn softmax_scalar(logits: &[f32]) -> Vec<f32> {
         max_val = max_val.max(v);
     }
 
-    // Pass 2: exp + store
-    let mut out = vec![0.0f32; n];
+    // Pass 2: exp + store (uninit: every element written by indexed loop)
+    let mut out: Vec<f32> = Vec::with_capacity(n);
+    // SAFETY: out[i] = exp(...) for every i in 0..n. No reads before writes.
+    unsafe {
+        out.set_len(n);
+    }
     for i in 0..n {
         out[i] = (logits[i] - max_val).exp();
     }
@@ -141,7 +145,12 @@ unsafe fn softmax_avx2(logits: &[f32]) -> Vec<f32> {
     }
 
     // ── Pass 2 (fused): SIMD exp(x - max) + accumulate sum ──────────────
-    let mut out = vec![0.0f32; n];
+    // Uninit: every element written by storeu_ps (main) or out[i]=e (remainder).
+    let mut out: Vec<f32> = Vec::with_capacity(n);
+    // SAFETY: Pass 2 writes all n elements before any read (pass 3).
+    unsafe {
+        out.set_len(n);
+    }
     let mut sum0;
     let mut sum1;
     let mut sum2;

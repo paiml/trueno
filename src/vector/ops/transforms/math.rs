@@ -49,7 +49,13 @@ impl Vector<f32> {
     /// - Signal processing: Amplitude calculations, power spectrum analysis
     /// - Physics simulations: Velocity from kinetic energy, wave propagation
     pub fn sqrt(&self) -> Result<Vector<f32>> {
-        let mut result_data = vec![0.0; self.len()];
+        // Uninit allocation: dispatch_unary_op!(sqrt) writes every element.
+        let n = self.len();
+        let mut result_data: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: dispatch_unary_op writes result_data[i] = sqrt(input[i]) for all i.
+        unsafe {
+            result_data.set_len(n);
+        }
 
         if !self.as_slice().is_empty() {
             // Use parallel processing for large arrays
@@ -115,7 +121,13 @@ impl Vector<f32> {
     /// - Physics: Resistance (R = 1/G), optical power (P = 1/f)
     /// - Signal processing: Frequency to period conversion, filter design
     pub fn recip(&self) -> Result<Vector<f32>> {
-        let mut result_data = vec![0.0; self.len()];
+        // Uninit allocation: dispatch_unary_op!(recip) writes every element.
+        let n = self.len();
+        let mut result_data: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: dispatch_unary_op writes result_data[i] = 1/input[i] for all i.
+        unsafe {
+            result_data.set_len(n);
+        }
 
         if !self.as_slice().is_empty() {
             dispatch_unary_op!(self.backend(), recip, self.as_slice(), &mut result_data);

@@ -186,7 +186,13 @@ impl ComputeOp for SoftmaxOp {
 
         // Step 2: Subtract max and compute exp (SIMD exp)
         let shifted: Vec<f32> = input.iter().map(|x| x - max).collect();
-        let mut exp_vals = vec![0.0f32; shifted.len()];
+        let n = shifted.len();
+        // Uninit: simd_exp writes output[i] = exp(input[i]) for every i.
+        let mut exp_vals: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: simd_exp writes every element (SET, not accumulate).
+        unsafe {
+            exp_vals.set_len(n);
+        }
         Self::simd_exp(&shifted, &mut exp_vals, backend);
 
         // Step 3: Sum (SIMD sum)
@@ -194,7 +200,12 @@ impl ComputeOp for SoftmaxOp {
 
         // Step 4: Normalize (SIMD scale, guard against sum=0)
         let inv_sum = 1.0 / exp_sum.max(f32::EPSILON);
-        let mut result = vec![0.0f32; exp_vals.len()];
+        // Uninit: simd_scale writes output[i] = input[i] * scalar for every i.
+        let mut result: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: simd_scale writes every element (SET, not accumulate).
+        unsafe {
+            result.set_len(n);
+        }
         Self::simd_scale(&exp_vals, inv_sum, &mut result, backend);
 
         Ok(result)
