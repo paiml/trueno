@@ -48,7 +48,15 @@ impl Vector<f32> {
             return Err(TruenoError::SizeMismatch { expected: self.len(), actual: other.len() });
         }
 
-        let mut result = vec![0.0; self.len()];
+        // Uninit allocation: avoids the zero-fill cost (70µs+ at 1M elements)
+        // since every element will be overwritten by dispatch_binary_op below.
+        // SAFETY: dispatch_binary_op!(..., add, a, b, out) writes to EVERY element
+        // of `out` (it's an element-wise add). No reads before writes.
+        let n = self.len();
+        let mut result: Vec<f32> = Vec::with_capacity(n);
+        unsafe {
+            result.set_len(n);
+        }
 
         // Use parallel processing for large arrays
         #[cfg(feature = "parallel")]
@@ -105,7 +113,13 @@ impl Vector<f32> {
             return Err(TruenoError::SizeMismatch { expected: self.len(), actual: other.len() });
         }
 
-        let mut result = vec![0.0; self.len()];
+        // Uninit allocation: skip zero-fill since dispatch_binary_op writes all elements.
+        let n = self.len();
+        let mut result: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Every element is written before any read (by element-wise op below).
+        unsafe {
+            result.set_len(n);
+        }
 
         // Use parallel processing for large arrays
         #[cfg(feature = "parallel")]
@@ -152,7 +166,13 @@ impl Vector<f32> {
             return Err(TruenoError::SizeMismatch { expected: self.len(), actual: other.len() });
         }
 
-        let mut result = vec![0.0; self.len()];
+        // Uninit allocation: skip zero-fill since dispatch_binary_op writes all elements.
+        let n = self.len();
+        let mut result: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Every element is written before any read (by element-wise op below).
+        unsafe {
+            result.set_len(n);
+        }
 
         // Use parallel processing for large arrays
         #[cfg(feature = "parallel")]
@@ -199,7 +219,13 @@ impl Vector<f32> {
             return Err(TruenoError::SizeMismatch { expected: self.len(), actual: other.len() });
         }
 
-        let mut result = vec![0.0; self.len()];
+        // Uninit allocation: skip zero-fill since dispatch_binary_op writes all elements.
+        let n = self.len();
+        let mut result: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Every element is written before any read (by element-wise op below).
+        unsafe {
+            result.set_len(n);
+        }
 
         // Use parallel processing for large arrays
         #[cfg(feature = "parallel")]
@@ -265,7 +291,13 @@ impl Vector<f32> {
     /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn scale(&self, scalar: f32) -> Result<Vector<f32>> {
-        let mut result_data = vec![0.0; self.len()];
+        // Uninit allocation: backend writes all elements.
+        let n = self.len();
+        let mut result_data: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: backend scale() writes every element before any read.
+        unsafe {
+            result_data.set_len(n);
+        }
 
         if !self.data.is_empty() {
             // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
@@ -351,7 +383,13 @@ impl Vector<f32> {
             return Err(TruenoError::SizeMismatch { expected: self.len(), actual: c.len() });
         }
 
-        let mut result_data = vec![0.0; self.len()];
+        // Uninit allocation: backend fma writes all elements.
+        let n = self.len();
+        let mut result_data: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: backend fma() writes every element before any read.
+        unsafe {
+            result_data.set_len(n);
+        }
 
         if !self.data.is_empty() {
             // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
