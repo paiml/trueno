@@ -21,6 +21,10 @@
 #![allow(clippy::macro_metavars_in_unsafe)]
 // Allow missing panics doc - will be added incrementally
 #![allow(clippy::missing_panics_doc)]
+// Allow uninit_vec - intentional pattern for perf-critical paths where
+// every element is SET (not accumulated) before any read. Each use has
+// a SAFETY comment documenting the write-before-read invariant.
+#![allow(clippy::uninit_vec)]
 // Allow missing errors doc - will be added incrementally
 #![allow(clippy::missing_errors_doc)]
 // Allow missing safety doc - will be added incrementally
