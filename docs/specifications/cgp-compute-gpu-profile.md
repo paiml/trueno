@@ -2794,4 +2794,74 @@ on the ACTUAL hardware, not the spec sheet.
 | 2 | CPU-GPU correlated flamegraphs | No cross-stack correlation | High | P2 | [52] |
 | 3 | SIMD alignment static analyzer | No compile-time SIMD safety | Low | **P0** | #242 lesson |
 | 4 | DHAT heap allocation profiler | No allocation overhead metric | Low | P1 | [54] |
-| 5 | Empirical roofline (ERT) | --empirical flag unimplemented | Medium | P1 | [6] |
+| 5 | Empirical roofline (ERT) | --empirical flag ~~unimplemented~~ **DONE** | Medium | ~~P1~~ | [6] |
+
+Note: Item 5 (empirical roofline) was implemented in Phase 4 (commit `03157c9d`).
+
+## Appendix D: GEMM Optimization Roadmap — faer Analysis (2026-04-05)
+
+**Context**: Criterion benchmarks show faer 0.24 is 8% faster than trueno at 1024
+(14.67ms vs 15.86ms) and 33% faster at small sizes (64-256). Root cause analysis
+of faer's `gemm` crate (v0.19.0) reveals five architectural differences:
+
+### 1. Register Utilization (Impact: ~1.3x at small sizes)
+
+| | faer | trueno |
+|--|------|--------|
+| Microkernel tile | **64×6 = 384 elements** | 8×16 = 128 elements |
+| zmm accumulators | **24 of 32** | 8 of 32 |
+| FMAs per K step | **24** | 8 |
+| Register file utilization | **75%** | 25% |
+
+faer's `nano-gemm` codegen produces MR_DIV_N=4, NR=6 microkernels with 4 rows of
+16 f32 zmm registers (64 elements) × 6 columns = 24 accumulators. trueno's 8×16
+tile uses only 8 accumulators, leaving 24 zmm registers unused.
+
+**Fix**: Increase microkernel to MR=48 (3×16), NR=6 → 18 accumulators + 3 A loads + 1 B broadcast = 22 registers used. This matches faer's approach more closely.
+
+### 2. K-Dimension Unrolling (Impact: ~1.2x)
+
+faer uses compile-time 4-way K-unrolling via `seq_macro!`, producing 96 FMA
+instructions between loop control. trueno relies on LLVM autovectorization
+which cannot unroll across loop-carried accumulator dependencies.
+
+**Fix**: Use a macro or const-generic to unroll the K inner loop 4×.
+
+### 3. Dynamic Cache Blocking (Impact: ~1.1x for varied hardware)
+
+faer reads `/sys/devices/system/cpu/` at runtime to determine L1/L2/L3 size and
+associativity, then computes optimal MC/KC/NC. trueno hardcodes MC=128, KC=256,
+NC=4096 for AVX-512.
+
+For Threadripper 7960X (32 KB L1, 1 MB L2):
+- trueno MC=128 → packed A = 128×256×4 = 128 KB (fills L1 4×, poor)
+- faer computes MC~512 → packed A fills more L2 (better reuse)
+
+**Fix**: Read cache topology or at minimum increase MC for large problems.
+
+### 4. B-Packing Optimization (Impact: ~1.05x)
+
+trueno's `pack_b_block_nr16` uses scalar element-by-element packing.
+faer's packing uses zmm-width loads when stride is 1 (contiguous).
+
+**Fix**: SIMD-optimize B packing with 512-bit loads.
+
+### 5. Conditional Packing (Impact: ~1.05x)
+
+faer skips packing entirely when matrices are already contiguous with correct
+stride. trueno unconditionally packs both A and B for every tile.
+
+**Fix**: Check stride at runtime, skip pack for contiguous row-major data.
+
+### Priority Order
+
+| # | Fix | Est. Gain | Effort | Dependencies |
+|---|-----|-----------|--------|-------------|
+| 1 | Larger microkernel (MR=48, NR=6) | 10-30% small, 5% large | High | New microkernel code |
+| 2 | 4-way K-unrolling | 10-20% | Medium | Macro refactor |
+| 3 | Dynamic cache blocking | 5-10% | Medium | /sys/ parsing |
+| 4 | SIMD B-packing | 3-5% | Low | zmm pack routine |
+| 5 | Conditional packing | 2-3% | Low | Stride check |
+
+Source: `gemm-0.19.0` (faer's GEMM engine), `gemm-common-0.19.0`, `nano-gemm-0.2.2`.
+Analysis via `decy audit` + `pmat query` + direct source comparison.
