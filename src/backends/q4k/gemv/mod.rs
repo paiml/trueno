@@ -135,7 +135,12 @@ fn matmul_q4k_f32_parallel(
     let num_blocks_per_row = (in_dim + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
     let row_bytes = num_blocks_per_row * SUPER_BLOCK_BYTES;
 
-    let mut output = vec![0.0f32; out_dim];
+    // Uninit: compute_chunk_* writes *out_val = hsum(acc) for every element.
+    let mut output: Vec<f32> = Vec::with_capacity(out_dim);
+    // SAFETY: Each thread's compute_chunk writes every element in its chunk (SET).
+    unsafe {
+        output.set_len(out_dim);
+    }
     let has_avx512 = is_x86_feature_detected!("avx512f")
         && is_x86_feature_detected!("avx512bw")
         && is_x86_feature_detected!("fma");

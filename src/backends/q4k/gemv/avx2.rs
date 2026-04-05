@@ -25,7 +25,12 @@ pub(crate) unsafe fn matmul_q4k_f32_avx2(
         let row_bytes = num_blocks_per_row * SUPER_BLOCK_BYTES;
         let low_mask = _mm256_set1_epi32(0x0F);
 
-        let mut output = vec![0.0f32; out_dim];
+        // Uninit: output[out_idx] = hsum_avx2(acc) (SET) for every out_idx.
+        let mut output: Vec<f32> = Vec::with_capacity(out_dim);
+        // SAFETY: Each output[out_idx] is SET from local SIMD accumulator.
+        unsafe {
+            output.set_len(out_dim);
+        }
 
         for out_idx in 0..out_dim {
             let row_start = out_idx * row_bytes;

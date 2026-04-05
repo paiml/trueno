@@ -193,11 +193,18 @@ impl ComputeOp for AttentionOp {
             return Err(TruenoError::SizeMismatch { expected: expected_kv, actual: k.len() });
         }
 
-        // Allocate output
-        let mut output = vec![0.0f32; expected_q];
-
-        // Allocate scores buffer (reused per query row)
-        let mut scores = vec![0.0f32; self.kv_seq_len];
+        // Uninit: output is zeroed per-row via out_row.fill(0.0) before accumulation.
+        // scores is SET via scores[ki] = simd_dot(...) before softmax reads.
+        let mut output: Vec<f32> = Vec::with_capacity(expected_q);
+        // SAFETY: Each qi loop iteration calls out_row.fill(0.0) before accumulating.
+        unsafe {
+            output.set_len(expected_q);
+        }
+        let mut scores: Vec<f32> = Vec::with_capacity(self.kv_seq_len);
+        // SAFETY: scores[ki] = ... (SET) for all ki before simd_softmax_row reads.
+        unsafe {
+            scores.set_len(self.kv_seq_len);
+        }
 
         // For each query position
         for qi in 0..self.seq_len {

@@ -68,7 +68,12 @@ pub fn matmul_q4k_f32_scalar(
         expected_size
     );
 
-    let mut output = vec![0.0f32; out_dim];
+    // Uninit: output[out_idx] = sum (SET) for every out_idx.
+    let mut output: Vec<f32> = Vec::with_capacity(out_dim);
+    // SAFETY: Each output[out_idx] is SET to the accumulated sum. No reads before writes.
+    unsafe {
+        output.set_len(out_dim);
+    }
 
     for out_idx in 0..out_dim {
         let row_start = out_idx * row_bytes;
@@ -139,7 +144,12 @@ pub fn matmul_q4k_f32(q4k_data: &[u8], input: &[f32], out_dim: usize, in_dim: us
     let num_blocks_per_row = (in_dim + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
     let row_bytes = num_blocks_per_row * SUPER_BLOCK_BYTES;
 
-    let mut output = vec![0.0f32; out_dim];
+    // Uninit: output[out_idx] = (acc[0]+acc[1])+(acc[2]+acc[3]) (SET) for every out_idx.
+    let mut output: Vec<f32> = Vec::with_capacity(out_dim);
+    // SAFETY: Each output[out_idx] is SET from local accumulator. No reads before writes.
+    unsafe {
+        output.set_len(out_dim);
+    }
 
     for out_idx in 0..out_dim {
         let row_start = out_idx * row_bytes;

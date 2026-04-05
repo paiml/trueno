@@ -110,7 +110,12 @@ impl ComputeOp for FusedQKVOp {
         }
 
         // Q projection: x @ W_q^T -> [hidden_size]
-        let mut q = vec![0.0f32; self.hidden_size];
+        // Uninit: q[i] = sum (SET, not accumulate) for every i.
+        let mut q: Vec<f32> = Vec::with_capacity(self.hidden_size);
+        // SAFETY: Each q[i] is SET to the dot product sum before any read.
+        unsafe {
+            q.set_len(self.hidden_size);
+        }
         for i in 0..self.hidden_size {
             let mut sum = 0.0f32;
             for j in 0..self.hidden_size {
@@ -120,7 +125,11 @@ impl ComputeOp for FusedQKVOp {
         }
 
         // K projection: x @ W_k^T -> [kv_dim]
-        let mut k = vec![0.0f32; self.kv_dim];
+        let mut k: Vec<f32> = Vec::with_capacity(self.kv_dim);
+        // SAFETY: Each k[i] is SET to the dot product sum before any read.
+        unsafe {
+            k.set_len(self.kv_dim);
+        }
         for i in 0..self.kv_dim {
             let mut sum = 0.0f32;
             for j in 0..self.hidden_size {
@@ -130,7 +139,11 @@ impl ComputeOp for FusedQKVOp {
         }
 
         // V projection: x @ W_v^T -> [kv_dim]
-        let mut v = vec![0.0f32; self.kv_dim];
+        let mut v: Vec<f32> = Vec::with_capacity(self.kv_dim);
+        // SAFETY: Each v[i] is SET to the dot product sum before any read.
+        unsafe {
+            v.set_len(self.kv_dim);
+        }
         for i in 0..self.kv_dim {
             let mut sum = 0.0f32;
             for j in 0..self.hidden_size {
@@ -239,7 +252,12 @@ impl ComputeOp for FusedGateUpOp {
 
         // SIMD-optimized fused gate + up + SwiGLU
         // Uses Vector dot product for ~4-8x speedup over scalar loops
-        let mut output = vec![0.0f32; self.intermediate_size];
+        // Uninit: output[i] = silu(gate) * up (SET) for every i.
+        let mut output: Vec<f32> = Vec::with_capacity(self.intermediate_size);
+        // SAFETY: Loop writes output[i] = silu(gate_sum) * up_sum for all i.
+        unsafe {
+            output.set_len(self.intermediate_size);
+        }
 
         // Select best SIMD backend (AVX2/AVX-512/NEON)
         let simd_backend = crate::Backend::select_best();
