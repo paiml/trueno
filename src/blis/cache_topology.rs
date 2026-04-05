@@ -145,9 +145,10 @@ pub fn blocking_8x48() -> BlisBlocking {
         let topo = topology();
         let mr = 8usize;
         let nr = 48usize;
-        // KC: l1d / (nr * 4) = 32768 / 192 = 170, round to 128
+        // KC: l1d / (nr * 4) = 32768 / 192 = 170, round down to power-of-2 = 128
+        // Power-of-2 KC ensures aligned loop trips for vectorized packing.
         let kc_max = topo.l1d_bytes / (nr * 4);
-        let kc = kc_max.next_power_of_two().min(kc_max).max(64);
+        let kc = (kc_max.next_power_of_two() >> 1).max(64);
         let mc_max = topo.l2_bytes / (kc * 4);
         let mc = (mc_max / mr * mr).min(12 * mr).max(mr);
         let nc_max = topo.l3_bytes / (2 * kc * 4);

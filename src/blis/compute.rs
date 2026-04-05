@@ -987,9 +987,13 @@ unsafe fn gemm_blis_avx512_large(
     // NR=48 (codegen): 24 FMA/K-step, KC=128 (L1-limited)
     // NR=32 (hand-written): 16 FMA/K-step, KC=256
     // NR=16 (hand-written): 8 FMA/K-step, KC=256
-    let blk = if n >= 48 {
-        super::cache_topology::blocking_8x48()
-    } else if n >= 32 {
+    // NEGATIVE RESULT (2026-04-05): NR=48 codegen with KC=128 regressed:
+    //   512: 41 → 135 GFLOPS after reverting to NR=32
+    //   1024: 85 → 130 GFLOPS after reverting to NR=32
+    // Root cause: KC halved (128 vs 256) → 2× more K-loop packing passes.
+    // The 24 FMA/K-step doesn't compensate for the packing overhead increase.
+    // NR=48 path disabled pending KC optimization (prefetch, double-buffer).
+    let blk = if n >= 32 {
         super::cache_topology::blocking_8x32()
     } else {
         super::cache_topology::blocking_8x16()

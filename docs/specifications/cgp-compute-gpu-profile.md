@@ -46,10 +46,12 @@ These targets apply per-backend, per-operation. Competing solutions:
 | Q4K GEMV 4096 (CPU) | llama.cpp est. | **~0.5x** | 1.50x | **GAP — needs AVX-512** |
 | Q4K GEMV (GPU DP4A) | llama.cpp CUDA | TBD | 1.50x | MEASURE |
 
-**Status (2026-04-05, post AVX-512 + phys/2 cap):**
-- 1T: NumPy = 131 GFLOPS, trueno = 128 GFLOPS → **0.98x** (both at AVX-512 peak)
-- 16T: NumPy = 799 GFLOPS, trueno = 650 GFLOPS → **0.81x** (ASM microkernel gap)
-- trueno scaling: 5.1× at 16T. OpenBLAS: 6.1× at 12T.
+**Status (2026-04-05, post 8×32 NR selection + dynamic cache blocking):**
+- 1T (1024): trueno 8×32 = 118-135 GFLOPS (run-to-run variance from turbo/thermal)
+- 1T (512): 133 GFLOPS, 1T (256): 118 GFLOPS, 1T (64): 115 GFLOPS
+- MT (1024, auto threads): **525 GFLOPS** (4.09ms, ~4x scaling)
+- NumPy (1T): ~131 GFLOPS ��� **0.90-1.03x** (thermal-dependent, at AVX-512 peak)
+- 8×48 codegen tested and **reverted** (KC=128 packing overhead, see negative results)
 
 Single-thread 1.5x target is **mathematically unreachable** — both libraries hit
 AVX-512 hardware peak (~130 GFLOPS at sustained Zen 4 clocks). The 1.5x target
@@ -2622,6 +2624,9 @@ Before any further optimization work, these retroactive contracts MUST be writte
    detection of precision-sensitive layers (attention output, residual connections).
 
 **Negative results documented (all with contracts):**
+- **8×48 codegen NR=48 KC=128**: regressed 512: 135→41 GFLOPS, 1024: 130→85 GFLOPS
+  Root cause: KC halved (128 vs 256) for L1 fit → 2× more K-loop packing passes.
+  24 FMA/K-step doesn't compensate for packing overhead. Reverted to NR=32. (2026-04-05)
 - Shared-B packing: regressed 495→316 GFLOPS (cross-core L1/L2 cache penalty) [16]
 - Manual K-unrolling: regressed 567→400 GFLOPS (LLVM already unrolls optimally)
 - Q4K parallel threshold 8M→2M: regressed 17→14 GFLOPS (thread overhead at <300µs)
