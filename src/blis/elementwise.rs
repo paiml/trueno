@@ -346,8 +346,11 @@ unsafe fn add_avx512(a: &[f32], b: &[f32], output: &mut [f32]) {
         if data_bytes > NT_STORE_THRESHOLD_BYTES && rp_aligned {
             // NT path: 4-way unrolled, requires 64-byte aligned output
             while i + 64 <= n {
-                _mm_prefetch(ap.add(i + 128).cast::<i8>(), _MM_HINT_T0);
-                _mm_prefetch(bp.add(i + 128).cast::<i8>(), _MM_HINT_T0);
+                // Guard prefetch to avoid reading past allocation (#242 SIGSEGV fix)
+                if i + 128 <= n {
+                    _mm_prefetch(ap.add(i + 128).cast::<i8>(), _MM_HINT_T0);
+                    _mm_prefetch(bp.add(i + 128).cast::<i8>(), _MM_HINT_T0);
+                }
 
                 _mm512_stream_ps(
                     rp.add(i),

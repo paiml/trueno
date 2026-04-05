@@ -104,9 +104,76 @@ pub fn profile_quant(kernel_name: &str, size: &str) -> Result<()> {
     println!("  Compressed size: {:.2} MB", compressed_bytes as f64 / 1e6);
     println!("  FP32 equivalent: {:.2} MB", fp32_bytes as f64 / 1e6);
     println!("  Compression ratio: {:.1}x", fp32_bytes as f64 / compressed_bytes as f64);
-    println!("\n  Metrics: superblocks/sec, effective_bandwidth_gbps, compression_speedup");
+
+    // Try to get actual timing from benchmark_matrix_suite
+    if let Some(timing) = parse_q4k_timing(dims[0], dims[2]) {
+        println!("\n  Measured (from benchmark_matrix_suite):");
+        println!("    Time: {:.1} us", timing.time_us);
+        println!("    GFLOPS: {:.1}", timing.gflops);
+        println!("    Effective BW: {:.1} GB/s (compressed)", timing.bw_gbps);
+        let sbs_per_sec = num_superblocks as f64 / (timing.time_us / 1e6);
+        println!("    Super-blocks/sec: {:.0}", sbs_per_sec);
+    } else {
+        println!("\n  No timing data (build benchmark: cargo build --release --example benchmark_matrix_suite --features parallel)");
+    }
+
     println!();
     Ok(())
+}
+
+/// Parsed Q4K timing from benchmark output.
+struct Q4kTiming {
+    time_us: f64,
+    gflops: f64,
+    bw_gbps: f64,
+}
+
+/// Parse Q4K GEMV timing from benchmark_matrix_suite output.
+/// Looks for lines like: "Q4K GEMV (MxK, label)...  X.XX us  (Y.YY GFLOPS, Z.Z GB/s)"
+fn parse_q4k_timing(out_dim: u32, in_dim: u32) -> Option<Q4kTiming> {
+    let binary = find_bench_binary()?;
+    let output = std::process::Command::new(&binary).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let pattern = format!("{}x{}", out_dim, in_dim);
+
+    for line in stdout.lines() {
+        if line.contains("Q4K GEMV") && line.contains(&pattern) {
+            // Parse "...  X.XX us  (Y.YY GFLOPS, Z.Z GB/s)"
+            let time_us =
+                extract_between(line, "...", " us").and_then(|s| s.trim().parse::<f64>().ok())?;
+            let gflops =
+                extract_between(line, "(", " GFLOPS").and_then(|s| s.trim().parse::<f64>().ok())?;
+            let bw_gbps = extract_between(line, "GFLOPS, ", " GB/s")
+                .and_then(|s| s.trim().parse::<f64>().ok())?;
+            return Some(Q4kTiming { time_us, gflops, bw_gbps });
+        }
+    }
+    None
+}
+
+/// Extract text between two markers (finds last occurrence of start before end).
+fn extract_between<'a>(s: &'a str, start: &str, end: &str) -> Option<&'a str> {
+    let end_idx = s.find(end)?;
+    let prefix = &s[..end_idx];
+    let start_idx = prefix.rfind(start)? + start.len();
+    Some(&s[start_idx..end_idx])
+}
+
+/// Find benchmark binary at standard paths.
+fn find_bench_binary() -> Option<String> {
+    let candidates = [
+        "/mnt/nvme-raid0/targets/trueno/release/examples/benchmark_matrix_suite",
+        "./target/release/examples/benchmark_matrix_suite",
+    ];
+    for path in &candidates {
+        if std::path::Path::new(path).exists() {
+            return Some(path.to_string());
+        }
+    }
+    None
 }
 
 #[cfg(test)]
