@@ -56,6 +56,11 @@ pub(crate) unsafe fn matmul_q4k_f32_avx512(
 /// Each super-block = 256 elements in 4 chunks of 64.
 /// Each chunk: 32 low nibbles + 32 high nibbles.
 /// AVX-512: 16 elements per iteration → 2 iterations per 32 nibbles.
+///
+/// NOTE: Dual-accumulator (low→acc0, high→acc1) was tested (2026-04-05)
+/// but showed NO improvement. Zen 4's OOO engine already hides the FMA
+/// dependency chain across iterations — adding a second accumulator just
+/// adds merge overhead without helping the pipeline.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx512f", enable = "avx512bw", enable = "fma")]
 unsafe fn process_q4k_superblock_avx512(
@@ -91,7 +96,6 @@ unsafe fn process_q4k_superblock_avx512(
             while i + 16 <= 32 {
                 let input_base = input_offset + chunk_start + i;
                 if input_base + 16 <= in_dim {
-                    // Load 16 bytes, zero-extend to 16 i32
                     let q_bytes = _mm_loadu_si128(qs.as_ptr().add(q_start + i) as *const __m128i);
                     let q_i32 = _mm512_cvtepu8_epi32(q_bytes);
                     let q_low = _mm512_and_si512(q_i32, low_mask);
