@@ -2221,8 +2221,8 @@ FALSIFY tests implemented (111 unit + 15 falsify + 29 integration = 155):
 
 | Metric | Value | Source | Contract? |
 |--------|-------|--------|-----------|
-| 1024 GEMM 1T (AVX-512) | 128 GFLOPS (98.5% peak) | `cgp profile scaling` | **NO** — needs avx512-blis-v1 |
-| 1024 GEMM 12T (AVX-512) | 567 GFLOPS (4.5× scaling) | `cgp profile scaling` | **NO** — needs blis-thread-cap-v1 |
+| 1024 GEMM 1T (AVX-512) | 128 GFLOPS (98.5% peak) | `cgp profile scaling` | YES — avx512-blis-v1 ✅ |
+| 1024 GEMM 12T (AVX-512) | 567 GFLOPS (4.5× scaling) | `cgp profile scaling` | YES — blis-thread-cap-v1 ✅ |
 | Q4K GEMV 4096→4096 | 73 GFLOPS, 20.5 GB/s | `benchmark_matrix_suite` | **NO** — Q4K uses AVX2 only |
 | cuBLAS FP16 512 | 34.7 TFLOP/s | `cgp profile compare` | YES (roofline contract) |
 | CTA WMMA FP16 512 | 11.6 TFLOP/s | `cgp profile compare` | YES (roofline contract) |
@@ -2271,15 +2271,17 @@ Before any further optimization work, these retroactive contracts MUST be writte
 | `blis-thread-cap-v1.yaml` | Thread cap policy in `parallel.rs` | FLOPs thresholds → max_threads mapping, cache topology model |
 | `cgp-scaling-v1.yaml` | `cgp profile scaling` command | GEMM output parsing contract, min-of-N timing model |
 
-**BlisProfiler integration required:**
-- Add `profiler: Option<&mut BlisProfiler>` to `gemm_blis_avx512_large`
-- Record tile-level stats (`TileStats`) in the AVX-512 microkernel
-- Wire profiler through the parallel dispatch path (currently only `gemm_blis` has profiling)
+**BlisProfiler integration: DONE (2026-04-05)**
+- `gemm_blis_avx512_large` now accepts `Option<&mut BlisProfiler>` ✅
+- `record_avx512_blis()` records macro-level timing (m, n, k, duration) ✅
+- Removed `profiler.is_none()` dispatch guard — AVX-512 runs WITH profiling ✅
+- Micro/midi-level stats: NOT YET (only generic BLIS 5-loop populates these)
+- Dead `gemm_parallel_shared_b_avx512` removed ✅
 
-**Binding updates required:**
-- Add 3 new bindings to `../provable-contracts/contracts/trueno/binding.yaml`
-- Run `pv verify-bindings` to confirm compliance
-- `build.rs` should report these as implemented (not gaps)
+**Binding updates: DONE (2026-04-05)**
+- 4 new bindings added to `../provable-contracts/contracts/trueno/binding.yaml` ✅
+- `build.rs` reports: 41/41 implemented, 0 gaps ✅
+- `pv lint`: PASS (0 errors, 11 warnings) ✅
 
 ### What's Left
 
