@@ -850,7 +850,7 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "toml",
- "trueno 0.17.1",
+ "trueno 0.17.2",
  "trueno-gpu",
 ]
 
@@ -4499,6 +4499,8 @@ dependencies = [
 [[package]]
 name = "provable-contracts-macros"
 version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a79b3496cd98fb9767f6ee845a4fda80f3b4a18de4a1477d8a59d527f2e98ac"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4507,9 +4509,7 @@ dependencies = [
 
 [[package]]
 name = "provable-contracts-macros"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a79b3496cd98fb9767f6ee845a4fda80f3b4a18de4a1477d8a59d527f2e98ac"
+version = "0.2.2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6159,7 +6159,7 @@ dependencies = [
  "chrono",
  "hostname",
  "num_cpus",
- "provable-contracts-macros 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "provable-contracts-macros 0.2.1",
  "serde",
  "serde_json",
  "serde_yaml_ng",
@@ -6170,7 +6170,7 @@ dependencies = [
 
 [[package]]
 name = "trueno"
-version = "0.17.1"
+version = "0.17.2"
 dependencies = [
  "anyhow",
  "aprender 0.27.5",
@@ -6191,7 +6191,7 @@ dependencies = [
  "presentar-core",
  "presentar-terminal",
  "proptest",
- "provable-contracts-macros 0.2.1",
+ "provable-contracts-macros 0.2.2",
  "rayon",
  "regex",
  "serde",
@@ -6299,7 +6299,7 @@ dependencies = [
 
 [[package]]
 name = "trueno-gpu"
-version = "0.4.35"
+version = "0.4.36"
 dependencies = [
  "batuta-common",
  "bytemuck",
