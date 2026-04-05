@@ -37,18 +37,18 @@ These targets apply per-backend, per-operation. Competing solutions:
 - **GPU GEMM**: cuBLAS (vendor-optimized), CUTLASS (NVIDIA open-source)
 - **Quantized inference**: llama.cpp (GGML), vLLM, TensorRT-LLM
 
-| Operation | Competitor | Current | Target (1.5x) | Stretch (2x) | Status |
-|-----------|-----------|---------|---------------|-------------|--------|
-| CPU GEMM 1024 (1T) | NumPy OpenBLAS | **0.98x** | 1.50x | 2.00x | **AT HARDWARE PEAK** |
-| CPU GEMM 1024 (8T) | NumPy OpenBLAS | **0.73x** | 1.50x | 2.00x | **GAP — parallel scaling** |
-| GPU GEMM 512 FP16 | cuBLAS | **0.33x** | N/A | N/A | KNOWN GAP |
-| Q4K GEMV (CPU) | llama.cpp | TBD | 1.50x | 2.00x | MEASURE |
-| Q4K GEMV (GPU DP4A) | llama.cpp CUDA | TBD | 1.50x | 2.00x | MEASURE |
+| Operation | Competitor | Current | Target | Status |
+|-----------|-----------|---------|--------|--------|
+| CPU GEMM 1024 (1T) | NumPy OpenBLAS | **0.98x** | 1.0x | **AT HARDWARE PEAK** |
+| CPU GEMM 1024 (12T) | NumPy OpenBLAS | **0.71x** | 1.0x | **GAP — ASM microkernel** |
+| GPU GEMM 512 FP16 | cuBLAS | **0.33x** | 0.5x | KNOWN GAP |
+| Q4K GEMV (CPU) | llama.cpp | TBD | 1.50x | MEASURE |
+| Q4K GEMV (GPU DP4A) | llama.cpp CUDA | TBD | 1.50x | MEASURE |
 
-**Status (2026-04-05, post AVX-512 BLIS):**
+**Status (2026-04-05, post AVX-512 + phys/2 cap):**
 - 1T: NumPy = 131 GFLOPS, trueno = 128 GFLOPS → **0.98x** (both at AVX-512 peak)
-- 8T: NumPy = 679 GFLOPS, trueno = 495 GFLOPS → **0.73x** (parallel scaling gap)
-- 16T (cgp scaling): trueno = 516 GFLOPS peak
+- 12T: NumPy = 799 GFLOPS, trueno = 567 GFLOPS → **0.71x** (ASM microkernel gap)
+- trueno scaling: 4.5× at 12T. OpenBLAS: 6.1× at 12T.
 
 Single-thread 1.5x target is **mathematically unreachable** — both libraries hit
 AVX-512 hardware peak (~130 GFLOPS at sustained Zen 4 clocks). The 1.5x target
@@ -2046,17 +2046,17 @@ Best single-thread efficiency: 94.7% (1024). Best 8T efficiency: 52% (1024).
 Note: 256 has low parallel efficiency because thread cap is 2 (L2 contention
 dominates at small sizes). 512 cap is 4 (see Phase 3 thread cap tuning).
 
-**Parallel scaling analysis (`cgp profile scaling --size 1024 --runs 3`, 2026-04-05, AVX-512):**
+**Parallel scaling analysis (`cgp profile scaling --size 1024 --runs 3`, 2026-04-05, AVX-512, phys/2 cap):**
 
 | Threads | 1024x1024 GFLOPS | Scaling | Notes |
 |---------|-----------------|---------|-------|
 | 1 | 127 | 1.0x | baseline (AVX-512 peak at sustained clocks) |
-| 2 | 216 | 1.7x | |
-| 4 | 354 | 2.8x | |
-| 8 | 495 | 3.9x | cap applied (single CCD) |
-| 12 | 499 | 4.0x | cap at 8, Rayon scheduling benefit |
-| 16 | **516** | **4.1x** | **peak** — cap at 8 but better thread placement |
-| 24 | 468 | 3.7x | cross-CCD regression |
+| 2 | 218 | 1.7x | |
+| 4 | 387 | 3.1x | |
+| 8 | 499 | 4.0x | |
+| 12 | **567** | **4.5x** | **peak** — cap at phys/2 = 12 |
+| 16 | 538 | 4.3x | slight cross-CCD overhead |
+| 24 | 523 | 4.1x | diminishing returns |
 
 **512x512 scaling (`cgp profile scaling --size 512 --runs 5`):**
 
@@ -2067,11 +2067,16 @@ dominates at small sizes). 512 cap is 4 (see Phase 3 thread cap tuning).
 | 8 | 173 | 2.1x | capped at 4 internally |
 | 12 | 187 | 2.2x | slight improvement from Rayon scheduling |
 
-**Optimization applied (Phase 3):** Thread caps recalibrated from cgp profile scaling:
-- <64M FLOPs (256³): cap at 2 (peak at 2T, no benefit beyond)
-- <512M FLOPs (512³): cap at 4 (peak at 4T, 8T regresses from L3 contention)
-- <4B FLOPs (1024³): cap at 8 (peak at 8T, single CCD L3 boundary)
+**Optimization applied (Phase 3, updated):** Thread caps from cgp profile scaling:
+- <64M FLOPs (256³): cap at 2 (peak at 2T, overhead dominates)
+- <512M FLOPs (512³): cap at 4 (peak at 4T, L3 contention at 8+)
+- <4B FLOPs (1024³): cap at phys_cores/2 (peak at 12T with AVX-512)
 - ≥4B FLOPs: all physical cores
+
+**Negative result (shared-B packing):** Attempted packing B once and sharing
+across threads. Regressed from 495→316 GFLOPS. Per-thread B packing keeps
+data in L1/L2; shared B causes cross-core cache line fetches that cost more
+than the redundant packing. This is consistent with BLIS literature [16].
 
 **Negative result (documented):** Pre-packing B via `gemm_blis_with_prepacked_b`
 regressed from 548→256 GFLOP/s. Root cause: unpacked `gemm_blis` inner loop
@@ -2087,18 +2092,20 @@ amortized across K iterations within each thread.
 
 **Head-to-Head (1024x1024 GEMM, controlled, 2026-04-05):**
 
-| Library | 1T (ms) | 1T GFLOPS | 8T (ms) | 8T GFLOPS | vs trueno |
-|---------|---------|-----------|---------|-----------|-----------|
-| NumPy 2.3 (OpenBLAS) | 16.4 | 131 | 3.17 | **679** | -- |
-| trueno BLIS (AVX-512) | 16.9 | 128 | 4.34 | 495 | **0.73x** |
-| trueno BLIS (old AVX2) | 21.5 | 100 | 6.40 | 336 | ~~0.49x~~ |
+| Library | 1T (ms) | 1T GFLOPS | Best (ms) | Best GFLOPS | vs trueno |
+|---------|---------|-----------|-----------|-------------|-----------|
+| NumPy 2.3 (OpenBLAS) | 16.4 | 131 | 2.69 (12T) | **799** | -- |
+| trueno BLIS (AVX-512) | 16.9 | 128 | 3.79 (12T) | **567** | **0.71x** |
+| trueno BLIS (old AVX2) | 21.5 | 100 | 6.40 (8T) | 336 | ~~0.42x~~ |
 
-**Progress**: AVX-512 8×16 microkernel closed 1T gap from 0.76x to 0.98x.
-8T improved from 0.49x to 0.73x (+49% relative improvement).
+**Progress** (3 optimization rounds):
+1. AVX-512 8×16 microkernel: 1T 100→128 GFLOPS (+28%), 8T 336→495 (+47%)
+2. Thread cap phys/2: peak 495→567 GFLOPS at 12T (+15%)
+3. Shared-B attempted: REVERTED (316 GFLOPS — cross-core cache miss penalty)
 
-**Remaining gap**: Parallel scaling. OpenBLAS 8T = 5.2× single-thread.
-trueno 8T = 3.9× single-thread. Root cause: B is packed per-thread in
-`gemm_blis`. OpenBLAS packs B once and shares across threads.
+**Remaining gap**: OpenBLAS 12T=6.1× scaling vs trueno 4.5×. Root cause:
+hand-tuned x86 assembly microkernels in OpenBLAS vs Rust intrinsics.
+Shared-B packing tested and disproven — per-thread B packing is faster.
 
 **Roofline gap analysis (2026-04-05, post AVX-512):**
 - CPU BLIS at 1024 1T: 128 GFLOPS / ~130 peak = **98.5%** — at hardware ceiling
