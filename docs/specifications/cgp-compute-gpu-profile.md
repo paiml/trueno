@@ -2234,10 +2234,27 @@ amortized across K iterations within each thread.
 | ndarray 0.17 | Rust | 18.0 | 119 | — | — | -- |
 | **trueno BLIS (AVX-512)** | **Rust** | **15.8** | **135** | **3.3** | **650** | **1.0x** |
 
+**Rust-only head-to-head (criterion, single-thread, 1024x1024, 2026-04-05):**
+
+| Library | Crate | Time (ms) | GFLOPS | vs trueno |
+|---------|-------|-----------|--------|-----------|
+| **faer 0.24** | `faer` | **8.18** | **262** | **1.98x faster** |
+| **trueno 0.17** | `trueno` | **16.20** | **133** | **1.00x** |
+| matrixmultiply 0.3 | `matrixmultiply` | 18.65 | 115 | 0.87x |
+| nalgebra 0.34 | `nalgebra` | 19.06 | 113 | 0.85x |
+| ndarray 0.17 | `ndarray` | 19.52 | 110 | 0.83x |
+
+**CRITICAL FINDING**: faer is 2x faster than trueno at 1024 single-thread GEMM.
+faer uses the `gemm` crate (by the same author) which has more aggressively
+optimized AVX-512 microkernels and packing. Investigation in progress — faer's
+`gemm` crate uses `nano-gemm` for microkernel codegen and `pulp` for portable SIMD.
+This represents the **#1 optimization opportunity** for trueno CPU GEMM.
+
 **Key findings** (2026-04-05):
-- trueno 1T: 135 GFLOPS = **0.98x C/OpenBLAS**, **1.02x NumPy**, **1.14x ndarray**
+- trueno 1T: 133 GFLOPS = **0.98x C/OpenBLAS**, **1.02x NumPy**, **1.14x ndarray**
 - trueno multi: 650 GFLOPS at 16T = **0.95x NumPy**, **0.81x** ideal OpenBLAS scaling
-- ndarray (matrixmultiply): 119 GFLOPS at 1024 — trueno is **1.14x faster**
+- **faer 1T: 262 GFLOPS = 1.98x trueno** — new optimization target
+- ndarray/nalgebra/matrixmultiply: all ~110-115 GFLOPS — trueno is 1.14-1.21x faster
 - cuBLAS FP32: 43.9 TFLOP/s at 1024 = **67x faster** than best CPU (expected — GPU >> CPU)
 
 **Progress** (4 optimization rounds):

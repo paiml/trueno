@@ -195,6 +195,8 @@ trueno-cuda-edge = { version = "0.1", path = "trueno-cuda-edge" }
 trueno-sparse = { version = "0.1", path = "crates/trueno-sparse" }
 trueno-solve = { version = "0.1", path = "crates/trueno-solve" }
 ndarray = "0.17.2"
+faer = "0.24"  # For GEMM benchmark comparison (fastest pure-Rust BLAS)
+matrixmultiply = "0.3"  # Direct matrixmultiply crate benchmark (engine behind ndarray)
 
 [features]
 default = []

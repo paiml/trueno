@@ -41,6 +41,43 @@ fn bench_gemm(c: &mut Criterion) {
             let b = ndarray::Array2::from_shape_vec((n, n), b.clone()).unwrap();
             bench.iter(|| black_box(black_box(&a).dot(black_box(&b))));
         });
+        // faer: fastest pure-Rust BLAS (uses runtime SIMD dispatch)
+        g.bench_with_input(BenchmarkId::new("faer", n), &n, |bench, &n| {
+            let a = faer::Mat::<f32>::from_fn(n, n, |i, j| a[i * n + j]);
+            let b = faer::Mat::<f32>::from_fn(n, n, |i, j| b[i * n + j]);
+            bench.iter(|| black_box(black_box(&a) * black_box(&b)));
+        });
+        // nalgebra: popular Rust linear algebra (uses matrixmultiply crate)
+        g.bench_with_input(BenchmarkId::new("nalgebra", n), &n, |bench, &n| {
+            let a = nalgebra::DMatrix::from_row_slice(n, n, &a);
+            let b = nalgebra::DMatrix::from_row_slice(n, n, &b);
+            bench.iter(|| black_box(black_box(&a) * black_box(&b)));
+        });
+        // matrixmultiply: raw sgemm (the engine behind ndarray GEMM)
+        g.bench_with_input(BenchmarkId::new("matrixmultiply", n), &n, |bench, &n| {
+            let mut c = vec![0.0f32; n * n];
+            bench.iter(|| {
+                // SAFETY: calling raw BLAS-style sgemm with valid pointers and strides
+                unsafe {
+                    matrixmultiply::sgemm(
+                        n,
+                        n,
+                        n,
+                        1.0,
+                        black_box(a.as_ptr()),
+                        n as isize,
+                        1,
+                        black_box(b.as_ptr()),
+                        n as isize,
+                        1,
+                        0.0,
+                        black_box(c.as_mut_ptr()),
+                        n as isize,
+                        1,
+                    );
+                }
+            });
+        });
     }
     g.finish();
 }
