@@ -142,6 +142,17 @@ pub fn transpose(rows: usize, cols: usize, a: &[f32], b: &mut [f32]) -> Result<(
         return Ok(());
     }
 
+    // Parallel transpose for large matrices (DRAM-bound → multi-channel).
+    // Threshold: rows*cols >= 4M (2048×2048+). 1024×1024 regressed at 1M
+    // threshold (parallel overhead > compute time).
+    #[cfg(feature = "parallel")]
+    {
+        const PARALLEL_THRESHOLD: usize = 4_000_000;
+        if expected >= PARALLEL_THRESHOLD {
+            return transpose_parallel(rows, cols, a, b);
+        }
+    }
+
     #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
@@ -154,6 +165,122 @@ pub fn transpose(rows: usize, cols: usize, a: &[f32], b: &mut [f32]) -> Result<(
     }
 
     transpose_scalar_impl(rows, cols, a, b);
+    Ok(())
+}
+
+/// Parallel transpose: chunk A by row ranges, each thread transposes its strip.
+/// Each thread writes to a disjoint COLUMN range of B (non-overlapping mutations).
+#[cfg(feature = "parallel")]
+fn transpose_parallel(
+    rows: usize,
+    cols: usize,
+    a: &[f32],
+    b: &mut [f32],
+) -> Result<(), TruenoError> {
+    use rayon::prelude::*;
+
+    let num_threads = rayon::current_num_threads().min(8);
+    // Chunk A's rows; each thread handles rows_per rows of A = cols_per (in B)
+    let rows_per = (rows + num_threads - 1) / num_threads;
+
+    // SAFETY: each thread writes to disjoint slices of B via raw pointer.
+    // Thread t writes B[c, rt..rt+rows_per] for all c in 0..cols — disjoint row ranges in A
+    // map to disjoint COLUMN ranges in B; B is accessed via (c*rows + r) indexing so
+    // threads write non-overlapping memory regions (separated by rows_per elements per row).
+    let b_ptr = b.as_mut_ptr() as usize;
+
+    (0..num_threads).into_par_iter().try_for_each(|t| {
+        let r_start = t * rows_per;
+        let r_end = (r_start + rows_per).min(rows);
+        if r_start >= r_end {
+            return Ok::<(), TruenoError>(());
+        }
+        let sub_rows = r_end - r_start;
+
+        // Input strip: A[r_start..r_end, 0..cols]
+        let a_strip = &a[r_start * cols..r_end * cols];
+
+        // SAFETY: see above - disjoint column range in B
+        unsafe {
+            let b_ptr_mut = b_ptr as *mut f32;
+            // For this strip, transpose into B using absolute B coordinates.
+            // B[c, r] for r in r_start..r_end, c in 0..cols.
+            // Equivalent: substrip of B has shape [cols, sub_rows] with stride rows.
+            transpose_strided_avx2(sub_rows, cols, a_strip, b_ptr_mut.add(r_start), rows)?;
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// Transpose A[sub_rows×cols] → B viewed as [cols × ...] with given b_stride (= rows of full B).
+/// Writes into B at offsets (c * b_stride + r) for r in 0..sub_rows, c in 0..cols.
+#[cfg(all(feature = "parallel", target_arch = "x86_64"))]
+unsafe fn transpose_strided_avx2(
+    sub_rows: usize,
+    cols: usize,
+    a: &[f32],
+    b_ptr: *mut f32,
+    b_stride: usize,
+) -> Result<(), TruenoError> {
+    const TILE: usize = 64; // L1-resident outer tile (16KB working set)
+    const BLOCK: usize = 8; // AVX2 micro-kernel
+
+    let rb_end = sub_rows / BLOCK * BLOCK;
+    let cb_end = cols / BLOCK * BLOCK;
+
+    unsafe {
+        // Two-level tiling: 64×64 outer (L1) + 8×8 inner (AVX2)
+        // Standard inner order (r0 outer, c0 inner): sequential A reads.
+        for rt in (0..rb_end).step_by(TILE) {
+            let rt_end = (rt + TILE).min(rb_end);
+            for ct in (0..cb_end).step_by(TILE) {
+                let ct_end = (ct + TILE).min(cb_end);
+                for r0 in (rt..rt_end).step_by(BLOCK) {
+                    for c0 in (ct..ct_end).step_by(BLOCK) {
+                        let src = a.as_ptr().add(r0 * cols + c0);
+                        let dst = b_ptr.add(c0 * b_stride + r0);
+                        transpose_8x8_avx2(src, cols, dst, b_stride);
+                    }
+                }
+            }
+        }
+        // Remainder: edge rows
+        if rb_end < sub_rows {
+            for r in rb_end..sub_rows {
+                for c in 0..cols {
+                    *b_ptr.add(c * b_stride + r) = *a.get_unchecked(r * cols + c);
+                }
+            }
+        }
+        // Remainder: edge cols (for row-aligned part)
+        if cb_end < cols {
+            for r in 0..rb_end {
+                for c in cb_end..cols {
+                    *b_ptr.add(c * b_stride + r) = *a.get_unchecked(r * cols + c);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Scalar fallback strided transpose (for non-x86 or no-AVX2).
+#[cfg(all(feature = "parallel", not(target_arch = "x86_64")))]
+unsafe fn transpose_strided_avx2(
+    sub_rows: usize,
+    cols: usize,
+    a: &[f32],
+    b_ptr: *mut f32,
+    b_stride: usize,
+) -> Result<(), TruenoError> {
+    unsafe {
+        for r in 0..sub_rows {
+            for c in 0..cols {
+                *b_ptr.add(c * b_stride + r) = *a.get_unchecked(r * cols + c);
+            }
+        }
+    }
     Ok(())
 }
 
@@ -191,6 +318,9 @@ unsafe fn transpose_avx2_impl(
     // Tall-skinny: rows >> cols → destination stride (=rows) is large.
     // Swap loop order so inner loop walks consecutive r0 values,
     // making destination writes sequential within each cache line.
+    // Tested rows >= 1024 extension (2026-04-05): regressed 1024×1024
+    // from 25 → 15 GB/s. Standard order is better for square matrices
+    // due to sequential A reads (prefetcher friendly).
     let tall_skinny = rows >= 4 * cols;
 
     unsafe {

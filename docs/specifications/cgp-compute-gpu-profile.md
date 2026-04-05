@@ -61,6 +61,15 @@ These targets apply per-backend, per-operation. Competing solutions:
   at 4096-8192 sizes. vecmat 4096×4096: 9.3 → 16.1 GFLOPS (+73%).
   Tiled kernel's strided B access (stride=N*4 bytes) is TLB-unfriendly at
   large N; axpy keeps sequential B reads and c[] in L1.
+- **Parallel transpose (2026-04-05)**: Rayon parallelization across row chunks
+  of A (disjoint column ranges of B). Threshold: rows*cols >= 4M.
+  - transpose 2048×2048: 14.2 → 26.2 GB/s (+85%)
+  - transpose 4096×4096: 3.7 → 6.7 GB/s (+81%)
+  - transpose 8192×8192: 3.7 → 10.5 GB/s (+184%)
+  Same 64×64 outer + 8×8 AVX2 inner tiling as serial, just chunked across
+  threads. Single-threaded perf at 4096+ remains poor (TLB thrashing on
+  strided writes) — needs deeper fix (streaming stores? hugepages?).
+
 - **Parallel vecmat K-split (2026-04-05)**: Rayon parallelization along K
   dimension (each thread computes partial c, then reduce). Threshold:
   K*N >= 4M (e.g., 2048×2048). Combined with threshold fix above:
