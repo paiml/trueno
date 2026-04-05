@@ -57,19 +57,21 @@ pub unsafe fn gemv_avx2(k: usize, n: usize, a: &[f32], b: &[f32], c: &mut [f32])
             let b3_base = b2_base + n;
 
             let mut j = 0;
+            let b_ptr = b.as_ptr();
+            let c_ptr = c.as_mut_ptr();
             while j < n8 {
-                let cv = _mm256_loadu_ps(c.get_unchecked(j));
-                let bv0 = _mm256_loadu_ps(b.get_unchecked(b0_base + j));
-                let bv1 = _mm256_loadu_ps(b.get_unchecked(b1_base + j));
-                let bv2 = _mm256_loadu_ps(b.get_unchecked(b2_base + j));
-                let bv3 = _mm256_loadu_ps(b.get_unchecked(b3_base + j));
+                let cv = _mm256_loadu_ps(c_ptr.add(j));
+                let bv0 = _mm256_loadu_ps(b_ptr.add(b0_base + j));
+                let bv1 = _mm256_loadu_ps(b_ptr.add(b1_base + j));
+                let bv2 = _mm256_loadu_ps(b_ptr.add(b2_base + j));
+                let bv3 = _mm256_loadu_ps(b_ptr.add(b3_base + j));
 
                 let r = _mm256_fmadd_ps(a0, bv0, cv);
                 let r = _mm256_fmadd_ps(a1, bv1, r);
                 let r = _mm256_fmadd_ps(a2, bv2, r);
                 let r = _mm256_fmadd_ps(a3, bv3, r);
 
-                _mm256_storeu_ps(c.get_unchecked_mut(j), r);
+                _mm256_storeu_ps(c_ptr.add(j), r);
                 j += 8;
             }
 
@@ -92,11 +94,13 @@ pub unsafe fn gemv_avx2(k: usize, n: usize, a: &[f32], b: &[f32], c: &mut [f32])
             let ak_v = _mm256_set1_ps(ak);
 
             let mut j = 0;
+            let b_ptr = b.as_ptr();
+            let c_ptr = c.as_mut_ptr();
             while j < n8 {
-                let cv = _mm256_loadu_ps(c.get_unchecked(j));
-                let bv = _mm256_loadu_ps(b.get_unchecked(bk_base + j));
+                let cv = _mm256_loadu_ps(c_ptr.add(j));
+                let bv = _mm256_loadu_ps(b_ptr.add(bk_base + j));
                 let r = _mm256_fmadd_ps(ak_v, bv, cv);
-                _mm256_storeu_ps(c.get_unchecked_mut(j), r);
+                _mm256_storeu_ps(c_ptr.add(j), r);
                 j += 8;
             }
             while j < n {

@@ -65,18 +65,17 @@ fn falsify_blis_004_rms_norm() {
 }
 
 #[test]
-#[ignore] // BUG: gemv_avx2 has unsafe OOB in debug builds — needs separate fix
-fn falsify_blis_005_gemv_aligned() {
-    // gemv(k, n, a, b, c): a[k×n] * b[n] = c[k]
-    // Note: non-aligned sizes (7×13) trigger OOB in gemv_avx2 — separate bug
-    for (k, n) in [(8, 16), (32, 32), (64, 128)] {
-        let a: Vec<f32> = (0..k * n).map(|i| (i % 10) as f32 * 0.01).collect();
-        let b: Vec<f32> = (0..n).map(|i| (i % 5) as f32 * 0.1).collect();
-        let mut c = vec![0.0f32; k];
+fn falsify_blis_005_gemv() {
+    // gemv(k, n, a, b, c): a[k] is the vector, b[k×n] is the matrix, c[n] is output
+    // c[j] = sum_i(a[i] * b[i*n + j])
+    for (k, n) in [(8, 16), (32, 32), (64, 128), (3, 4), (1, 1)] {
+        let a: Vec<f32> = (0..k).map(|i| (i + 1) as f32 * 0.1).collect();
+        let b: Vec<f32> = (0..k * n).map(|i| (i % 10) as f32 * 0.01).collect();
+        let mut c = vec![0.0f32; n];
         gemv::gemv(k, n, &a, &b, &mut c);
-        for i in 0..k {
-            let expected: f32 = (0..n).map(|j| a[i * n + j] * b[j]).sum();
-            assert!((c[i] - expected).abs() < 0.01, "005: [{i}] got={} exp={expected}", c[i]);
+        for j in 0..n {
+            let expected: f32 = (0..k).map(|i| a[i] * b[i * n + j]).sum();
+            assert!((c[j] - expected).abs() < 0.01, "005: [{j}] got={} exp={expected}", c[j]);
         }
     }
 }
