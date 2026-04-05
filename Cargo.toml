@@ -297,6 +297,14 @@ required-features = ["gpu"]
 name = "wgpu_backward_demo"
 required-features = ["gpu"]
 
+[[example]]
+name = "coop_gemm_bench"
+required-features = ["gpu"]
+
+[[example]]
+name = "gpu_monitor_demo"
+required-features = ["gpu", "tui-monitor"]
+
 [package.metadata.release]
 shared-version = true
 

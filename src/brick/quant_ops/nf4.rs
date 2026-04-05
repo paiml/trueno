@@ -118,7 +118,7 @@ pub fn quantize_nf4(x: f32) -> u8 {
 /// Source: `bitsandbytes/csrc/kernels.cu:465-529` (kDequantizeBlockwise algorithm)
 pub fn dequantize_blockwise(packed: &[u8], absmax: &[f32], blocksize: usize, output: &mut [f32]) {
     assert_eq!(output.len(), packed.len() * 2, "output must be 2× packed length");
-    let _half_block = blocksize / 2; // NF4 packs 2 per byte, so blocksize refers to elements
+    // NF4 packs 2 values per byte, so blocksize refers to elements
 
     for (byte_idx, &byte) in packed.iter().enumerate() {
         let elem_idx = byte_idx * 2;

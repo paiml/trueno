@@ -5,7 +5,6 @@
 
 use super::super::*;
 use crate::blis;
-use crate::error::TruenoError;
 
 // ═══ Contract: blis-gemm-v1 — GEMM correctness ═══
 
@@ -30,7 +29,7 @@ fn falsify_blis_002_gemm_non_aligned() {
         let mut c_blis = vec![0.0f32; m * n];
         let mut c_ref = vec![0.0f32; m * n];
         blis::gemm_blis(m, n, k, &a, &b, &mut c_blis, None).unwrap();
-        reference::gemm_reference(m, n, k, &a, &b, &mut c_ref);
+        reference::gemm_reference(m, n, k, &a, &b, &mut c_ref).unwrap();
         for i in 0..m * n {
             let diff = (c_blis[i] - c_ref[i]).abs();
             assert!(diff < 0.1, "002: [{i}] blis={} ref={}", c_blis[i], c_ref[i]);
@@ -90,7 +89,7 @@ fn falsify_blis_006_gemm_large_avx_path() {
     let mut c = vec![0.0f32; m * n];
     let mut c_ref = vec![0.0f32; m * n];
     blis::gemm_blis(m, n, k, &a, &b, &mut c, None).unwrap();
-    reference::gemm_reference(m, n, k, &a, &b, &mut c_ref);
+    reference::gemm_reference(m, n, k, &a, &b, &mut c_ref).unwrap();
     let max_diff: f32 =
         c.iter().zip(c_ref.iter()).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
     assert!(max_diff < 0.5, "006: large GEMM max_diff={max_diff}");
@@ -100,7 +99,7 @@ fn falsify_blis_006_gemm_large_avx_path() {
 fn falsify_blis_007_elementwise_add_inplace() {
     for len in [1, 8, 32, 255, 1024] {
         let mut a: Vec<f32> = (0..len).map(|i| i as f32).collect();
-        let b: Vec<f32> = (0..len).map(|i| 1.0).collect();
+        let b: Vec<f32> = (0..len).map(|_| 1.0).collect();
         elementwise::add_inplace(&mut a, &b).unwrap();
         for i in 0..len {
             assert!((a[i] - (i as f32 + 1.0)).abs() < 1e-5, "007: [{i}]={}", a[i]);
@@ -139,7 +138,7 @@ fn falsify_blis_009_softmax() {
 fn falsify_blis_010_relu() {
     let input: Vec<f32> = (-50..50).map(|i| i as f32 * 0.1).collect();
     let result = elementwise::relu_alloc(&input);
-    for (i, (&r, &x)) in result.iter().zip(input.iter()).enumerate() {
+    for (&r, &x) in result.iter().zip(input.iter()) {
         if x < 0.0 {
             assert_eq!(r, 0.0, "010: relu({x}) should be 0");
         } else {
