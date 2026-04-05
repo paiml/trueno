@@ -1084,7 +1084,11 @@ pub(super) unsafe fn avx512_microkernel_8x16_rowmajor(
     let mut c6 = _mm512_loadu_ps(c.add(6 * ldc));
     let mut c7 = _mm512_loadu_ps(c.add(7 * ldc));
 
-    // Main loop: for each K, load B[16] into zmm, broadcast A[i] to zmm, FMA
+    // Main loop: for each K, load B[16] into zmm, broadcast A[i] to zmm, FMA.
+    // NOTE: Manual 4-way K-unrolling was tested (2026-04-05) but REGRESSED
+    // from 567→400 GFLOPS at 12T. The compiler (LLVM) already unrolls this
+    // loop optimally. Manual unrolling causes register spills from 4× live
+    // B vectors + address calculations exceeding the register budget.
     for p in 0..k {
         let b_row = _mm512_loadu_ps(b.add(p * 16));
         let ap = a.add(p * 8); // MR=8
