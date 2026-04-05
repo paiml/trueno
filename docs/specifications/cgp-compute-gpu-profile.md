@@ -44,7 +44,7 @@ These targets apply per-backend, per-operation. Competing solutions:
 | CPU GEMM 1024 (1T) | ndarray 0.17 | **1.17x** | 1.0x | **FASTER** |
 | CPU GEMM 1024 (8T) | NumPy OpenBLAS | **0.82x** | 1.0x | **GAP — ASM microkernel IPC** |
 | GPU GEMM 512 FP16 | cuBLAS | **0.33x** | 0.5x | KNOWN GAP |
-| Q4K GEMV 4096 (CPU) | llama.cpp est. | **~0.5x** | 1.50x | **GAP — needs AVX-512** |
+| Q4K GEMV 4096 (CPU) | llama.cpp est. | **~0.5x** | 1.50x | **cgp: 70.4 GFLOPS, 47% util** |
 | Q4K GEMV (GPU DP4A) | llama.cpp CUDA | TBD | 1.50x | MEASURE |
 
 **Status (2026-04-05, post SIMD B-packing optimization):**
