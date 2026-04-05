@@ -40,7 +40,13 @@ impl Vector<f32> {
     /// - Graphics: Animation, rotation transformations, procedural generation
     /// - Fourier analysis: Frequency decomposition, spectral analysis
     pub fn sin(&self) -> Result<Vector<f32>> {
-        let mut result_data = vec![0.0; self.len()];
+        // Uninit: backend writes every element before any read.
+        let n = self.len();
+        let mut result_data: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Backend writes all elements before any read.
+        unsafe {
+            result_data.set_len(n);
+        }
 
         if !self.data.is_empty() {
             dispatch_unary_op!(self.backend, sin, &self.data, &mut result_data);
@@ -85,7 +91,13 @@ impl Vector<f32> {
     /// - Audio: Stereo panning, spatial audio, frequency synthesis
     /// - Engineering: Control systems, frequency response, AC circuits
     pub fn cos(&self) -> Result<Vector<f32>> {
-        let mut result_data = vec![0.0; self.len()];
+        // Uninit: backend writes every element before any read.
+        let n = self.len();
+        let mut result_data: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Backend writes all elements before any read.
+        unsafe {
+            result_data.set_len(n);
+        }
 
         if !self.data.is_empty() {
             dispatch_unary_op!(self.backend, cos, &self.data, &mut result_data);
@@ -134,7 +146,13 @@ impl Vector<f32> {
     /// - Graphics: Perspective projection, field of view calculations
     /// - Engineering: Slope gradients, tangent lines to curves
     pub fn tan(&self) -> Result<Vector<f32>> {
-        let mut result_data = vec![0.0; self.len()];
+        // Uninit: backend writes every element before any read.
+        let n = self.len();
+        let mut result_data: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Backend writes all elements before any read.
+        unsafe {
+            result_data.set_len(n);
+        }
 
         if !self.data.is_empty() {
             dispatch_unary_op!(self.backend, tan, &self.data, &mut result_data);

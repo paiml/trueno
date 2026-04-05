@@ -38,7 +38,13 @@ impl Vector<f32> {
     /// - Signal processing: Exponential smoothing, envelope detection
     /// - Numerical methods: Solving differential equations
     pub fn exp(&self) -> Result<Vector<f32>> {
-        let mut result_data = vec![0.0; self.len()];
+        // Uninit: backend writes every element before any read.
+        let n = self.len();
+        let mut result_data: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Backend writes all elements before any read.
+        unsafe {
+            result_data.set_len(n);
+        }
 
         if !self.data.is_empty() {
             // Use parallel processing for large arrays
@@ -101,7 +107,13 @@ impl Vector<f32> {
     /// - Economics: Log returns, elasticity calculations
     /// - Signal processing: Decibel conversion, log-frequency analysis
     pub fn ln(&self) -> Result<Vector<f32>> {
-        let mut result_data = vec![0.0; self.len()];
+        // Uninit: backend writes every element before any read.
+        let n = self.len();
+        let mut result_data: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Backend writes all elements before any read.
+        unsafe {
+            result_data.set_len(n);
+        }
 
         if !self.data.is_empty() {
             dispatch_unary_op!(self.backend, ln, &self.data, &mut result_data);
@@ -143,7 +155,13 @@ impl Vector<f32> {
     /// - Audio: Octave calculations, pitch detection
     /// - Data compression: Huffman coding, arithmetic coding
     pub fn log2(&self) -> Result<Vector<f32>> {
-        let mut result_data = vec![0.0; self.len()];
+        // Uninit: backend writes every element before any read.
+        let n = self.len();
+        let mut result_data: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Backend writes all elements before any read.
+        unsafe {
+            result_data.set_len(n);
+        }
 
         if !self.data.is_empty() {
             dispatch_unary_op!(self.backend, log2, &self.data, &mut result_data);
@@ -185,7 +203,13 @@ impl Vector<f32> {
     /// - Seismology: Richter scale
     /// - Scientific notation: Order of magnitude calculations
     pub fn log10(&self) -> Result<Vector<f32>> {
-        let mut result_data = vec![0.0; self.len()];
+        // Uninit: backend writes every element before any read.
+        let n = self.len();
+        let mut result_data: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Backend writes all elements before any read.
+        unsafe {
+            result_data.set_len(n);
+        }
 
         if !self.data.is_empty() {
             dispatch_unary_op!(self.backend, log10, &self.data, &mut result_data);

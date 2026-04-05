@@ -27,7 +27,13 @@ impl Vector<f32> {
     /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn floor(&self) -> Result<Vector<f32>> {
-        let mut result_data = vec![0.0; self.len()];
+        // Uninit: backend writes every element before any read.
+        let n = self.len();
+        let mut result_data: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Backend writes all elements before any read.
+        unsafe {
+            result_data.set_len(n);
+        }
 
         if !self.data.is_empty() {
             dispatch_unary_op!(self.backend, floor, &self.data, &mut result_data);
@@ -49,7 +55,13 @@ impl Vector<f32> {
     /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn ceil(&self) -> Result<Vector<f32>> {
-        let mut result_data = vec![0.0; self.len()];
+        // Uninit: backend writes every element before any read.
+        let n = self.len();
+        let mut result_data: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Backend writes all elements before any read.
+        unsafe {
+            result_data.set_len(n);
+        }
 
         if !self.data.is_empty() {
             dispatch_unary_op!(self.backend, ceil, &self.data, &mut result_data);
@@ -75,7 +87,13 @@ impl Vector<f32> {
     /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn round(&self) -> Result<Vector<f32>> {
-        let mut result_data = vec![0.0; self.len()];
+        // Uninit: backend writes every element before any read.
+        let n = self.len();
+        let mut result_data: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Backend writes all elements before any read.
+        unsafe {
+            result_data.set_len(n);
+        }
 
         if !self.data.is_empty() {
             dispatch_unary_op!(self.backend, round, &self.data, &mut result_data);

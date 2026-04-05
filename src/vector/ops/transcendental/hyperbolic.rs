@@ -128,7 +128,13 @@ impl Vector<f32> {
             }
         }
 
-        let mut result = vec![0.0; self.len()];
+        // Uninit: backend writes every element before any read.
+        let n = self.len();
+        let mut result: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Backend writes all elements before any read.
+        unsafe {
+            result.set_len(n);
+        }
 
         // Dispatch to appropriate SIMD backend
         // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants

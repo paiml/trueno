@@ -54,7 +54,13 @@ impl Vector<f32> {
     /// # }
     /// ```
     pub fn abs(&self) -> Result<Vector<f32>> {
-        let mut result_data = vec![0.0; self.len()];
+        // Uninit: backend writes every element before any read.
+        let n = self.len();
+        let mut result_data: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Backend writes all elements before any read.
+        unsafe {
+            result_data.set_len(n);
+        }
 
         if !self.as_slice().is_empty() {
             // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
@@ -89,7 +95,8 @@ impl Vector<f32> {
             }
         }
 
-        Ok(Vector::from_slice_with_backend(&result_data, self.backend()))
+        // Construct directly (no copy) — from_slice_with_backend would copy 4MB!
+        Ok(Vector { data: result_data, backend: self.backend() })
     }
 
     /// Clip values to a specified range [min_val, max_val]
@@ -186,7 +193,13 @@ impl Vector<f32> {
             )));
         }
 
-        let mut result_data = vec![0.0; self.len()];
+        // Uninit: backend writes every element before any read.
+        let n = self.len();
+        let mut result_data: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Backend writes all elements before any read.
+        unsafe {
+            result_data.set_len(n);
+        }
 
         if !self.as_slice().is_empty() {
             // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
@@ -231,7 +244,7 @@ impl Vector<f32> {
             }
         }
 
-        Ok(Vector::from_slice_with_backend(&result_data, self.backend()))
+        Ok(Vector { data: result_data, backend: self.backend() })
     }
 
     /// Linear interpolation between two vectors
@@ -281,7 +294,13 @@ impl Vector<f32> {
             return Err(TruenoError::SizeMismatch { expected: self.len(), actual: other.len() });
         }
 
-        let mut result_data = vec![0.0; self.len()];
+        // Uninit: backend writes every element before any read.
+        let n = self.len();
+        let mut result_data: Vec<f32> = Vec::with_capacity(n);
+        // SAFETY: Backend writes all elements before any read.
+        unsafe {
+            result_data.set_len(n);
+        }
 
         if !self.as_slice().is_empty() {
             // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
@@ -326,7 +345,7 @@ impl Vector<f32> {
             }
         }
 
-        Ok(Vector::from_slice_with_backend(&result_data, self.backend()))
+        Ok(Vector { data: result_data, backend: self.backend() })
     }
 }
 
