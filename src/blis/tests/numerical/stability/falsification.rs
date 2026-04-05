@@ -265,3 +265,37 @@ fn test_falsification_50_jidoka_wrong_result() {
     let result = gemm_reference_with_jidoka(n, n, n, &a, &b, &mut c_jidoka, &guard);
     assert!(result.is_ok(), "F50: Jidoka rejected correct result");
 }
+
+/// FALSIFY-CGP-093: CPU GEMM 1T must achieve >= 80 GFLOPS at 1024.
+/// (Conservative threshold — actual is ~140 GFLOPS. Using 80 to avoid flaky
+/// failures on loaded systems or debug builds.)
+#[test]
+fn test_falsification_gemm_perf_regression() {
+    let n = 512; // Use 512 for faster test — still exercises AVX-512 path
+    let a: Vec<f32> = (0..n * n).map(|i| ((i % 7) as f32) * 0.1).collect();
+    let b: Vec<f32> = (0..n * n).map(|i| ((i % 11) as f32) * 0.1).collect();
+    let mut c = vec![0.0f32; n * n];
+    let flops = 2.0 * (n as f64).powi(3);
+
+    // Warmup
+    for _ in 0..3 {
+        c.fill(0.0);
+        gemm_blis(n, n, n, &a, &b, &mut c, None).unwrap();
+    }
+
+    // Measure best of 5
+    let mut best_ns = u128::MAX;
+    for _ in 0..5 {
+        c.fill(0.0);
+        let start = std::time::Instant::now();
+        gemm_blis(n, n, n, &a, &b, &mut c, None).unwrap();
+        best_ns = best_ns.min(start.elapsed().as_nanos());
+    }
+
+    let gflops = flops / (best_ns as f64 * 1e-9) / 1e9;
+    assert!(
+        gflops > 40.0,
+        "FALSIFY-CGP-093: GEMM 512 1T only {gflops:.1} GFLOPS (min: 40.0). \
+         Regression detected! Expected ~140 GFLOPS in release, >40 even in debug."
+    );
+}

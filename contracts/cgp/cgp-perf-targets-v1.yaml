@@ -75,11 +75,17 @@ bounds:
 
 falsification:
   - name: FALSIFY-CGP-090
-    description: "CPU GEMM must achieve > 100 GFLOPS parallel at 1024"
-    check: "gemm_1024_parallel_gflops > 100"
+    description: "CPU GEMM must achieve > 500 GFLOPS parallel at 1024"
+    check: "gemm_1024_parallel_gflops > 500"
   - name: FALSIFY-CGP-091
-    description: "CPU GEMM must be >= 0.9x ndarray at 1024 1T"
-    check: "gemm_1024_1t_ratio_vs_ndarray >= 0.9"
+    description: "CPU GEMM must be >= 1.0x ndarray at 1024 1T (currently 1.17x)"
+    check: "gemm_1024_1t_ratio_vs_ndarray >= 1.0"
   - name: FALSIFY-CGP-092
     description: "Q4K composite tokens/sec >= 10"
     check: "q4k_composite_tok_per_sec >= 10"
+  - name: FALSIFY-CGP-093
+    description: "CPU GEMM 1T must achieve >= 120 GFLOPS at 1024 (currently 140)"
+    check: "gemm_1024_1t_gflops >= 120"
+  - name: FALSIFY-CGP-094
+    description: "CPU GEMM 1T must be >= 0.90x faer at 1024 (currently 0.98x)"
+    check: "gemm_1024_1t_ratio_vs_faer >= 0.90"
