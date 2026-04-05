@@ -1980,17 +1980,17 @@ Best single-thread efficiency: 94.7% (1024). Best 8T efficiency: 52% (1024).
 Note: 256 has low parallel efficiency because thread cap is 2 (L2 contention
 dominates at small sizes). 512 cap is 4 (see Phase 3 thread cap tuning).
 
-**Parallel scaling analysis (`cgp profile scaling --size 1024 --runs 5`, 2026-04-04):**
+**Parallel scaling analysis (`cgp profile scaling --size 1024 --runs 3`, 2026-04-05):**
 
 | Threads | 1024x1024 GFLOPS | Scaling | Notes |
 |---------|-----------------|---------|-------|
-| 1 | 105 | 1.0x | baseline |
-| 2 | 188 | 1.8x | near-linear |
-| 4 | 348 | 3.3x | |
-| 8 | 499 | 4.8x | **peak** — single CCD L3 (32MB) |
-| 12 | 452 | 4.3x | cross-CCD L3 contention |
-| 16 | 488 | 4.7x | partial recovery with more cores |
-| 24 | 466 | 4.5x | diminishing returns |
+| 1 | 106 | 1.0x | baseline (94.7% of 112 peak) |
+| 2 | 201 | 1.9x | near-linear |
+| 4 | 335 | 3.2x | |
+| 8 | 471 | 4.4x | **peak** — single CCD L3 (32MB), cap applied |
+| 12 | 383 | 3.6x | capped at 8 internally |
+| 16 | 426 | 4.0x | capped at 8 internally |
+| 24 | 445 | 4.2x | capped at 8 internally |
 
 **512x512 scaling (`cgp profile scaling --size 512 --runs 5`):**
 
@@ -2002,9 +2002,10 @@ dominates at small sizes). 512 cap is 4 (see Phase 3 thread cap tuning).
 | 12 | 187 | 2.2x | slight improvement from Rayon scheduling |
 
 **Optimization applied (Phase 3):** Thread caps recalibrated from cgp profile scaling:
-- 256³ FLOPs: cap reduced 4→2 (peak at 2T, no benefit beyond)
-- 512³ FLOPs: cap reduced 8→4 (peak at 4T, 8T regresses from L3 contention)
-- 1024³+ FLOPs: all physical cores (unchanged)
+- <64M FLOPs (256³): cap at 2 (peak at 2T, no benefit beyond)
+- <512M FLOPs (512³): cap at 4 (peak at 4T, 8T regresses from L3 contention)
+- <4B FLOPs (1024³): cap at 8 (peak at 8T, single CCD L3 boundary)
+- ≥4B FLOPs: all physical cores
 
 **Negative result (documented):** Pre-packing B via `gemm_blis_with_prepacked_b`
 regressed from 548→256 GFLOP/s. Root cause: unpacked `gemm_blis` inner loop
@@ -2026,8 +2027,8 @@ amortized across K iterations within each thread.
 | NumPy 2.x (MKL) | 388.3 ms | 2.10x |
 
 **Roofline gap analysis (2026-04-05):**
-- CPU BLIS at 1024 (8T): 489 GFLOPS / 896 peak (8-core) = 54.6% — CCD-local efficiency solid
-- CPU BLIS at 1024 (24T): 426 GFLOPS / 2688 peak = 15.9% → NUMA + cross-CCD L3 thrashing
+- CPU BLIS at 1024 (8T, capped): 471 GFLOPS / 896 peak (8-core) = 52.6% — CCD-local
+- CPU BLIS at 1024 (24T, capped at 8): 445 GFLOPS / 896 = 49.7% — same 8 active threads
 - GPU CTA WMMA: 11.6 TFLOP/s / 330 peak = 3.5% → larger tiles + double-buffering needed
 - GPU fused K+V DP4A: 170 insn/SB vs 216 separate (21% savings per layer)
 
@@ -2074,6 +2075,8 @@ New in Phase 3 (PMAT-037):
 - **Doctor**: perf_event_paranoid detection with actionable fix instructions
 - **Parallel profiler**: Min-of-3 timing for stable measurements
 - **Scaling command**: Thread-count sweep with GEMM output parsing, JSON support
+- **Thread cap tuning**: 4-tier cap (2/4/8/all) from cgp scaling measurements
+- **Performance contracts**: First contracts in `contracts/cgp/` (BLIS GEMM + roofline)
 - **Dogfooding**: All measurements regenerated via `cgp profile scaling` (see Appendix A.2)
 
 FALSIFY tests implemented (111 unit + 15 falsify + 29 integration = 155):
