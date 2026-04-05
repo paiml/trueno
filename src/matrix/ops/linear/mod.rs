@@ -165,23 +165,21 @@ impl Matrix<f32> {
 
             if self.rows >= PARALLEL_THRESHOLD {
                 use rayon::prelude::*;
-                use std::sync::atomic::{AtomicPtr, Ordering};
-                use std::sync::Arc;
 
-                let result_ptr = Arc::new(AtomicPtr::new(result_data.as_mut_ptr()));
+                // Chunk rows into slices per thread (amortizes task overhead).
+                // Previous per-row parallelism spawned rows-many tasks; chunked
+                // spawns num_threads tasks, each processing rows/num_threads rows.
+                let num_threads = rayon::current_num_threads().min(8);
+                let rows_per = (self.rows + num_threads - 1) / num_threads;
+                let cols = self.cols;
+                let data = &self.data;
 
-                // Process rows in parallel - each row computes an independent dot product
-                (0..self.rows).into_par_iter().for_each(|i| {
-                    let row_start = i * self.cols;
-                    let row = &self.data[row_start..(row_start + self.cols)];
-
-                    let dot_result = dispatch_dot!(self.backend, row, v_slice);
-
-                    // Write to non-overlapping memory location (thread-safe)
-                    // SAFETY: CPU feature verified at runtime, slices bounds-checked
-                    unsafe {
-                        let ptr = result_ptr.load(Ordering::Relaxed);
-                        *ptr.add(i) = dot_result;
+                result_data.par_chunks_mut(rows_per).enumerate().for_each(|(tid, out_chunk)| {
+                    let row_start = tid * rows_per;
+                    for (i, out) in out_chunk.iter_mut().enumerate() {
+                        let r = row_start + i;
+                        let row = &data[r * cols..(r + 1) * cols];
+                        *out = dispatch_dot!(self.backend, row, v_slice);
                     }
                 });
 
