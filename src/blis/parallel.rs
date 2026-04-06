@@ -122,22 +122,12 @@ pub fn gemm_blis_parallel(
     let ps = if m <= MC { MR.max(m / scheduler.num_threads) } else { MC };
     let partitions = scheduler.partition_m(m, ps);
 
-    // CGP-DBUF: Use shared-B packing when AVX-512 is available.
-    // Previous per-thread approach (2026-04-05): each thread independently packs B,
-    // wasting 8× L3 bandwidth (8 threads × 1MB packed_b = 8MB redundant).
-    // Previous shared-B attempt (2026-04-05): regressed 495→316 GFLOPS because
-    // sharing was at the FULL B level (not per (jc,pc) panel level).
-    // New approach (2026-04-06): pack B ONCE per (jc,pc) block in the main thread,
-    // distribute M-slices to workers. Each worker packs only its own A.
-    #[cfg(target_arch = "x86_64")]
-    if std::arch::is_x86_feature_detected!("avx512f")
-        && std::arch::is_x86_feature_detected!("fma")
-        && n >= 32
-    {
-        return gemm_blis_parallel_shared_b(m, n, k, a, b, c);
-    }
-
-    // Fallback: per-thread packing for non-AVX-512 or narrow N
+    // NEGATIVE RESULT (2026-04-06): shared-B per (jc,pc) block REGRESSED 597→318 GFLOPS.
+    // Root cause: Rayon barrier after each K-tile pack forces thread synchronization.
+    // With K=4 tiles for 1024×1024, threads stall 4× per GEMM waiting for B pack.
+    // Per-thread independent packing (below) avoids synchronization entirely.
+    // The 8× redundant B packing (~8MB) fits in L3 (64MB) and eliminates barriers.
+    // Future fix: producer-consumer B packing (one thread packs while others compute).
     let c_ptr = c.as_mut_ptr() as usize;
 
     partitions.into_par_iter().for_each(|m_range| {
