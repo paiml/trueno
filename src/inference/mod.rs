@@ -16,9 +16,7 @@
 pub mod generate;
 pub mod gguf;
 pub mod model;
-pub mod tokenizer;
 
 pub use generate::{generate, SampleParams};
 pub use gguf::GgufFile;
 pub use model::{KvCache, LlamaModel, ModelConfig};
-pub use tokenizer::BpeTokenizer;
