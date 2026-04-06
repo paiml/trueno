@@ -306,7 +306,16 @@ with 8KB shared memory (2× 4KB buffers). Requires sm_80+ target module.
 higher AI (42.7 vs 32 FLOP/byte). Further gains require 128×128 tiles (AI=64) but
 need 1024 threads (lower occupancy) or 32×32 per-warp tiles (32 accumulator regs).
 
-**Note**: GPU pure-Rust PTX vs cuBLAS is not expected to hit 1.5x — cuBLAS uses hand-tuned SASS and proprietary tensor core scheduling. The GPU target was to close the gap from 0.38x toward 0.5x+ (competitive for deployment where vendor lock-in is unacceptable). **TARGET MET: 0.52× cuBLAS at 1024** with 64×128 mma.sync tile.
+**Roofline analysis (cgp roofline --target cuda, 2026-04-06)**:
+
+RTX 4090: FP16 peak = 330 TFLOP/s, DRAM = 1008 GB/s, ridge = 327 FLOP/byte.
+64×128 kernel AI = 42.7 FLOP/byte → **memory-bound regime** (7.7× below ridge).
+DRAM-bound ceiling = 42.7 × 1.008 = 43.0 TFLOP/s. Pipeline achieves 59.3 TF/s —
+**exceeds DRAM ceiling** because L2 cache hits provide higher effective bandwidth
+for tiles shared across adjacent CTAs. To reach compute-bound regime, need
+128×256 tiles (AI=85, 1024 threads) — CUTLASS architecture.
+
+**Note**: GPU pure-Rust PTX vs cuBLAS is not expected to hit 1.5x — cuBLAS uses hand-tuned SASS and proprietary tensor core scheduling. The GPU target was to close the gap from 0.38x toward 0.5x+ (competitive for deployment where vendor lock-in is unacceptable). **TARGET MET: 0.52× cuBLAS at 1024** with 64×128 mma.sync tile. Pipeline extends this to **60.9 TF/s peak at 2048**.
 
 ### What Exists Today (Fragmented)
 
