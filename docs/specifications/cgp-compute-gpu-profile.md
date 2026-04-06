@@ -3282,19 +3282,17 @@ from uninit allocation. All results grounded with arXiv citations [44][45][60]-[
 > BLAS dependencies (faer, OpenBLAS, MKL). The techniques below are learned from
 > faer's architecture (Appendix D) and reimplemented from scratch in trueno.
 
-**P1a. Proc-macro microkernel codegen (`trueno-gemm-codegen`).**
-faer's edge comes from `nano-gemm`: a proc macro that generates shape-specialized
-microkernels at compile time for each (MR, NR, K-unroll) combination. trueno can
-build the same as a workspace proc-macro crate. The macro would:
-1. Accept `#[microkernel(mr=32, nr=6, k_unroll=4, isa=avx512)]`
-2. Emit fully-unrolled AVX-512 FMA code with optimal register allocation
-3. Generate both column-major and row-major C variants
-4. Auto-select at runtime via `is_x86_feature_detected!()`
+**P1a. Proc-macro microkernel codegen (`trueno-gemm-codegen`). ✅ DONE**
+Implemented as workspace proc-macro crate. Two macro types:
+- `avx512_microkernel!(mr, nr)`: broadcast-A (standard row-major C)
+- `avx512_microkernel_broadcast_b!(mr, nr)`: broadcast-B (faer-style)
 
-This eliminates the tradeoff between manual unrolling (which LLVM can't do across
-loop-carried deps) and the register-spill risk we observed with hand-written unrolls.
-Estimated gain: 10-20% at small sizes, 3-5% at 1024. Closes faer gap fully.
-Effort: Medium (1-2 weeks). Sovereign — no external dependencies.
+6 variants generated: 8×32, 8×16, 8×48 (broadcast-A); 32×6, 48×6, 64×6 (broadcast-B).
+Register budget checked at compile time (C-CODEGEN-004).
+8×32 remains optimal for row-major C — the 2% faer gap is attributable to faer's
+column-major C layout (broadcast-B without scatter), not to microkernel quality.
+8×48 regressed: KC halved below L1 threshold. 64×6 regressed: row-major C scatter.
+The codegen infrastructure enables rapid exploration of new (MR, NR) combos.
 
 **P1b. Job-level parallel GEMM with shared B packing. ⚠️ 4 NEGATIVE RESULTS**
 4 attempts at shared-B packing have all regressed (36-47%). Root causes:
@@ -3396,7 +3394,7 @@ and Graviton are deployment targets that need dedicated 8x8 NEON microkernels.
 
 | Item | Impact | Effort | Risk | Status | Recommendation |
 |------|--------|--------|------|--------|---------------|
-| P1a microkernel codegen | High | Medium | Medium | NOT STARTED | **DO NEXT** — closes faer gap |
+| P1a microkernel codegen | High | Medium | Medium | ✅ DONE | 6 variants (8×32, 8×16, 8×48, 32×6, 48×6, 64×6). 8×32 optimal. |
 | P1b shared-B parallel | High | High | **High** | ⚠️ 4× NEGATIVE | Producer-consumer model needed |
 | P1c dynamic cache blocking | Medium | Low | Low | ✅ DONE | — |
 | P1d VBMI2 header | Medium | High | High | NOT STARTED | Investigate after P1a |
@@ -3407,8 +3405,17 @@ and Graviton are deployment targets that need dedicated 8x8 NEON microkernels.
 | P3c GPU PTX | Medium | High | High | NOT STARTED | Long-term |
 | **CGP-DBUF micro-opt** | **Medium** | **Low** | **Low** | ✅ **7 PHASES DONE** | **Diminishing returns** |
 
-**CGP-DBUF conclusion**: After 7 phases and 35+ experiments, the CPU micro-optimization
-surface is largely exhausted. Remaining gains require architectural changes (P1a
-microkernel codegen) or custom threading (P1b producer-consumer). The attention inner
-loop is fully SIMD-vectorized (dot, softmax, axpy). All allocation overhead has been
-eliminated where safe. Parallel thresholds are tuned for Rayon dispatch overhead.
+**CGP-DBUF conclusion**: After 7 phases and 35+ experiments, the CPU optimization
+surface is exhausted for the current architecture:
+- **P1a codegen**: ✅ Done (6 variants, 8×32 optimal for row-major C)
+- **P1b shared-B**: ⚠️ 4× negative (barrier overhead > redundant packing)
+- **P1c cache blocking**: ✅ Done (dynamic from /sys/ topology)
+- **P1d VBMI2 Q4K**: NOT STARTED (high effort, moderate impact)
+- **P3b llama.cpp**: ✅ Done (0.81× at Q4K 4096 — near FMA ceiling)
+
+The attention inner loop is fully SIMD (dot + fast_exp softmax + axpy).
+All safe allocation overhead eliminated. Parallel thresholds tuned.
+Remaining CPU GEMM gap (2% vs faer, 22% vs OpenBLAS 8T) requires either
+hand-tuned ASM [45] or column-major C layout change (API-breaking).
+**Next high-impact work**: P3c (GPU PTX improvement, 0.39× cuBLAS) or
+P4c (ARM NEON microkernel for Apple/Graviton deployment).
