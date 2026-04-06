@@ -1179,9 +1179,66 @@ fn cta64_vs_cta32_vs_cublas_fp16() {
 
         let cp_vs_cublas = cublas_us / cpasync_us;
 
+        // ─── 128×128 cp.async (Phase 2 bridge plan) ───
+        let kernel_128 =
+            crate::kernels::gemm::basic::tensor_core::cta128_wmma::build_cta128_wmma_fp16_cpasync(
+                m as u32, n as u32, k as u32,
+            );
+        let ptx_128 = PtxModule::new().target("sm_80").add_kernel(kernel_128).emit();
+        let cta128_us = match CudaModule::from_ptx(&ctx, &ptx_128) {
+            Ok(mut mod_128) => {
+                let cfg_128 = LaunchConfig {
+                    grid: (((n + 127) / 128) as u32, ((m + 127) / 128) as u32, 1),
+                    block: (512, 1, 1),
+                    shared_mem: 16384, // 2 stages × 8KB
+                };
+                a_ptr = a_buf.as_ptr();
+                b_ptr = b_buf.as_ptr();
+                c_ptr = c_buf.as_ptr();
+                m_v = m as u32;
+                n_v = n as u32;
+                k_v = k as u32;
+                for _ in 0..5 {
+                    unsafe {
+                        stream
+                            .launch_kernel(
+                                &mut mod_128,
+                                "gemm_cta128_cpasync_fp16",
+                                &cfg_128,
+                                &mut args,
+                            )
+                            .ok();
+                    }
+                }
+                stream.synchronize().ok();
+                let start = Instant::now();
+                for _ in 0..iters {
+                    unsafe {
+                        stream
+                            .launch_kernel(
+                                &mut mod_128,
+                                "gemm_cta128_cpasync_fp16",
+                                &cfg_128,
+                                &mut args,
+                            )
+                            .ok();
+                    }
+                }
+                stream.synchronize().ok();
+                start.elapsed().as_micros() as f64 / iters as f64
+            }
+            Err(e) => {
+                eprintln!("{:<6} cta128 compile failed: {e}", n);
+                f64::INFINITY
+            }
+        };
+        let cta128_tflops = flops / (cta128_us * 1e6);
+        let cta128_vs_cublas = cublas_us / cta128_us;
+
         eprintln!(
-            "{:<6} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>5.2}x",
+            "{:<6} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>5.2}x | 128: {:>8.1} {:>8.1} {:>5.2}x",
             n, cta32_us, cta64_us, dbuf64_us, cpasync_us, cublas_us, cpasync_tflops, cp_vs_cublas,
+            cta128_us, cta128_tflops, cta128_vs_cublas,
         );
     }
     eprintln!();
