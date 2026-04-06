@@ -3206,6 +3206,7 @@ to output. Key results:
 | CTA64 (16-warp, 64×64) | 73.2 | 29.3 | 0.28x | **+62%** (2× data reuse) |
 | CTA64 double-buffer | 71.7 | 30.0 | 0.29x | Neutral (amortized) |
 | **CTA64 + cp.async** | **53.0** | **40.5** | **0.39x** | **+120% total** (8-byte async copy) |
+| **CTA64 mma.sync** | **23.7** | **90.5** | **0.86x** | **+124% over wmma** (ldmatrix+mma.sync) |
 | cuBLAS FP16 | 20.6 | ~104 | 1.00x | Target: 0.5x |
 
 17 experiments (7 positive, 10 negative). cp.async gives the biggest win by
