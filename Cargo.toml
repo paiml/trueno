@@ -108,12 +108,12 @@ needless_question_mark = "allow"
 
 [package]
 name = "trueno"
-version = "0.17.5"
+version = "0.18.0"
 edition = "2021"
 rust-version = "1.89"
 authors = ["Pragmatic AI Labs"]
 license = "MIT"
-description = "High-performance SIMD compute library with GPU support for matrix operations"
+description = "High-performance SIMD compute library with GPU support, LLM inference engine, and GGUF model loading"
 repository = "https://github.com/paiml/trueno"
 readme = "README.md"
 keywords = ["simd", "gpu", "wasm", "performance", "vectorization"]
