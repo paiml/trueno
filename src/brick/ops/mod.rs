@@ -173,43 +173,15 @@ impl ComputeOp for SoftmaxOp {
         "softmax"
     }
 
-    fn execute(&self, input: Self::Input, backend: Backend) -> Result<Self::Output, TruenoError> {
+    fn execute(&self, input: Self::Input, _backend: Backend) -> Result<Self::Output, TruenoError> {
         if input.is_empty() {
             return Ok(vec![]);
         }
 
-        // SIMD-EXP: Use SIMD backends for 2-3x speedup on softmax
-        // The exp() is the bottleneck in softmax - SIMD polynomial approximation
-        // matches llama.cpp's ggml_v_expf performance.
-
-        // Step 1: Find max for numerical stability (SIMD max)
-        let max = Self::simd_max(&input, backend);
-
-        // Step 2: Subtract max and compute exp (SIMD exp)
-        let shifted: Vec<f32> = input.iter().map(|x| x - max).collect();
-        let n = shifted.len();
-        // Uninit: simd_exp writes output[i] = exp(input[i]) for every i.
-        let mut exp_vals: Vec<f32> = Vec::with_capacity(n);
-        // SAFETY: simd_exp writes every element (SET, not accumulate).
-        unsafe {
-            exp_vals.set_len(n);
-        }
-        Self::simd_exp(&shifted, &mut exp_vals, backend);
-
-        // Step 3: Sum (SIMD sum)
-        let exp_sum = Self::simd_sum(&exp_vals, backend);
-
-        // Step 4: Normalize (SIMD scale, guard against sum=0)
-        let inv_sum = 1.0 / exp_sum.max(f32::EPSILON);
-        // Uninit: simd_scale writes output[i] = input[i] * scalar for every i.
-        let mut result: Vec<f32> = Vec::with_capacity(n);
-        // SAFETY: simd_scale writes every element (SET, not accumulate).
-        unsafe {
-            result.set_len(n);
-        }
-        Self::simd_scale(&exp_vals, inv_sum, &mut result, backend);
-
-        Ok(result)
+        // CGP-DBUF: delegate to blis::softmax which has AVX2 fused exp+sum
+        // (3-pass: max, fused exp+sum, normalize). This eliminates 3 intermediate
+        // allocations (shifted, exp_vals, result) and uses polynomial fast_exp.
+        Ok(crate::blis::softmax::softmax_1d_alloc(&input))
     }
 
     fn tokens(&self, input: &Self::Input) -> usize {
