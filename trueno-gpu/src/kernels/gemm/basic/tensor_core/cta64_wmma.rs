@@ -278,6 +278,270 @@ pub fn build_cta64_wmma_fp16_cpasync(m: u32, n: u32, k: u32) -> PtxKernel {
         })
 }
 
+/// 64×64 CTA GEMM using mma.sync.m16n8k16 + ldmatrix (Phase 1 bridge plan).
+///
+/// Same structure as wmma cp.async variant but replaces:
+/// - wmma_load_a/b (~32 ld.shared) → ldmatrix.x4 + ldmatrix.x2.trans (2 instructions)
+/// - wmma_mma → 2× mma.sync.m16n8k16 (covers 16×16 via 16×8 + 16×8)
+///
+/// Expected: fewer instructions per K-tile → higher IPC → more TFLOP/s.
+/// Contract: cgp-gpu-mma-sync-v1.yaml
+pub fn build_cta64_mma_fp16_cpasync(_m: u32, n: u32, k: u32) -> PtxKernel {
+    let tile_m: u32 = 64;
+    let tile_n: u32 = 64;
+    let tile_k: u32 = 16;
+    let a_smem_bytes = (tile_m * tile_k * 2) as usize;
+    let b_smem_bytes = (tile_k * tile_n * 2) as usize;
+    let smem_single = a_smem_bytes + b_smem_bytes;
+    let smem_bytes = smem_single * 2;
+    let n_k_tiles = (k + tile_k - 1) / tile_k;
+    let a_threads: u32 = 256;
+
+    PtxKernel::new("gemm_cta64_mma_fp16")
+        .param(PtxType::U64, "a_ptr")
+        .param(PtxType::U64, "b_ptr")
+        .param(PtxType::U64, "c_ptr")
+        .param(PtxType::U32, "m_param")
+        .param(PtxType::U32, "n_param")
+        .param(PtxType::U32, "k_param")
+        .shared_memory(smem_bytes)
+        .build(move |ctx| {
+            let tid = ctx.special_reg(PtxReg::TidX);
+            let ctaid_x = ctx.special_reg(PtxReg::CtaIdX);
+            let ctaid_y = ctx.special_reg(PtxReg::CtaIdY);
+
+            // === Constants ===
+            let c_2 = ctx.mov_u32_imm(2);
+            let c_3 = ctx.mov_u32_imm(3);
+            let c_4 = ctx.mov_u32_imm(4);
+            let c_5 = ctx.mov_u32_imm(5);
+            let c_7 = ctx.mov_u32_imm(7);
+            let c_8 = ctx.mov_u32_imm(8);
+            let c_16 = ctx.mov_u32_imm(16);
+            let c_32 = ctx.mov_u32_imm(32);
+            let c_64 = ctx.mov_u32_imm(64);
+            let c_256 = ctx.mov_u32_imm(a_threads);
+            let c_a_smem = ctx.mov_u32_imm(a_smem_bytes as u32);
+            let k_const = ctx.mov_u32_imm(k);
+            let n_const = ctx.mov_u32_imm(n);
+            let n_k_tiles_reg = ctx.mov_u32_imm(n_k_tiles);
+            let smem_single_reg = ctx.mov_u32_imm(smem_single as u32);
+
+            let cta_row = ctx.mul_u32_reg(ctaid_y, c_64);
+            let cta_col = ctx.mul_u32_reg(ctaid_x, c_64);
+            let m_param = ctx.load_param_u32("m_param");
+            let n_param = ctx.load_param_u32("n_param");
+            let _k_param = ctx.load_param_u32("k_param");
+
+            // Bounds check
+            let cta_oob = ctx.setp_ge_u32(cta_row, m_param);
+            ctx.branch_if(cta_oob, "exit");
+            let cta_oob2 = ctx.setp_ge_u32(cta_col, n_param);
+            ctx.branch_if(cta_oob2, "exit");
+
+            let a_ptr = ctx.load_param_u64("a_ptr");
+            let b_ptr = ctx.load_param_u64("b_ptr");
+            let c_ptr = ctx.load_param_u64("c_ptr");
+
+            // === Warp layout (same as wmma: 4×4 grid, 16×16 per warp) ===
+            let warp_id = ctx.shr_u32(tid, c_5);
+            let c_31 = ctx.mov_u32_imm(31);
+            let lane_id = ctx.and_u32(tid, c_31);
+            let warp_row = ctx.shr_u32(warp_id, c_2);
+            let warp_col = ctx.and_u32(warp_id, c_3);
+            let warp_m_off = ctx.mul_u32_reg(warp_row, c_16);
+            let warp_n_off = ctx.mul_u32_reg(warp_col, c_16);
+
+            let smem_base = ctx.shared_base_addr();
+            let is_a_thread = ctx.setp_lt_u32(tid, c_256);
+
+            // === cp.async load offsets (IDENTICAL to wmma version) ===
+            let a_row_in_tile = ctx.shr_u32(tid, c_2);
+            let c_mask3 = ctx.mov_u32_imm(3);
+            let a_col_mod = ctx.and_u32(tid, c_mask3);
+            let a_col_in_tile = ctx.mul_u32_reg(a_col_mod, c_4);
+            let a_global_row = ctx.add_u32_reg(cta_row, a_row_in_tile);
+            let b_local = ctx.sub_u32_reg(tid, c_256);
+            let b_row_in_tile = ctx.shr_u32(b_local, c_4);
+            let c_mask15 = ctx.mov_u32_imm(15);
+            let b_col_mod = ctx.and_u32(b_local, c_mask15);
+            let b_col_in_tile = ctx.mul_u32_reg(b_col_mod, c_4);
+            let b_global_col = ctx.add_u32_reg(cta_col, b_col_in_tile);
+
+            let a_smem_off = ctx.mul_u32_reg(tid, c_8);
+            let b_local_8 = ctx.mul_u32_reg(b_local, c_8);
+            let b_smem_off = ctx.add_u32_reg(c_a_smem, b_local_8);
+            let base_smem_off = ctx.selp_u32(is_a_thread, a_smem_off, b_smem_off);
+
+            // === mma.sync accumulators (4 F32 regs for 16×8 output) ===
+            // Two mma.sync calls per 16×16: left half (col 0-7) and right half (col 8-15)
+            let acc_l0 = ctx.mov_f32_imm(0.0);
+            let acc_l1 = ctx.mov_f32_imm(0.0);
+            let acc_l2 = ctx.mov_f32_imm(0.0);
+            let acc_l3 = ctx.mov_f32_imm(0.0);
+            let acc_r0 = ctx.mov_f32_imm(0.0);
+            let acc_r1 = ctx.mov_f32_imm(0.0);
+            let acc_r2 = ctx.mov_f32_imm(0.0);
+            let acc_r3 = ctx.mov_f32_imm(0.0);
+
+            let store_buf_off = ctx.mov_u32_imm(0);
+
+            // === ldmatrix address computation (per-thread, pre-computed) ===
+            // A: ldmatrix.x4 loads 16×16 from smem. Thread lane_id determines row.
+            // sub = lane/8, row = (sub/2)*8 + lane%8, col_bytes = (sub%2)*16
+            let lane_sub = ctx.shr_u32(lane_id, c_3); // lane / 8
+            let lane_row_in_8 = ctx.and_u32(lane_id, c_7); // lane % 8
+            let c_1 = ctx.mov_u32_imm(1);
+            let sub_half = ctx.shr_u32(lane_sub, c_1); // sub / 2
+            let sub_col = ctx.and_u32(lane_sub, c_1); // sub % 2
+            let phys_row = ctx.mad_lo_u32(sub_half, c_8, lane_row_in_8); // (sub/2)*8 + lane%8
+            let col_bytes = ctx.mul_u32_reg(sub_col, c_16); // (sub%2)*16 bytes
+                                                            // A stride in smem = tile_k * 2 = 32 bytes per row
+            let a_row_bytes = ctx.mul_u32_reg(phys_row, c_32);
+            let a_ldm_off_base = ctx.add_u32_reg(a_row_bytes, col_bytes); // within 16×16 tile
+
+            // B: ldmatrix.x2.trans loads 16×8 transposed.
+            // Thread lane_id: row = lane % 16, addr = b_base + row * b_stride
+            let b_lane_row = ctx.and_u32(lane_id, c_mask15); // lane % 16 → row 0-15
+                                                             // B stride in smem = tile_n * 2 = 128 bytes per row
+            let c_128 = ctx.mov_u32_imm(128);
+            let b_row_bytes = ctx.mul_u32_reg(b_lane_row, c_128);
+
+            // === Prologue: cp.async tile 0 ===
+            {
+                let a_rowk = ctx.mul_u32_reg(a_global_row, k_const);
+                let a_flat = ctx.add_u32_reg(a_rowk, a_col_in_tile);
+                let a_byte_off = ctx.mul_wide_u32(a_flat, 2);
+                let a_addr = ctx.add_u64(a_ptr, a_byte_off);
+                let b_flat = ctx.mad_lo_u32(b_row_in_tile, n_const, b_global_col);
+                let b_byte_off = ctx.mul_wide_u32(b_flat, 2);
+                let b_addr = ctx.add_u64(b_ptr, b_byte_off);
+                let gaddr = ctx.selp_u64(is_a_thread, a_addr, b_addr);
+                ctx.cp_async_global_to_shared(base_smem_off, gaddr, 8);
+            }
+            ctx.cp_async_commit_group();
+            ctx.cp_async_wait_group(0);
+            ctx.bar_sync(0);
+
+            // === Main K-loop ===
+            let k_tile = ctx.mov_u32_imm(1);
+            ctx.label("k_loop");
+            let k_done = ctx.setp_ge_u32(k_tile, n_k_tiles_reg);
+            ctx.branch_if(k_done, "mma_epi");
+
+            // Swap buffer
+            let new_store = ctx.sub_u32_reg(smem_single_reg, store_buf_off);
+            ctx.mov_u32_reg(store_buf_off, new_store);
+            let compute_off = ctx.sub_u32_reg(smem_single_reg, store_buf_off);
+
+            // cp.async next tile
+            let k_off = ctx.mul_u32_reg(k_tile, c_16);
+            {
+                let a_col_full = ctx.add_u32_reg(k_off, a_col_in_tile);
+                let a_rowk = ctx.mul_u32_reg(a_global_row, k_const);
+                let a_flat = ctx.add_u32_reg(a_rowk, a_col_full);
+                let a_byte_off = ctx.mul_wide_u32(a_flat, 2);
+                let a_addr = ctx.add_u64(a_ptr, a_byte_off);
+                let b_row_full = ctx.add_u32_reg(k_off, b_row_in_tile);
+                let b_flat = ctx.mad_lo_u32(b_row_full, n_const, b_global_col);
+                let b_byte_off = ctx.mul_wide_u32(b_flat, 2);
+                let b_addr = ctx.add_u64(b_ptr, b_byte_off);
+                let gaddr = ctx.selp_u64(is_a_thread, a_addr, b_addr);
+                let smem_off_buf = ctx.add_u32_reg(base_smem_off, store_buf_off);
+                ctx.cp_async_global_to_shared(smem_off_buf, gaddr, 8);
+            }
+            ctx.cp_async_commit_group();
+
+            // === mma.sync compute on compute buffer ===
+            {
+                // A tile base in smem = warp_m_off * tile_k * 2 + compute_off
+                let a_warp_bytes = ctx.mul_u32_reg(warp_m_off, c_32); // warp_m_off * 32
+                let a_tile_base = ctx.add_u32_reg(a_warp_bytes, compute_off);
+                let a_addr_u32 = ctx.add_u32_reg(a_tile_base, a_ldm_off_base);
+                let a_frags = ctx.ldmatrix_x4(a_addr_u32);
+
+                // B tile base in smem = a_smem + warp_n_off * 2 + compute_off
+                let b_warp_bytes = ctx.mul_u32_reg(warp_n_off, c_2);
+                let b_tile_base = ctx.add_u32_reg(c_a_smem, b_warp_bytes);
+                let b_tile_base = ctx.add_u32_reg(b_tile_base, compute_off);
+
+                // Left B half (cols 0-7): ldmatrix.x2.trans
+                let b_addr_l = ctx.add_u32_reg(b_tile_base, b_row_bytes);
+                let b_frags_l = ctx.ldmatrix_x2_trans(b_addr_l);
+
+                // Right B half (cols 8-15): ldmatrix.x2.trans at +16 bytes
+                let b_addr_r = ctx.add_u32_reg(b_addr_l, c_16);
+                let b_frags_r = ctx.ldmatrix_x2_trans(b_addr_r);
+
+                // Two mma.sync: left 16×8 + right 16×8 = 16×16
+                let d_l =
+                    ctx.mma_sync_m16n8k16(&a_frags, &b_frags_l, &[acc_l0, acc_l1, acc_l2, acc_l3]);
+                ctx.mov_f32_reg(acc_l0, d_l[0]);
+                ctx.mov_f32_reg(acc_l1, d_l[1]);
+                ctx.mov_f32_reg(acc_l2, d_l[2]);
+                ctx.mov_f32_reg(acc_l3, d_l[3]);
+
+                let d_r =
+                    ctx.mma_sync_m16n8k16(&a_frags, &b_frags_r, &[acc_r0, acc_r1, acc_r2, acc_r3]);
+                ctx.mov_f32_reg(acc_r0, d_r[0]);
+                ctx.mov_f32_reg(acc_r1, d_r[1]);
+                ctx.mov_f32_reg(acc_r2, d_r[2]);
+                ctx.mov_f32_reg(acc_r3, d_r[3]);
+            }
+
+            ctx.cp_async_wait_group(0);
+            ctx.bar_sync(0);
+            ctx.add_u32_inplace(k_tile, 1);
+            ctx.branch("k_loop");
+
+            // === Epilogue: last K-tile ===
+            ctx.label("mma_epi");
+            {
+                let a_warp_bytes = ctx.mul_u32_reg(warp_m_off, c_32);
+                let a_tile_base = ctx.add_u32_reg(a_warp_bytes, store_buf_off);
+                let a_addr_u32 = ctx.add_u32_reg(a_tile_base, a_ldm_off_base);
+                let a_frags = ctx.ldmatrix_x4(a_addr_u32);
+
+                let b_warp_bytes = ctx.mul_u32_reg(warp_n_off, c_2);
+                let b_tile_base = ctx.add_u32_reg(c_a_smem, b_warp_bytes);
+                let b_tile_base = ctx.add_u32_reg(b_tile_base, store_buf_off);
+                let b_addr_l = ctx.add_u32_reg(b_tile_base, b_row_bytes);
+                let b_frags_l = ctx.ldmatrix_x2_trans(b_addr_l);
+                let b_addr_r = ctx.add_u32_reg(b_addr_l, c_16);
+                let b_frags_r = ctx.ldmatrix_x2_trans(b_addr_r);
+
+                let d_l =
+                    ctx.mma_sync_m16n8k16(&a_frags, &b_frags_l, &[acc_l0, acc_l1, acc_l2, acc_l3]);
+                ctx.mov_f32_reg(acc_l0, d_l[0]);
+                ctx.mov_f32_reg(acc_l1, d_l[1]);
+                ctx.mov_f32_reg(acc_l2, d_l[2]);
+                ctx.mov_f32_reg(acc_l3, d_l[3]);
+                let d_r =
+                    ctx.mma_sync_m16n8k16(&a_frags, &b_frags_r, &[acc_r0, acc_r1, acc_r2, acc_r3]);
+                ctx.mov_f32_reg(acc_r0, d_r[0]);
+                ctx.mov_f32_reg(acc_r1, d_r[1]);
+                ctx.mov_f32_reg(acc_r2, d_r[2]);
+                ctx.mov_f32_reg(acc_r3, d_r[3]);
+            }
+
+            // === Store C ===
+            // mma.sync m16n8k16 output: 4 F32 per thread per 16×8 half.
+            // Thread t holds C[row][col] where:
+            //   row = (t/4)*2 + (t%2) for the first pair, +8 for second pair
+            //   col = (t%4)/2 * ... (complex mapping)
+            // For now, use wmma_store_d which accepts any F32 fragment:
+            // Actually, mma.sync output layout IS compatible with wmma store
+            // if we combine left+right halves into the 16×16 fragment.
+            // Simplest correct approach: store via explicit per-thread st.global.
+            //
+            // TEMPORARY: skip C store — focus on compile test first.
+            // TODO: implement per-thread C store for mma.sync output layout.
+
+            ctx.label("exit");
+            ctx.ret();
+        })
+}
+
 fn build_cta64_wmma_fp16_impl(_m: u32, n: u32, k: u32, double_buffer: bool) -> PtxKernel {
     let tile_m: u32 = 64;
     let tile_n: u32 = 64;
