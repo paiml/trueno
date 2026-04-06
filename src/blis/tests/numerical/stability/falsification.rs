@@ -272,7 +272,7 @@ fn test_falsification_50_jidoka_wrong_result() {
 /// NOTE: #[ignore] in CI — containerized runners hit ~12 GFLOPS due to shared
 /// resources and no AVX-512 guarantee. Run manually: `cargo test -- --ignored`
 #[test]
-#[ignore]
+#[ignore = "CI containers hit ~12 GFLOPS vs 40 threshold — run via cargo test -- --ignored"]
 fn test_falsification_gemm_perf_regression() {
     let n = 512; // Use 512 for faster test — still exercises AVX-512 path
     let a: Vec<f32> = (0..n * n).map(|i| ((i % 7) as f32) * 0.1).collect();

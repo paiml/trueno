@@ -236,13 +236,12 @@ unsafe fn softmax_avx2(logits: &[f32]) -> Vec<f32> {
 /// Reconstruction via integer bit manipulation of float exponent.
 ///
 /// Relative error < 2 ULP for x ∈ [-87, 88].
-#[cfg(target_arch = "x86_64")]
-#[target_feature(enable = "avx2", enable = "fma")]
-#[inline]
+///
 /// AVX2 polynomial exp approximation (6th-order Remez minimax, <1 ULP error).
 /// CGP-DBUF: made pub(crate) for reuse in AttentionOp::simd_softmax_row.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2", enable = "fma")]
+#[inline]
 pub(crate) unsafe fn fast_exp_avx2(x: std::arch::x86_64::__m256) -> std::arch::x86_64::__m256 {
     use std::arch::x86_64::*;
 
