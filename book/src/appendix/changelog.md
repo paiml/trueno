@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **End-to-end LLM inference engine** (`src/inference/`)
+  - `GgufFile`: GGUF v2/v3 reader (headers, metadata, tensor info, data section)
+  - `LlamaModel`: Full transformer — RMSNorm → Q4K matmul → RoPE → GQA → SwiGLU FFN → KV cache
+  - Dequantization: Q4_0, Q4_1, Q4K, Q5K, Q6K, Q8_0, F16, BF16
+  - Token sampling: temperature, top-k, top-p nucleus with xorshift64 PRNG
+  - QKV bias support for Qwen2/Qwen3 architectures
+  - `examples/inference_demo.rs`: CLI demo with tok/s benchmarking
+  - **Benchmark**: 807 tok/s (TinyLlama 5M F16) — 0.33× llama.cpp
+
+- **Software-pipelined GPU GEMM** (64×128 CTA, 3-stage cp.async)
+  - 60.9 TF/s peak — 0.52× cuBLAS, TARGET MET
+  - 5 FALSIFY tests, 19/19 contracts pass
+
 - **LZ4 Compression Kernel** - GPU-accelerated LZ4 compression
   - `Lz4WarpCompressKernel`: Warp-per-page architecture (32 threads per 4KB page)
   - `Lz4WarpDecompressKernel`: Corresponding decompression kernel

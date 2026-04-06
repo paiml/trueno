@@ -2028,15 +2028,41 @@ roadmap:
   github_issue: null
   item_type: task
   title: 'CGP-DBUF Phase 15: sw-pipelined 64×128 — 60.9 TF/s (+39%)'
-  status: inprogress
+  status: completed
   priority: high
   assigned_to: null
   created: 2026-04-06T13:14:28Z
-  updated: 2026-04-06T13:26:15.305962971+00:00
-  spec: null
-  acceptance_criteria: []
+  updated: 2026-04-06T22:00:00Z
+  spec: '3-stage cp.async pipeline, 18KB smem, 0.52× cuBLAS TARGET MET'
+  acceptance_criteria:
+  - 60.9 TF/s peak at 2048, correctness verified max_err=0.0000, 5 FALSIFY tests pass
   phases: []
   subtasks: []
   estimated_effort: null
   labels: []
+  notes: null
+- id: CGP-INF
+  github_issue: null
+  item_type: task
+  title: 'P5a: End-to-end inference demo — 807 tok/s TinyLlama'
+  status: completed
+  priority: critical
+  assigned_to: null
+  created: 2026-04-06T18:00:00Z
+  updated: 2026-04-06T22:00:00Z
+  spec: |
+    GGUF loader + LlamaModel + generate() composing trueno primitives.
+    TinyLlama 5M F16: 807 tok/s (coherent output).
+    P5c benchmark: 0.33× llama.cpp (807 vs 2481 tok/s).
+    SentencePiece tokenizer only; Qwen2+ needs aprender.
+  acceptance_criteria:
+  - 807 tok/s TinyLlama 5M F16 CPU decode
+  - 0.33× llama.cpp b7746 (1T)
+  - 3630 tests pass
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels:
+  - inference
+  - benchmark
   notes: null

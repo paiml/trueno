@@ -3637,15 +3637,36 @@ All safe allocation overhead eliminated. Parallel thresholds tuned.
 Remaining CPU GEMM gap (2% vs faer, 22% vs OpenBLAS 8T) requires either
 hand-tuned ASM [45] or column-major C layout change (API-breaking).
 
-**Next high-impact work — shift from micro-optimization to integration**:
+**Completed integration work (2026-04-06)**:
 
-1. **End-to-end inference demo** (✅ COMPLETE 2026-04-06): `inference_demo.rs`
-   loads GGUF, builds LlamaModel (Q4K/Q6K/Q5K/Q8_0/Q4_0/Q4_1), generates text.
-   TinyLlama 666 tok/s, Qwen2.5-Coder 2.4 tok/s, Qwen3-8B 0.5 tok/s (all CPU).
-   Next: BPE tokenizer for tiktoken models, then llama.cpp comparison (P5c).
+1. **P5a inference demo** ✅ — 807 tok/s TinyLlama (coherent output), 2.6 tok/s Qwen2.5
+2. **P5c llama.cpp benchmark** ✅ — 0.33× (807 vs 2481 tok/s, TinyLlama 5M F16 CPU)
+3. **GPU pipeline** ✅ — 60.9 TF/s, 0.52× cuBLAS TARGET MET
 
-2. **v0.10.0 release** (HIGH IMPACT): Blocked by 95% coverage gate, benchmark
-   documentation, and book updates. Mechanical work that signals maturity.
+**Recommended next steps (ranked by impact/effort)**:
+
+1. **v0.17.x → v0.18.0 release** (HIGH IMPACT, LOW EFFORT)
+   - Bump version, publish crate, update docs
+   - New features: inference engine, GPU pipeline, 7 dequant formats
+   - All 3630 tests pass, contracts pass
+
+2. **Close the 3× inference gap** (HIGH IMPACT, MEDIUM EFFORT)
+   The 0.33× gap vs llama.cpp is NOT kernel quality — it's glue code:
+   - **Arena allocator**: Replace per-token `Vec<f32>` allocs with bump allocator (~2× speedup expected)
+   - **Parallel F16→F32 decode**: The F16 weight matmul path is single-threaded
+   - **Op fusion**: Fuse RMSNorm+MatMul, fuse SiLU*Up in SwiGLU
+   Target: 0.5× llama.cpp (1200+ tok/s)
+
+3. **GPU inference path** (HIGH IMPACT, HIGH EFFORT)
+   - Route large matmuls (Q4K GEMV, output projection) to CUDA kernels
+   - The GPU kernels already exist (BatchedHwDp4aQ4KGemvKernel, mma.sync GEMM)
+   - Needs CPU→GPU transfer orchestration and kernel launch scheduling
+   - Target: 10-50× CPU speed for 1B+ models
+
+4. **Qwen2/Qwen3 correctness** (MEDIUM IMPACT, LOW EFFORT)
+   - Don't duplicate aprender — extract `aprender-tokenizer` crate (zero deps)
+   - Qwen2 needs: BPE tokenizer, attention biases (added), chat template
+   - Or: let aprender handle Qwen2+ inference, trueno provides primitives only
 
 3. **Industry baseline measurement** (MEDIUM-HIGH): Run QuantizedBrick +
    PagedKvCache + ContinuousBatcher against vLLM/TGI. Even 10% parity

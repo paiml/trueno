@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **End-to-end LLM inference engine** (`src/inference/`)
+  - `GgufFile`: GGUF v2/v3 reader — metadata KV, tensor info, alignment-padded data
+  - `LlamaModel`: Full transformer — RMSNorm, Q4K fused matmul, RoPE, GQA, SwiGLU FFN, KV cache
+  - `WeightMatrix` enum: Q4K fused path for hot weights, F32 dequant path for mixed quantization
+  - Dequantization: Q4_0, Q4_1, Q4K, Q5K, Q6K, Q8_0, F16, BF16
+  - `generate()`: Autoregressive decode with temperature, top-k, top-p nucleus sampling
+  - QKV bias support for Qwen2/Qwen3 architectures
+  - `examples/inference_demo.rs`: CLI — load GGUF, tokenize, generate, print tok/s stats
+
+- **Software-pipelined GPU GEMM kernel** (64×128 CTA, 3-stage cp.async)
+  - 60.9 TF/s peak at 2048 — 0.52× cuBLAS, TARGET MET
+  - 18KB shared memory (3×6KB pipeline stages)
+  - 5 FALSIFY tests, 19/19 contracts pass
+
+### Performance
+
+- **P5c industry baseline**: trueno 807 tok/s vs llama.cpp 2481 tok/s (0.33×) on TinyLlama 5M F16
+- GPU GEMM pipeline: +39% over non-pipelined (60.9 vs 43.8 TF/s at 2048)
+- All 3630 tests pass
+
 ## [0.16.0] - 2026-02-26
 
 ### Changed
