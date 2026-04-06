@@ -30,8 +30,9 @@ pub use flash::PrefillAttentionKernel;
 
 // Re-export Paged/Incremental attention kernels
 pub use paged::{
-    BatchedIncrementalAttentionKernel, FlashDecodingChunkKernel, FlashDecodingReduceKernel,
-    IncrementalAttentionKernel, MultiWarpIncrementalAttentionKernel, FLASH_DECODE_CHUNK_SIZE,
+    BatchedIncrementalAttentionKernel, FlashDecodingChunkKernel, FlashDecodingChunkKernel2Warp,
+    FlashDecodingReduceKernel, IncrementalAttentionKernel, MultiWarpIncrementalAttentionKernel,
+    FLASH_DECODE_CHUNK_SIZE,
 };
 
 #[cfg(test)]

@@ -24,7 +24,8 @@ mod multi_warp;
 
 pub use batched::BatchedIncrementalAttentionKernel;
 pub use flash_decoding::{
-    FlashDecodingChunkKernel, FlashDecodingReduceKernel, FLASH_DECODE_CHUNK_SIZE,
+    FlashDecodingChunkKernel, FlashDecodingChunkKernel2Warp, FlashDecodingReduceKernel,
+    FLASH_DECODE_CHUNK_SIZE,
 };
 pub use incremental::IncrementalAttentionKernel;
 pub use multi_warp::MultiWarpIncrementalAttentionKernel;

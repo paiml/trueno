@@ -19,9 +19,11 @@
 //! - Expected speedup: ~1.5-2x for typical seq_len (512-2048)
 
 mod chunk_kernel;
+mod chunk_kernel_2warp;
 mod reduce_kernel;
 
 pub use chunk_kernel::FlashDecodingChunkKernel;
+pub use chunk_kernel_2warp::FlashDecodingChunkKernel2Warp;
 pub use reduce_kernel::FlashDecodingReduceKernel;
 
 /// Chunk size for Flash Decoding split-K attention.

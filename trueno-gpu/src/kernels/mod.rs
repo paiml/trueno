@@ -42,8 +42,8 @@ mod softmax;
 pub use argmax::{ArgMaxFinalKernel, ArgMaxKernel};
 pub use attention::{
     AttentionKernel, BatchedIncrementalAttentionKernel, FlashDecodingChunkKernel,
-    FlashDecodingReduceKernel, IncrementalAttentionKernel, MultiWarpIncrementalAttentionKernel,
-    PrefillAttentionKernel, FLASH_DECODE_CHUNK_SIZE,
+    FlashDecodingChunkKernel2Warp, FlashDecodingReduceKernel, IncrementalAttentionKernel,
+    MultiWarpIncrementalAttentionKernel, PrefillAttentionKernel, FLASH_DECODE_CHUNK_SIZE,
 };
 pub use bias_activation::{Activation, BiasActivationKernel};
 pub use conv1d::{Conv1dKernel, TiledConv1dKernel};
