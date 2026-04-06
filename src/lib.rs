@@ -93,6 +93,7 @@ pub mod eigen;
 pub mod error;
 pub mod hardware;
 pub mod hash;
+pub mod inference;
 pub mod matrix;
 pub mod monitor;
 pub mod simulation;
