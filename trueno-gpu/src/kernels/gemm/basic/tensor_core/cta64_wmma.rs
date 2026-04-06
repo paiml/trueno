@@ -897,4 +897,47 @@ mod tests {
         // Distinct kernel name to avoid conflict with non-cp.async variant
         assert!(ptx.contains("gemm_cta64_cpasync_fp16"));
     }
+
+    /// Analyze instruction mix of the cp.async kernel.
+    /// The instruction count reveals the compute-to-overhead ratio.
+    #[test]
+    fn test_cta64_cpasync_instruction_analysis() {
+        let kernel = build_cta64_wmma_fp16_cpasync(1024, 1024, 1024);
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+
+        let wmma_mma = ptx.matches("wmma.mma.sync").count();
+        let wmma_load = ptx.matches("wmma.load.").count();
+        let cp_async = ptx.matches("cp.async.ca").count();
+        let bar_sync = ptx.matches("bar.sync").count();
+        let selp = ptx.matches("selp.").count();
+        let mul_wide = ptx.matches("mul.wide").count();
+
+        // The cp.async kernel should have:
+        // - 2 wmma.mma (prologue epilogue uses same MMA, main loop has 1)
+        // - Multiple wmma.load (2 per MMA: A + B)
+        // - cp.async for data loading
+        assert!(wmma_mma >= 2, "need at least 2 wmma.mma (loop + epilogue), got {wmma_mma}");
+        assert!(cp_async >= 2, "need at least 2 cp.async, got {cp_async}");
+        assert!(wmma_load >= 4, "need at least 4 wmma.load (2A + 2B), got {wmma_load}");
+
+        // Report instruction mix for analysis (visible with --nocapture)
+        eprintln!("=== CTA64 cp.async PTX Instruction Analysis ===");
+        eprintln!("  wmma.mma:    {wmma_mma}");
+        eprintln!("  wmma.load:   {wmma_load}");
+        eprintln!("  cp.async:    {cp_async}");
+        eprintln!("  bar.sync:    {bar_sync}");
+        eprintln!("  selp:        {selp}");
+        eprintln!("  mul.wide:    {mul_wide}");
+        eprintln!("  total lines: {}", ptx.lines().count());
+
+        // Ratio: compute instructions / total instructions
+        // High ratio = efficient, low ratio = overhead-dominated
+        let total_insts = ptx.lines().filter(|l| l.trim().ends_with(';')).count();
+        let compute_insts = wmma_mma + wmma_load;
+        eprintln!("  total instrs: {total_insts}");
+        eprintln!(
+            "  compute:      {compute_insts} ({:.1}%)",
+            100.0 * compute_insts as f64 / total_insts.max(1) as f64
+        );
+    }
 }
