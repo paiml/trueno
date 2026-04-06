@@ -3256,11 +3256,11 @@ Analysis via `decy audit` + `pmat query` + direct source comparison.
 
 **cgp tool**: 18/18 CLI commands implemented (only `cgp tui` is STUB).
 3623 tests passing. 16 FALSIFY tests (11 UNINIT + 3 PARALLEL + 2 SIMD).
-65 peer-reviewed citations [1]-[65]. 11 provable-contracts, all pass.
+65 peer-reviewed citations [1]-[65]. 19 provable-contracts (92 checks pass).
 
-**CGP-DBUF optimization sweep (8 phases, 2026-04-05 through 2026-04-06)**:
+**CGP-DBUF optimization sweep (8 phases + pipeline, 2026-04-05 through 2026-04-06)**:
 
-36+ experiments (16 positive, 20 negative/documented). Systematic
+37+ experiments (17 positive, 20 negative/documented). Systematic
 optimization of the CPU compute pipeline from allocation through compute
 to output. Key results:
 
@@ -3498,8 +3498,8 @@ own FFI bindings. Falls back to wgpu if CUDA unavailable.
 - **mma.sync PTX support**: DONE. Builder + emission + GPU compilation verified.
   Contract: cgp-gpu-mma-sync-v1.yaml (FALSIFY-MMA-SYNC-001 through 003).
   Key fix: A/B operands must be .b32 registers, not .u32 (ptxas enforces).
-- **15/15 contracts pass** (73 checks, 0 fail). cuBLAS backend provides
-  production throughput (105-150 TFLOP/s) while PTX R&D continues.
+- **19/19 contracts pass** (92 checks, 0 fail). cuBLAS backend provides
+  production throughput (105-168 TFLOP/s) while PTX R&D continues.
 
 **Track 3 (software pipeline) ✅ POSITIVE RESULT**: 3-stage cp.async pipeline
 on 64×128 tile. wait_group(1) overlaps load with compute. 18KB smem (3×6KB).
@@ -3526,6 +3526,48 @@ Production monitoring mode with near-zero overhead. Own the eBPF probes.
 Current NEON path is functional but not optimized to AVX-512 level. Apple M-series
 and Graviton are deployment targets that need dedicated 8x8 NEON microkernels.
 
+### Priority 5: Integration — Shift from Primitives to Product (2026-04-06)
+
+The kernel optimization surface is exhausted (roofline-bound GPU, FMA-ceiling CPU).
+The next phase is **integration**: proving the sovereign stack works end-to-end.
+
+**P5a. End-to-end inference demo (HIGHEST IMPACT, unblocks everything)**
+
+All components exist individually but have never been composed:
+- Brick architecture: ComputeBrick<Op> for RmsNorm, Attention, FFN (src/brick/)
+- Quantization: Q4_K/Q5_K/Q6_K with GGUF metadata parsing (crates/cbtop/src/quantize/)
+- KV cache: PagedKvCache with LRU eviction, CoW for beam search (crates/cbtop/src/paged_kv/)
+- Batching: ContinuousBatcher with FCFS/SJF policies (crates/cbtop/src/continuous_batcher/)
+- GPU forward: WgslForwardPass at 27.6 tok/s (src/backends/gpu/device/linalg/)
+- CUDA kernels: BatchedHwDp4aQ4KGemvKernel, mma.sync GEMM (trueno-gpu/src/)
+
+**Gap analysis (5 missing pieces)**:
+1. **Model orchestration**: No LlamaLayer/LlamaModel struct composing bricks into a
+   transformer. BrickLayer is a throughput tracker, not an executor.
+2. **Weight loading**: GgufLoader parses headers but doesn't read tensor data into
+   brick weight buffers. No dequantize-on-load or CPU→GPU transfer path.
+3. **Token sampling**: No softmax sampling (temperature, top-k, top-p), no
+   `generate(prompt, max_len) -> tokens` API.
+4. **KV cache wiring**: KvCacheManager exists but isn't plumbed into the attention
+   brick's incremental decode path. No prefill-vs-decode phase management.
+5. **Glue example**: 38 examples exist, all component-level. No `inference_demo.rs`.
+
+**Deliverable**: `cargo run --example inference_demo --release -- --model tiny-llama-1.1B-Q4_K_M.gguf`
+Effort: Medium (3-5 days — code exists, needs composition).
+Impact: Validates entire stack, unblocks v0.10.0 release, attracts users.
+
+**P5b. v0.10.0 release completion**
+
+Blocked by: 95% coverage gate, benchmark documentation, book updates.
+Depends on: P5a (inference demo provides the integration test).
+Effort: Medium (3-4 days, mechanical).
+
+**P5c. Industry baseline measurement (PMAT-016)**
+
+Run integrated stack against vLLM/TGI/Triton on same hardware.
+Even 10% parity validates the sovereign stack approach.
+Depends on: P5a (need working inference to measure).
+
 ### Decision Matrix (updated 2026-04-06)
 
 | Item | Impact | Effort | Risk | Status | Recommendation |
@@ -3536,10 +3578,14 @@ and Graviton are deployment targets that need dedicated 8x8 NEON microkernels.
 | P1d VBMI2 header | Medium | High | High | NOT STARTED | Investigate after P1a |
 | P2a cgp tui | Low | Medium | Low | NOT STARTED | Nice-to-have |
 | P2b compare --measure | Low | Low | Low | ✅ WORKING | Auto-measures when binary exists |
-| P3a contract schema | Low | Low | Low | ✅ DONE | 14/14 pass, 69 checks |
+| P3a contract schema | Low | Low | Low | ✅ DONE | 19/19 pass, 92 checks |
 | P3b llama.cpp bench | Medium | Low | Low | ✅ DONE | **0.81× measured** |
-| P3c GPU PTX | Medium | High | High | IN PROGRESS | cuBLAS backend ✅ + 128×128 scaffold |
-| **CGP-DBUF micro-opt** | **Medium** | **Low** | **Low** | ✅ **7 PHASES DONE** | **Diminishing returns** |
+| P3c GPU PTX | Medium | High | High | ✅ **TARGET MET** | 0.52× cuBLAS, pipeline peak 60.9 TF/s |
+| **CGP-DBUF micro-opt** | **Medium** | **Low** | **Low** | ✅ **8 PHASES DONE** | **Diminishing returns — roofline-bound** |
+| **P5a inference demo** | **Critical** | **Medium** | **Low** | **NOT STARTED** | **HIGHEST IMPACT — validates entire stack** |
+| P5b v0.10.0 release | High | Medium | Low | BLOCKED (P5a) | Needs 95% coverage + benchmarks |
+| P5c industry baseline | High | Medium | Medium | BLOCKED (P5a) | Needs working inference to measure |
+| P4c ARM NEON | Medium | High | Medium | NOT STARTED | Apple/Graviton deployment |
 
 **MANDATORY**: All performance changes require a Level A provable-contract
 (../provable-contracts) BEFORE any code is written. The contract must include:
@@ -3551,17 +3597,42 @@ Violations of this policy were caught during the CGP-DBUF work when:
 - st.global.v2.f32 missing braces (caught by ptxas compilation contract)
 - 128×128 CTA occupancy loss (caught by FALSIFY benchmarking)
 
-**CGP-DBUF conclusion**: After 7+ phases and 35+ experiments, the CPU optimization
-surface is exhausted for the current architecture:
+**CGP-DBUF conclusion**: After 8+ phases and 37+ experiments, both CPU and GPU
+optimization surfaces are at diminishing returns for the current architecture:
+
+**CPU (exhausted)**:
 - **P1a codegen**: ✅ Done (6 variants, 8×32 optimal for row-major C)
 - **P1b shared-B**: ⚠️ 4× negative (barrier overhead > redundant packing)
 - **P1c cache blocking**: ✅ Done (dynamic from /sys/ topology)
 - **P1d VBMI2 Q4K**: NOT STARTED (high effort, moderate impact)
 - **P3b llama.cpp**: ✅ Done (0.81× at Q4K 4096 — near FMA ceiling)
 
+**GPU (roofline-bound)**:
+- **0.52× cuBLAS at 1024** — TARGET MET (was 0.38×)
+- **60.9 TF/s peak** (pipeline) — exceeds DRAM roofline ceiling (43 TF/s) via L2
+- **19/19 contracts pass** (92 checks). cuBLAS backend: 105-168 TF/s production path.
+- **Next GPU step**: 128×256 tiles (CUTLASS architecture, AI=85) to reach compute-bound
+  regime. Requires 1024 threads, 32KB+ smem. High effort, est. 0.6-0.7× cuBLAS.
+
 The attention inner loop is fully SIMD (dot + fast_exp softmax + axpy).
 All safe allocation overhead eliminated. Parallel thresholds tuned.
 Remaining CPU GEMM gap (2% vs faer, 22% vs OpenBLAS 8T) requires either
 hand-tuned ASM [45] or column-major C layout change (API-breaking).
-**Next high-impact work**: P3c (GPU PTX improvement, 0.39× cuBLAS) or
-P4c (ARM NEON microkernel for Apple/Graviton deployment).
+
+**Next high-impact work — shift from micro-optimization to integration**:
+
+1. **End-to-end inference demo** (HIGHEST IMPACT): All pieces exist (bricks,
+   quantization, PagedKvCache, ContinuousBatcher, WgslForwardPass) but no
+   integrated example. A runnable `examples/inference_demo.rs` that loads a
+   quantized model and generates text would validate the entire stack at once,
+   unblock v0.10.0, and attract users. Effort: Medium (code exists, glue needed).
+
+2. **v0.10.0 release** (HIGH IMPACT): Blocked by 95% coverage gate, benchmark
+   documentation, and book updates. Mechanical work that signals maturity.
+
+3. **Industry baseline measurement** (MEDIUM-HIGH): Run QuantizedBrick +
+   PagedKvCache + ContinuousBatcher against vLLM/TGI. Even 10% parity
+   validates the sovereign stack approach.
+
+4. **ARM NEON microkernel parity** (MEDIUM): Apple M-series and Graviton are
+   deployment targets. Current NEON path functional but not optimized.
