@@ -122,11 +122,22 @@ pub fn gemm_blis_parallel(
     let ps = if m <= MC { MR.max(m / scheduler.num_threads) } else { MC };
     let partitions = scheduler.partition_m(m, ps);
 
-    // Per-thread gemm_blis: each thread independently packs A+B and runs the
-    // BLIS 5-loop. Redundant B packing is intentional — keeps B hot in each
-    // thread's L1/L2 cache (faster than shared B from another core's cache).
-    // Tested shared-B approach (2026-04-05): regressed from 495→316 GFLOPS
-    // because cross-core cache fetches for shared B exceeded packing cost.
+    // CGP-DBUF: Use shared-B packing when AVX-512 is available.
+    // Previous per-thread approach (2026-04-05): each thread independently packs B,
+    // wasting 8× L3 bandwidth (8 threads × 1MB packed_b = 8MB redundant).
+    // Previous shared-B attempt (2026-04-05): regressed 495→316 GFLOPS because
+    // sharing was at the FULL B level (not per (jc,pc) panel level).
+    // New approach (2026-04-06): pack B ONCE per (jc,pc) block in the main thread,
+    // distribute M-slices to workers. Each worker packs only its own A.
+    #[cfg(target_arch = "x86_64")]
+    if std::arch::is_x86_feature_detected!("avx512f")
+        && std::arch::is_x86_feature_detected!("fma")
+        && n >= 32
+    {
+        return gemm_blis_parallel_shared_b(m, n, k, a, b, c);
+    }
+
+    // Fallback: per-thread packing for non-AVX-512 or narrow N
     let c_ptr = c.as_mut_ptr() as usize;
 
     partitions.into_par_iter().for_each(|m_range| {
@@ -241,62 +252,81 @@ pub fn gemm_blis_parallel_shared_b(
                 }
                 let ic_end = (ic_start + m_per_thread).min(m);
 
-                // Thread-local packed A
-                let a_panels = (m_per_thread + mr - 1) / mr;
-                let mut packed_a = vec![0.0f32; a_panels * mr * kc_block];
+                // Thread-local packed A — reuse across (jc, pc) iterations
+                // via thread_local! to avoid heap allocation per iteration.
+                thread_local! {
+                    static TL_A: std::cell::RefCell<Vec<f32>> =
+                        const { std::cell::RefCell::new(Vec::new()) };
+                }
+                TL_A.with(|tl| {
+                    let a_panels = (m_per_thread + mr - 1) / mr;
+                    let needed = a_panels * mr * kc_block;
+                    let mut packed_a = tl.borrow_mut();
+                    if packed_a.len() < needed {
+                        packed_a.resize(needed, 0.0);
+                    }
 
-                let panels_n = (nc_block + nr - 1) / nr;
+                    let panels_n = (nc_block + nr - 1) / nr;
 
-                for ic in (ic_start..ic_end).step_by(mc) {
-                    let mc_block = mc.min(ic_end - ic);
+                    for ic in (ic_start..ic_end).step_by(mc) {
+                        let mc_block = mc.min(ic_end - ic);
 
-                    super::packing::pack_a_block(a, k, ic, pc, mc_block, kc_block, &mut packed_a);
+                        super::packing::pack_a_block(
+                            a,
+                            k,
+                            ic,
+                            pc,
+                            mc_block,
+                            kc_block,
+                            &mut packed_a,
+                        );
 
-                    let panels_m = (mc_block + mr - 1) / mr;
+                        let panels_m = (mc_block + mr - 1) / mr;
 
-                    for ir_panel in 0..panels_m {
-                        let ir = ir_panel * mr;
-                        let mr_block = mr.min(mc_block - ir);
+                        for ir_panel in 0..panels_m {
+                            let ir = ir_panel * mr;
+                            let mr_block = mr.min(mc_block - ir);
 
-                        for jr_panel in 0..panels_n {
-                            let jr = jr_panel * nr;
-                            let nr_block = nr.min(nc_block - jr);
+                            for jr_panel in 0..panels_n {
+                                let jr = jr_panel * nr;
+                                let nr_block = nr.min(nc_block - jr);
 
-                            let a_panel = &packed_a[ir_panel * mr * kc_block..];
-                            let b_panel = &shared_b[jr_panel * nr * kc_block..];
+                                let a_panel = &packed_a[ir_panel * mr * kc_block..];
+                                let b_panel = &shared_b[jr_panel * nr * kc_block..];
 
-                            if mr_block == 8 && nr_block == 32 {
-                                #[cfg(target_arch = "x86_64")]
-                                unsafe {
-                                    super::compute::avx512_microkernel_8x32_rowmajor(
-                                        kc_block,
-                                        a_panel.as_ptr(),
-                                        b_panel.as_ptr(),
-                                        (c_ptr as *mut f32).add((ic + ir) * n + (jc + jr)),
-                                        n,
-                                    );
-                                }
-                            } else {
-                                // Scalar fallback for edge tiles
-                                for ir_local in 0..mr_block {
-                                    for jr_local in 0..nr_block {
-                                        let mut sum = 0.0f32;
-                                        for p in 0..kc_block {
-                                            sum += a_panel[p * mr + ir_local]
-                                                * b_panel[p * nr + jr_local];
-                                        }
-                                        unsafe {
-                                            let c = c_ptr as *mut f32;
-                                            *c.add(
-                                                (ic + ir + ir_local) * n + (jc + jr + jr_local),
-                                            ) += sum;
+                                if mr_block == 8 && nr_block == 32 {
+                                    #[cfg(target_arch = "x86_64")]
+                                    unsafe {
+                                        super::compute::avx512_microkernel_8x32_rowmajor(
+                                            kc_block,
+                                            a_panel.as_ptr(),
+                                            b_panel.as_ptr(),
+                                            (c_ptr as *mut f32).add((ic + ir) * n + (jc + jr)),
+                                            n,
+                                        );
+                                    }
+                                } else {
+                                    // Scalar fallback for edge tiles
+                                    for ir_local in 0..mr_block {
+                                        for jr_local in 0..nr_block {
+                                            let mut sum = 0.0f32;
+                                            for p in 0..kc_block {
+                                                sum += a_panel[p * mr + ir_local]
+                                                    * b_panel[p * nr + jr_local];
+                                            }
+                                            unsafe {
+                                                let c = c_ptr as *mut f32;
+                                                *c.add(
+                                                    (ic + ir + ir_local) * n + (jc + jr + jr_local),
+                                                ) += sum;
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                }
+                }); // TL_A.with
             });
         }
     }

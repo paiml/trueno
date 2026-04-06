@@ -1769,3 +1769,37 @@ roadmap:
   estimated_effort: null
   labels: []
   notes: null
+- id: PMAT-020
+  github_issue: null
+  item_type: task
+  title: 'CGP-DBUF: Uninit Allocation Sweep — 20+ ops optimized'
+  status: inprogress
+  priority: high
+  assigned_to: null
+  created: 2026-04-05T20:02:39Z
+  updated: 2026-04-05T20:02:48.860400218+00:00
+  spec: null
+  acceptance_criteria:
+  - 'Systematic audit of all vec![0.0; n] in hot paths. Replaced zero-fill with uninit allocation where every element is SET (not accumulated). Key findings: BLIS GEMM/GEMV accumulate and require zeros. sqrt -67%, Q4K +5%, attention/fused ops/softmax optimized. 3608 tests pass.'
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: PMAT-021
+  github_issue: null
+  item_type: task
+  title: 'CGP-DBUF Phase 2: SIMD fused ops + FALSIFY tests + matmul_naive'
+  status: inprogress
+  priority: high
+  assigned_to: null
+  created: 2026-04-06T03:56:52Z
+  updated: 2026-04-06T03:56:58.547267059+00:00
+  spec: null
+  acceptance_criteria:
+  - FusedQkvOp SIMD dot (scalar→AVX2), FusedGateUpOp zero-alloc (38K allocs→0), MatmulOp zero-copy, matmul_naive direct indexing. 11 FALSIFY-UNINIT tests. 3619 tests pass.
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null

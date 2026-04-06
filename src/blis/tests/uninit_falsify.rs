@@ -5,7 +5,7 @@
 //!
 //! If any test fails, the uninit optimization is UNSOUND and must be reverted.
 
-use crate::{Backend, Matrix, Vector};
+use crate::{Matrix, Vector};
 
 // ========================================================================
 // FALSIFY-UNINIT-001: Vector::sqrt uninit matches zero-init
