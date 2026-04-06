@@ -78,6 +78,11 @@
 #[macro_use]
 #[allow(unused_macros)]
 mod generated_contracts;
+
+// Fallback macros for contracts not yet in codegen
+macro_rules! contract_pre_add { () => {{}}; ($($x:expr),+ $(,)?) => {{ $(let _ = &$x;)+ }}; }
+macro_rules! contract_pre_gemv { () => {{}}; ($($x:expr),+ $(,)?) => {{ $(let _ = &$x;)+ }}; }
+
 pub mod activations;
 pub mod backends;
 pub mod blis;
