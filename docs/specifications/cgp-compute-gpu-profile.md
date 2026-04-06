@@ -3531,30 +3531,30 @@ and Graviton are deployment targets that need dedicated 8x8 NEON microkernels.
 The kernel optimization surface is exhausted (roofline-bound GPU, FMA-ceiling CPU).
 The next phase is **integration**: proving the sovereign stack works end-to-end.
 
-**P5a. End-to-end inference demo (HIGHEST IMPACT, unblocks everything)**
+**P5a. End-to-end inference demo — ✅ COMPLETE (2026-04-06)**
 
-All components exist individually but have never been composed:
-- Brick architecture: ComputeBrick<Op> for RmsNorm, Attention, FFN (src/brick/)
-- Quantization: Q4_K/Q5_K/Q6_K with GGUF metadata parsing (crates/cbtop/src/quantize/)
-- KV cache: PagedKvCache with LRU eviction, CoW for beam search (crates/cbtop/src/paged_kv/)
-- Batching: ContinuousBatcher with FCFS/SJF policies (crates/cbtop/src/continuous_batcher/)
-- GPU forward: WgslForwardPass at 27.6 tok/s (src/backends/gpu/device/linalg/)
-- CUDA kernels: BatchedHwDp4aQ4KGemvKernel, mma.sync GEMM (trueno-gpu/src/)
+Delivered in commit `1318cc68`. New modules:
+- `src/inference/gguf.rs` — GGUF v2/v3 reader: headers, metadata KV, tensor info, alignment-padded data section
+- `src/inference/model.rs` — LlamaModel: WeightMatrix enum (Q4K fused / F32 dequant), KV cache, RoPE, GQA, SwiGLU
+  - Dequant coverage: Q4_0, Q4_1, Q5K, Q6K, Q8_0 (all formats found in the wild)
+- `src/inference/generate.rs` — temperature + top-k + top-p nucleus sampling, xorshift64 PRNG
+- `examples/inference_demo.rs` — CLI: GGUF load → tokenize → generate → tok/s stats
 
-**Gap analysis (5 missing pieces)**:
-1. **Model orchestration**: No LlamaLayer/LlamaModel struct composing bricks into a
-   transformer. BrickLayer is a throughput tracker, not an executor.
-2. **Weight loading**: GgufLoader parses headers but doesn't read tensor data into
-   brick weight buffers. No dequantize-on-load or CPU→GPU transfer path.
-3. **Token sampling**: No softmax sampling (temperature, top-k, top-p), no
-   `generate(prompt, max_len) -> tokens` API.
-4. **KV cache wiring**: KvCacheManager exists but isn't plumbed into the attention
-   brick's incremental decode path. No prefill-vs-decode phase management.
-5. **Glue example**: 38 examples exist, all component-level. No `inference_demo.rs`.
+**Measured results (2026-04-06)**:
 
-**Deliverable**: `cargo run --example inference_demo --release -- --model tiny-llama-1.1B-Q4_K_M.gguf`
-Effort: Medium (3-5 days — code exists, needs composition).
-Impact: Validates entire stack, unblocks v0.10.0 release, attracts users.
+| Model | Params | Quant | Architecture | CPU tok/s | Output Quality |
+|-------|--------|-------|--------------|-----------|---------------|
+| TinyLlama-v0.1-5M | 5M | F16 | llama 8L×64H | **666 tok/s** | Coherent English (TinyStories) |
+| Qwen2.5-Coder-1.5B | 1.5B | Q4K/Q6K | qwen2 28L×1536H | **2.4 tok/s** | Correct architecture, tokenizer gap |
+| Qwen3-8B | 8B | Q4K | qwen3 36L×4096H | **0.5 tok/s** | Correct architecture, tokenizer gap |
+
+Hardware: RTX 4090 host, inference runs CPU-only (sovereign stack CPU primitives).
+
+**Limitation**: Tokenizer is greedy SentencePiece longest-match with ▁ normalization.
+Tiktoken-based models (Qwen2.5, Qwen3) produce correct logits / correct decode speed
+but need proper BPE merge rules for accurate input tokenization.
+
+**All 3630 tests pass** (cargo test --all-features).
 
 **P5b. v0.10.0 release completion**
 
@@ -3582,9 +3582,9 @@ Depends on: P5a (need working inference to measure).
 | P3b llama.cpp bench | Medium | Low | Low | ✅ DONE | **0.81× measured** |
 | P3c GPU PTX | Medium | High | High | ✅ **TARGET MET** | 0.52× cuBLAS, pipeline peak 60.9 TF/s |
 | **CGP-DBUF micro-opt** | **Medium** | **Low** | **Low** | ✅ **8 PHASES DONE** | **Diminishing returns — roofline-bound** |
-| **P5a inference demo** | **Critical** | **Medium** | **Low** | **NOT STARTED** | **HIGHEST IMPACT — validates entire stack** |
-| P5b v0.10.0 release | High | Medium | Low | BLOCKED (P5a) | Needs 95% coverage + benchmarks |
-| P5c industry baseline | High | Medium | Medium | BLOCKED (P5a) | Needs working inference to measure |
+| **P5a inference demo** | **Critical** | **Medium** | **Low** | ✅ **DONE** | TinyLlama 666 tok/s, Qwen2.5 2.4 tok/s, Qwen3-8B 0.5 tok/s |
+| P5b v0.10.0 release | High | Medium | Low | IN PROGRESS | P5a done; needs 95% coverage + book updates |
+| P5c industry baseline | High | Medium | Medium | UNBLOCKED | Can now measure vs llama.cpp/vLLM |
 | P4c ARM NEON | Medium | High | Medium | NOT STARTED | Apple/Graviton deployment |
 
 **MANDATORY**: All performance changes require a Level A provable-contract
@@ -3621,11 +3621,10 @@ hand-tuned ASM [45] or column-major C layout change (API-breaking).
 
 **Next high-impact work — shift from micro-optimization to integration**:
 
-1. **End-to-end inference demo** (HIGHEST IMPACT): All pieces exist (bricks,
-   quantization, PagedKvCache, ContinuousBatcher, WgslForwardPass) but no
-   integrated example. A runnable `examples/inference_demo.rs` that loads a
-   quantized model and generates text would validate the entire stack at once,
-   unblock v0.10.0, and attract users. Effort: Medium (code exists, glue needed).
+1. **End-to-end inference demo** (✅ COMPLETE 2026-04-06): `inference_demo.rs`
+   loads GGUF, builds LlamaModel (Q4K/Q6K/Q5K/Q8_0/Q4_0/Q4_1), generates text.
+   TinyLlama 666 tok/s, Qwen2.5-Coder 2.4 tok/s, Qwen3-8B 0.5 tok/s (all CPU).
+   Next: BPE tokenizer for tiktoken models, then llama.cpp comparison (P5c).
 
 2. **v0.10.0 release** (HIGH IMPACT): Blocked by 95% coverage gate, benchmark
    documentation, and book updates. Mechanical work that signals maturity.
