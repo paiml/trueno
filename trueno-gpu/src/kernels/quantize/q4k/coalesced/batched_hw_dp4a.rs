@@ -373,10 +373,13 @@ impl Kernel for BatchedHwDp4aQ4KGemvKernel {
                     ctx.branch_if_not(is_l0, &skip_label);
 
                     // y[mi * N + row] — row-major output for batch element mi
+                    // realizr#220 FIX: Compute element index FIRST, then multiply by 4 for byte offset.
+                    // Previous code mixed elements (mi*n_dim) with bytes (row*4), causing
+                    // batch elements to overwrite each other's output.
                     let mi_reg = ctx.mov_u32_imm(mi);
-                    let y_mi_base = ctx.mul_wide_u32_reg(mi_reg, n_dim);
-                    let y_row_off = ctx.mul_wide_u32(row_idx, 4);
-                    let y_off = ctx.add_u64(y_mi_base, y_row_off);
+                    let y_mi_base = ctx.mul_u32_reg(mi_reg, n_dim);
+                    let y_idx = ctx.add_u32_reg(y_mi_base, row_idx);
+                    let y_off = ctx.mul_wide_u32(y_idx, 4);
                     let y_addr = ctx.add_u64(y_ptr, y_off);
                     ctx.st_global_f32(y_addr, result);
 
