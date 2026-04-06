@@ -69,6 +69,8 @@ pub struct WgslForwardPass {
     rmsnorm_pipeline: wgpu::ComputePipeline,
     silu_mul_pipeline: wgpu::ComputePipeline,
     rope_pipeline: wgpu::ComputePipeline,
+    batch_rope_pipeline: wgpu::ComputePipeline,
+    batch_rope_bgl: wgpu::BindGroupLayout,
     residual_pipeline: wgpu::ComputePipeline,
 
     // Bind group layouts
@@ -190,7 +192,57 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 "#;
 
-// RoPE shader (NeoX-style interleaved)
+// Batch RoPE shader — applies RoPE to all positions in a sequence at once.
+// PMAT-509: Training forward path was missing RoPE entirely, causing loss > random.
+// Input: qk[seq_len * num_heads * head_dim], applies position-dependent rotation.
+const BATCH_ROPE_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read_write> qk: array<f32>;
+
+struct RopeParams {
+    seq_len: u32,
+    num_heads: u32,
+    head_dim: u32,
+    _pad: u32,
+}
+
+@group(0) @binding(1) var<uniform> params: RopeParams;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let idx = gid.x;
+    let total = params.seq_len * params.num_heads * params.head_dim;
+    if (idx >= total) { return; }
+
+    let head_dim = params.head_dim;
+    let half_hd = head_dim / 2u;
+
+    // Decompose idx into (position, head, pos_in_head)
+    let elements_per_pos = params.num_heads * head_dim;
+    let position = idx / elements_per_pos;
+    let within_pos = idx % elements_per_pos;
+    let head_idx = within_pos / head_dim;
+    let pos_in_head = within_pos % head_dim;
+
+    // Only process the first half of each head (pairs with second half)
+    if (pos_in_head >= half_hd) { return; }
+
+    let theta = pow(1000000.0, -f32(pos_in_head * 2u) / f32(head_dim));
+    let angle = f32(position) * theta;
+    let cos_a = cos(angle);
+    let sin_a = sin(angle);
+
+    let base = position * elements_per_pos + head_idx * head_dim;
+    let i0 = base + pos_in_head;
+    let i1 = i0 + half_hd;
+
+    let x0 = qk[i0];
+    let x1 = qk[i1];
+    qk[i0] = x0 * cos_a - x1 * sin_a;
+    qk[i1] = x0 * sin_a + x1 * cos_a;
+}
+"#;
+
+// RoPE shader (NeoX-style interleaved) — single position (inference)
 const ROPE_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read_write> qk: array<f32>;
 @group(0) @binding(1) var<uniform> params: vec4<u32>; // (dim, position, num_heads, head_dim)
@@ -398,6 +450,31 @@ impl WgslForwardPass {
             })
         };
 
+        // PMAT-509: Batch RoPE for training (all positions at once)
+        let batch_rope_shader_mod = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("batch_rope"),
+            source: wgpu::ShaderSource::Wgsl(BATCH_ROPE_SHADER.into()),
+        });
+        let batch_rope_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("batch_rope_bgl"),
+            entries: &[bgl_storage(0, false), bgl_uniform(1)],
+        });
+        let batch_rope_pipeline = {
+            let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("batch_rope_pl"),
+                bind_group_layouts: &[&batch_rope_bgl],
+                push_constant_ranges: &[],
+            });
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("batch_rope_pipe"),
+                layout: Some(&pl),
+                module: &batch_rope_shader_mod,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                cache: None,
+            })
+        };
+
         // Allocate persistent intermediate buffers
         let buf = |size: usize, label: &str| -> wgpu::Buffer {
             device.create_buffer(&wgpu::BufferDescriptor {
@@ -445,6 +522,8 @@ impl WgslForwardPass {
             rmsnorm_pipeline,
             silu_mul_pipeline,
             rope_pipeline,
+            batch_rope_pipeline,
+            batch_rope_bgl,
             residual_pipeline,
             matmul_bgl,
             elementwise_bgl,
@@ -1176,6 +1255,11 @@ impl WgslForwardPass {
             );
         }
 
+        // PMAT-509: Apply RoPE to Q and K before attention.
+        // Without RoPE, the model has no positional information and produces loss > random.
+        self.encode_batch_rope(encoder, &self.q_buf, seq_len, self.num_heads, self.head_dim);
+        self.encode_batch_rope(encoder, &self.k_buf, seq_len, self.num_kv_heads, self.head_dim);
+
         // Attention — wgpu handles execution ordering within the encoder.
         self.encode_attention(encoder, seq_len);
 
@@ -1592,6 +1676,49 @@ impl WgslForwardPass {
     /// Encode causal multi-head attention on GPU.
     /// Q: [seq_len, num_heads * head_dim], K/V: [seq_len, num_kv_heads * head_dim]
     /// Output written to q_buf (reused as attn output).
+    /// PMAT-509: Encode batch RoPE for all positions in a sequence.
+    /// Applies position-dependent rotation to Q or K buffer in-place.
+    fn encode_batch_rope(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        qk_buf: &wgpu::Buffer,
+        seq_len: u32,
+        num_heads: u32,
+        head_dim: u32,
+    ) {
+        #[repr(C)]
+        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+        struct RopeParams {
+            seq_len: u32,
+            num_heads: u32,
+            head_dim: u32,
+            _pad: u32,
+        }
+        let params = RopeParams { seq_len, num_heads, head_dim, _pad: 0 };
+        let params_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("batch_rope_params"),
+            size: 16,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        self.queue.write_buffer(&params_buf, 0, bytemuck::bytes_of(&params));
+
+        let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("batch_rope_bg"),
+            layout: &self.batch_rope_bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: qk_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: params_buf.as_entire_binding() },
+            ],
+        });
+        let total = seq_len * num_heads * head_dim;
+        let wg = total.div_ceil(256);
+        let mut pass = encoder.begin_compute_pass(&Default::default());
+        pass.set_pipeline(&self.batch_rope_pipeline);
+        pass.set_bind_group(0, &bg, &[]);
+        pass.dispatch_workgroups(wg, 1, 1);
+    }
+
     fn encode_attention(&self, encoder: &mut wgpu::CommandEncoder, seq_len: u32) {
         let params = [seq_len, self.num_heads, self.num_kv_heads, self.head_dim];
         let params_buf = self.make_uniform(&params);
