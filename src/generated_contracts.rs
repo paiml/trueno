@@ -21307,7 +21307,7 @@ macro_rules! contract_pre_softmax {
 macro_rules! contract_post_softmax {
     ($result:expr) => {{
         let _contract_result = &$result;
-        debug_assert!(_contract_result.iter().all(|v| *v > 0.0), "Contract softmax: postcondition violated — result.iter().all(|v| *v > 0.0)");
+        debug_assert!(_contract_result.iter().all(|v| *v >= 0.0), "Contract softmax: postcondition violated — result.iter().all(|v| *v >= 0.0) [f32 underflow to 0.0 is valid]");
         debug_assert!((_contract_result.iter().sum::<f32>() - 1.0).abs() < 1e-5, "Contract softmax: postcondition violated — (result.iter().sum::<f32>() - 1.0).abs() < 1e-5");
     }};
 }
