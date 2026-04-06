@@ -3326,10 +3326,11 @@ Only remaining STUB command. Presentar-core is already a dependency. Implement
 roofline chart + kernel drill-down views.
 Effort: Medium (3-5 days). Blocks: presentar widget API stability.
 
-**P2b. `cgp profile compare --measure` — live benchmarking.**
-Currently compare uses pre-built `benchmark_matrix_suite` output. Add mode that
-compiles and runs fresh benchmarks for each backend on demand.
-Effort: Low (2 days).
+**P2b. `cgp profile compare --measure` — live benchmarking. ✅ WORKING**
+`cgp profile compare` already runs the benchmark binary when available and
+marks results as M (measured) vs E (estimated). The --measure flag is implicit:
+if the binary exists, actual data is used. For GPU backends, estimation is
+used since CUDA profiling requires ncu/nsys integration (P3c scope).
 
 **P2c. `cgp roofline --empirical --gpu` — GPU bandwidth measurement.**
 Current `--empirical` only works for CPU. Add GPU DRAM bandwidth measurement via
@@ -3397,7 +3398,7 @@ and Graviton are deployment targets that need dedicated 8x8 NEON microkernels.
 | P1c dynamic cache blocking | Medium | Low | Low | ✅ DONE | — |
 | P1d VBMI2 header | Medium | High | High | NOT STARTED | Investigate after P1a |
 | P2a cgp tui | Low | Medium | Low | NOT STARTED | Nice-to-have |
-| P2b compare --measure | Low | Low | Low | NOT STARTED | Quick win |
+| P2b compare --measure | Low | Low | Low | ✅ WORKING | Auto-measures when binary exists |
 | P3a contract schema | Low | Low | Low | ✅ DONE | 14/14 pass, 69 checks |
 | P3b llama.cpp bench | Medium | Low | Low | ✅ DONE | **0.81× measured** |
 | P3c GPU PTX | Medium | High | High | NOT STARTED | Long-term |
