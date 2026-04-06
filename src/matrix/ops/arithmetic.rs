@@ -371,6 +371,16 @@ impl Matrix<f32> {
     /// GPU-accelerated matrix multiplication
     #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     fn matmul_gpu(&self, other: &Matrix<f32>) -> Result<Matrix<f32>, TruenoError> {
+        // Track 1 (CGP-DBUF): Try cuBLAS first when cuda feature is enabled.
+        // cuBLAS at 105-150 TFLOP/s vs wgpu shader at ~5 TFLOP/s — 20-30× faster.
+        #[cfg(feature = "cuda")]
+        {
+            if let Ok(result) = self.matmul_cublas(other) {
+                return Ok(result);
+            }
+            // cuBLAS unavailable (no GPU, driver error) — fall through to wgpu
+        }
+
         use crate::backends::gpu::GpuBackend;
 
         if !GpuBackend::is_available() {
@@ -386,6 +396,57 @@ impl Matrix<f32> {
         result.data = result_data;
 
         Ok(result)
+    }
+
+    /// cuBLAS FP32 GEMM via trueno-gpu's own FFI bindings (OWN THE STACK).
+    /// Uses cublasGemmEx with CUBLAS_COMPUTE_32F for numerical safety.
+    #[cfg(feature = "cuda")]
+    fn matmul_cublas(&self, other: &Matrix<f32>) -> Result<Matrix<f32>, TruenoError> {
+        use trueno_gpu::driver::{CublasHandle, CudaContext, CudaStream, GemmOp, GpuBuffer};
+
+        let m = self.rows;
+        let k = self.cols;
+        let n = other.cols;
+
+        let ctx = CudaContext::new(0)
+            .map_err(|e| TruenoError::InvalidInput(format!("CUDA init: {e}")))?;
+        let stream = CudaStream::new(&ctx)
+            .map_err(|e| TruenoError::InvalidInput(format!("CUDA stream: {e}")))?;
+        let handle = CublasHandle::new(&ctx)
+            .map_err(|e| TruenoError::InvalidInput(format!("cuBLAS init: {e}")))?;
+        handle
+            .set_stream(&stream)
+            .map_err(|e| TruenoError::InvalidInput(format!("cuBLAS stream: {e}")))?;
+
+        let a_buf = GpuBuffer::from_host(&ctx, &self.data)
+            .map_err(|e| TruenoError::InvalidInput(format!("GPU alloc A: {e}")))?;
+        let b_buf = GpuBuffer::from_host(&ctx, &other.data)
+            .map_err(|e| TruenoError::InvalidInput(format!("GPU alloc B: {e}")))?;
+        let c_data = vec![0.0f32; m * n];
+        let c_buf = GpuBuffer::from_host(&ctx, &c_data)
+            .map_err(|e| TruenoError::InvalidInput(format!("GPU alloc C: {e}")))?;
+
+        handle
+            .gemm_f32_row_major(
+                m as i32,
+                n as i32,
+                k as i32,
+                1.0,
+                a_buf.as_ptr(),
+                b_buf.as_ptr(),
+                0.0,
+                c_buf.as_ptr(),
+            )
+            .map_err(|e| TruenoError::InvalidInput(format!("cuBLAS GEMM: {e}")))?;
+
+        stream.synchronize().map_err(|e| TruenoError::InvalidInput(format!("CUDA sync: {e}")))?;
+
+        let mut result_data = vec![0.0f32; m * n];
+        c_buf
+            .copy_to_host(&mut result_data)
+            .map_err(|e| TruenoError::InvalidInput(format!("GPU readback: {e}")))?;
+
+        Ok(Matrix { rows: m, cols: n, data: result_data, backend: self.backend })
     }
 }
 
