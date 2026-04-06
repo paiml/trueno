@@ -141,6 +141,56 @@ impl AttentionOp {
         }
     }
 
+    /// SIMD axpy: out[i] += alpha * x[i] for all i.
+    /// Used in attention weighted sum: out += weight * v_row.
+    #[inline]
+    pub(crate) fn simd_axpy(alpha: f32, x: &[f32], out: &mut [f32]) {
+        debug_assert_eq!(x.len(), out.len());
+
+        #[cfg(target_arch = "x86_64")]
+        {
+            if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
+                // SAFETY: AVX2+FMA verified, slices same length
+                unsafe {
+                    Self::avx2_axpy(alpha, x, out);
+                }
+                return;
+            }
+        }
+
+        // Scalar fallback
+        for (o, &xi) in out.iter_mut().zip(x.iter()) {
+            *o += alpha * xi;
+        }
+    }
+
+    /// AVX2-optimized axpy: out[i] += alpha * x[i].
+    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "avx2", enable = "fma")]
+    unsafe fn avx2_axpy(alpha: f32, x: &[f32], out: &mut [f32]) {
+        unsafe {
+            use std::arch::x86_64::*;
+
+            let alpha_v = _mm256_set1_ps(alpha);
+            let n = x.len();
+            let n8 = n / 8 * 8;
+
+            let mut i = 0;
+            while i < n8 {
+                let xv = _mm256_loadu_ps(x.as_ptr().add(i));
+                let ov = _mm256_loadu_ps(out.as_ptr().add(i));
+                let r = _mm256_fmadd_ps(alpha_v, xv, ov);
+                _mm256_storeu_ps(out.as_mut_ptr().add(i), r);
+                i += 8;
+            }
+            // Scalar remainder
+            while i < n {
+                *out.get_unchecked_mut(i) += alpha * *x.get_unchecked(i);
+                i += 1;
+            }
+        }
+    }
+
     /// Row-wise softmax with SIMD max/sum.
     #[inline]
     pub(crate) fn simd_softmax_row(scores: &mut [f32]) {
@@ -227,10 +277,8 @@ impl ComputeOp for AttentionOp {
                 let v_row = &v[ki * self.head_dim..(ki + 1) * self.head_dim];
                 let weight = scores[ki];
 
-                // SIMD-friendly accumulation
-                for (o, &vi) in out_row.iter_mut().zip(v_row.iter()) {
-                    *o += weight * vi;
-                }
+                // CGP-DBUF: AVX2 broadcast-multiply-add (was scalar loop)
+                Self::simd_axpy(weight, v_row, out_row);
             }
         }
 
