@@ -3392,12 +3392,15 @@ Two parallel tracks (2026-04-06):
 when `--features cuda` enabled. 105-150 TFLOP/s production path via trueno-gpu
 own FFI bindings. Falls back to wgpu if CUDA unavailable.
 
-**Track 2 (128×128 PTX kernel) SCAFFOLD BUILT**: `cta128_wmma.rs` created with:
+**Track 2 (128×128 PTX kernel) HARDWARE TESTED**: `cta128_wmma.rs` implemented and benchmarked.
 - 128×128 CTA tile (2× compute-to-load ratio vs 64×64)
 - 16 warps, 4×4 grid, each warp → 2×2 WMMA tiles (32×32 output)
 - 3-stage cp.async pipeline, 24KB smem (fits in 48KB static)
-- 3 FALSIFY tests pass (build, smem size, compute ratio)
-- Load/compute pipeline TODO — needs 2 cp.async per thread for A/B loading
+- Full pipeline: prologue → K-loop → epilogue → C-store (4 WMMAs per warp)
+- **NEGATIVE RESULT**: 28.4 TFLOP/s at 1024 (vs 40.5 for 64×64) — lower occupancy
+  dominates the 2× compute-to-load improvement. 24KB smem per CTA → fewer CTAs/SM.
+  CUTLASS compensates with 3-5 stage pipeline and mma.sync (higher IPC).
+- Next: try 128×64 tile (12KB smem, better occupancy) or 3-stage pipeline
 
 CUTLASS SM80 FP16 reference (from source): `GemmShape<128,256,64>`,
 `WarpShape<64,64,64>`, `InstructionShape<16,8,16>` (mma.sync.m16n8k16), 3 stages.
