@@ -1255,8 +1255,18 @@ impl WgslForwardPass {
             );
         }
 
+        // PMAT-509: Apply QKV biases (required for Qwen2)
+        if let Some(q_bias) = self.cpu_biases.get(&format!("{layer_prefix}.q_bias")) {
+            self.encode_broadcast_bias(encoder, &self.q_buf, q_bias, seq_len);
+        }
+        if let Some(k_bias) = self.cpu_biases.get(&format!("{layer_prefix}.k_bias")) {
+            self.encode_broadcast_bias(encoder, &self.k_buf, k_bias, seq_len);
+        }
+        if let Some(v_bias) = self.cpu_biases.get(&format!("{layer_prefix}.v_bias")) {
+            self.encode_broadcast_bias(encoder, &self.v_buf, v_bias, seq_len);
+        }
+
         // PMAT-509: Apply RoPE to Q and K before attention.
-        // Without RoPE, the model has no positional information and produces loss > random.
         self.encode_batch_rope(encoder, &self.q_buf, seq_len, self.num_heads, self.head_dim);
         self.encode_batch_rope(encoder, &self.k_buf, seq_len, self.num_kv_heads, self.head_dim);
 
@@ -1497,7 +1507,16 @@ impl WgslForwardPass {
                 );
             });
         }
-        // PMAT-509: RoPE on Q and K before attention
+        // PMAT-509: QKV biases + RoPE before attention
+        if let Some(q_bias) = self.cpu_biases.get(&format!("{layer_prefix}.q_bias")) {
+            run("q_bias", &|e| self.encode_broadcast_bias(e, &self.q_buf, q_bias, seq_len));
+        }
+        if let Some(k_bias) = self.cpu_biases.get(&format!("{layer_prefix}.k_bias")) {
+            run("k_bias", &|e| self.encode_broadcast_bias(e, &self.k_buf, k_bias, seq_len));
+        }
+        if let Some(v_bias) = self.cpu_biases.get(&format!("{layer_prefix}.v_bias")) {
+            run("v_bias", &|e| self.encode_broadcast_bias(e, &self.v_buf, v_bias, seq_len));
+        }
         run("rope_q", &|e| {
             self.encode_batch_rope(e, &self.q_buf, seq_len, self.num_heads, self.head_dim)
         });
@@ -1683,6 +1702,41 @@ impl WgslForwardPass {
     /// Encode causal multi-head attention on GPU.
     /// Q: [seq_len, num_heads * head_dim], K/V: [seq_len, num_kv_heads * head_dim]
     /// Output written to q_buf (reused as attn output).
+    /// PMAT-509: Add broadcast bias to a [seq_len, dim] buffer.
+    /// bias has shape [dim], applied to each of seq_len rows.
+    pub fn encode_broadcast_bias(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        buf: &wgpu::Buffer,
+        bias: &[f32],
+        seq_len: u32,
+    ) {
+        let dim = bias.len();
+        // Create a full-size bias buffer by repeating the bias per position
+        let mut full_bias = Vec::with_capacity(seq_len as usize * dim);
+        for _ in 0..seq_len {
+            full_bias.extend_from_slice(bias);
+        }
+        let bias_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("broadcast_bias"),
+            size: (full_bias.len() * 4) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        self.queue.write_buffer(&bias_buf, 0, bytemuck::cast_slice(&full_bias));
+
+        // Use existing residual: out = buf + bias_buf (into a temp, then copy back)
+        let total = seq_len * dim as u32;
+        let tmp = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("bias_tmp"),
+            size: (total as usize * 4) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        self.encode_residual(encoder, buf, &bias_buf, &tmp, total);
+        encoder.copy_buffer_to_buffer(&tmp, 0, buf, 0, (total as u64) * 4);
+    }
+
     /// PMAT-509: Encode batch RoPE for all positions in a sequence.
     /// Applies position-dependent rotation to Q or K buffer in-place.
     fn encode_batch_rope(
