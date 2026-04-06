@@ -34,6 +34,19 @@ impl<'a> KernelBuilder<'a> {
         );
     }
 
+    /// Store 2 consecutive f32 values to global memory (vectorized, 8-byte store).
+    /// PTX: st.global.v2.f32 [addr], {val0, val1};
+    /// Address should be 8-byte aligned for optimal performance.
+    pub fn st_global_f32_v2(&mut self, addr: VirtualReg, val0: VirtualReg, val1: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::V2F32)
+                .space(PtxStateSpace::Global)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val0))
+                .src(Operand::Reg(val1)),
+        );
+    }
+
     /// Load 4 consecutive f32 values from global memory (vectorized, 16-byte load)
     ///
     /// Returns 4 registers containing the loaded values.

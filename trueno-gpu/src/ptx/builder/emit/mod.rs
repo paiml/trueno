@@ -28,7 +28,7 @@ mod wmma;
 use std::fmt::Write;
 
 use crate::ptx::instructions::{Operand, PtxInstruction, PtxOp};
-use crate::ptx::types::PtxStateSpace;
+use crate::ptx::types::{PtxStateSpace, PtxType};
 
 // Re-export operand functions for external use (wmma.rs, instruction_emission tests)
 #[allow(unused_imports)]
@@ -189,6 +189,11 @@ fn write_sources(instr: &PtxInstruction, out: &mut String) {
     let is_global_mem = instr.state_space == Some(PtxStateSpace::Global)
         || (is_memory_op && instr.state_space.is_none());
 
+    // Vector stores (st.global.v2/v4) need braces around data operands:
+    //   st.global.v2.f32 [addr], {val0, val1};
+    let is_vector_store =
+        instr.op == PtxOp::St && matches!(instr.ty, PtxType::V2F32 | PtxType::V4F32);
+
     for (i, src) in instr.srcs.iter().enumerate() {
         if i == 0 && (is_memory_op || is_atomic_op) {
             if is_shared_mem || is_global_mem || is_atomic_op {
@@ -197,7 +202,15 @@ fn write_sources(instr: &PtxInstruction, out: &mut String) {
                 write_operand(src, out);
             }
         } else {
+            // For vector store: emit opening brace before first data operand
+            if is_vector_store && i == 1 {
+                out.push('{');
+            }
             write_operand(src, out);
+            // For vector store: emit closing brace after last data operand
+            if is_vector_store && i == instr.srcs.len() - 1 {
+                out.push('}');
+            }
         }
         if i < instr.srcs.len() - 1 {
             out.push_str(", ");
