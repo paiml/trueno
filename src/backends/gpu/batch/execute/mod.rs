@@ -36,7 +36,9 @@ impl GpuCommandBatch {
     pub async fn execute(&mut self) -> Result<(), String> {
         contract_pre_single_encoder_batch!();
         let mut local_cache = dispatch::PipelineCache::new();
-        self.execute_inner(&mut local_cache)
+        let result = self.execute_inner(&mut local_cache);
+        contract_post_single_encoder_batch!(result);
+        result
     }
 
     /// Execute with a persistent pipeline cache (KAIZEN-023).

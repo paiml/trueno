@@ -120,6 +120,10 @@ pub struct LayerWeights {
     pub k_weight: WeightMatrix,
     pub v_weight: WeightMatrix,
     pub o_weight: WeightMatrix,
+    // Qwen2/Qwen3 biases (None for LLaMA)
+    pub q_bias: Option<Vec<f32>>,
+    pub k_bias: Option<Vec<f32>>,
+    pub v_bias: Option<Vec<f32>>,
 
     // FFN
     pub ffn_norm: Vec<f32>,
@@ -237,10 +241,25 @@ impl LlamaModel {
         let mut attn_input = vec![0.0f32; cfg.hidden_size];
         rms_norm(hidden, &lw.attn_norm, cfg.rms_norm_eps, &mut attn_input)?;
 
-        // QKV projections
-        let q = matmul_weight(&lw.q_weight, &attn_input, cfg.hidden_size);
-        let k_proj = matmul_weight(&lw.k_weight, &attn_input, cfg.hidden_size);
-        let v_proj = matmul_weight(&lw.v_weight, &attn_input, cfg.hidden_size);
+        // QKV projections + optional bias (Qwen2/Qwen3)
+        let mut q = matmul_weight(&lw.q_weight, &attn_input, cfg.hidden_size);
+        let mut k_proj = matmul_weight(&lw.k_weight, &attn_input, cfg.hidden_size);
+        let mut v_proj = matmul_weight(&lw.v_weight, &attn_input, cfg.hidden_size);
+        if let Some(bias) = &lw.q_bias {
+            for (v, b) in q.iter_mut().zip(bias.iter()) {
+                *v += b;
+            }
+        }
+        if let Some(bias) = &lw.k_bias {
+            for (v, b) in k_proj.iter_mut().zip(bias.iter()) {
+                *v += b;
+            }
+        }
+        if let Some(bias) = &lw.v_bias {
+            for (v, b) in v_proj.iter_mut().zip(bias.iter()) {
+                *v += b;
+            }
+        }
 
         // Apply RoPE to Q and K
         let mut q_rope = q;
@@ -380,6 +399,13 @@ fn load_weights(gguf: &GgufFile, config: &ModelConfig) -> Result<ModelWeights, T
             load_weight_matrix(gguf, &format!("{prefix}.attn_v.weight"), config.hidden_size)?;
         let o_weight =
             load_weight_matrix(gguf, &format!("{prefix}.attn_output.weight"), config.hidden_size)?;
+
+        // Qwen2/Qwen3 attention biases (optional — LLaMA has none)
+        let kv_dim = config.num_kv_heads * config.head_dim;
+        let q_bias = load_optional_f32(gguf, &format!("{prefix}.attn_q.bias"), config.hidden_size);
+        let k_bias = load_optional_f32(gguf, &format!("{prefix}.attn_k.bias"), kv_dim);
+        let v_bias = load_optional_f32(gguf, &format!("{prefix}.attn_v.bias"), kv_dim);
+
         let gate_weight =
             load_weight_matrix(gguf, &format!("{prefix}.ffn_gate.weight"), config.hidden_size)?;
         let up_weight =
@@ -410,6 +436,9 @@ fn load_weights(gguf: &GgufFile, config: &ModelConfig) -> Result<ModelWeights, T
             k_weight,
             v_weight,
             o_weight,
+            q_bias,
+            k_bias,
+            v_bias,
             ffn_norm,
             gate_weight,
             up_weight,
@@ -457,6 +486,13 @@ fn load_f32_or_dequant_tensor(
             Ok(vec![0.0f32; expected_elements])
         }
     }
+}
+
+/// Load an optional F32 tensor (returns None if tensor doesn't exist in GGUF).
+fn load_optional_f32(gguf: &GgufFile, name: &str, expected_elements: usize) -> Option<Vec<f32>> {
+    let info = gguf.tensor_info(name)?;
+    let data = gguf.tensor_data(name)?;
+    Some(to_f32_from_any(data, info.dtype, expected_elements))
 }
 
 /// Load a tensor as F32 (dequantizing F16 if needed).

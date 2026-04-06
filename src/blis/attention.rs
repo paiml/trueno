@@ -42,6 +42,7 @@ pub fn fused_attention_decode(
 
     if seq_len == 0 {
         output.fill(0.0);
+        contract_post_attention!(output);
         return;
     }
 
@@ -51,10 +52,12 @@ pub fn fused_attention_decode(
         unsafe {
             fused_attention_decode_avx2(q, k_cache, v_cache, head_dim, seq_len, output);
         }
+        contract_post_attention!(output);
         return;
     }
 
     fused_attention_decode_scalar(q, k_cache, v_cache, head_dim, seq_len, output);
+    contract_post_attention!(output);
 }
 
 /// Scalar fallback for non-x86 or non-AVX2 platforms.

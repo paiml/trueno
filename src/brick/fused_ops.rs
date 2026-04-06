@@ -224,7 +224,9 @@ impl FusedGateUpOp {
     #[inline]
     pub fn silu(x: f32) -> f32 {
         contract_pre_silu!();
-        crate::activations::silu_scalar(x)
+        let result = crate::activations::silu_scalar(x);
+        contract_post_silu!(&[result]);
+        result
     }
 }
 

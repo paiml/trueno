@@ -46,7 +46,12 @@ pub const NF4_LUT: [f32; 16] = [
 #[inline]
 pub fn dequantize_nf4(val: u8) -> f32 {
     contract_pre_dequant!();
-    NF4_LUT[(val & 0x0F) as usize]
+    let result = NF4_LUT[(val & 0x0F) as usize];
+    debug_assert!(
+        result.is_finite(),
+        "Contract dequant: postcondition violated — result.is_finite()"
+    );
+    result
 }
 
 /// Quantize a normalized f32 value to a 4-bit NF4 code.

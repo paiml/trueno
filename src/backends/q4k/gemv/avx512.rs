@@ -50,6 +50,7 @@ pub(crate) unsafe fn matmul_q4k_f32_avx512(
             output[out_idx] = hsum_avx512(acc);
         }
 
+        contract_post_dequant!(output);
         output
     }
 }
@@ -215,4 +216,5 @@ pub(crate) unsafe fn compute_chunk_q4k_avx512(
             *out_val = hsum_avx512(acc);
         }
     }
+    contract_post_dequant!(chunk);
 }

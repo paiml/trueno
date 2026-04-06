@@ -53,5 +53,6 @@ pub fn dequantize_q4k_to_f32(data: &[u8], num_elements: usize) -> Vec<f32> {
     }
 
     result.truncate(num_elements);
+    contract_post_dequant!(result);
     result
 }

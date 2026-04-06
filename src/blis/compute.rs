@@ -954,6 +954,7 @@ pub fn gemm_blis(
         });
     });
 
+    contract_post_flops_per_tile!(c);
     Ok(())
 }
 

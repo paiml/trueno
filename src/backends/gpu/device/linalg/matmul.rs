@@ -267,6 +267,7 @@ impl GpuDevice {
 
         staging_buffer.unmap();
 
+        contract_post_matmul!(result);
         Ok(())
     }
 }

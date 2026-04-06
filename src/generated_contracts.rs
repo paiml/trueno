@@ -1459,6 +1459,264 @@ macro_rules! contract_save_checkpoint {
     }};
 }
 
+// Auto-generated from contracts/apr-cli-longrunning-v1.yaml — DO NOT EDIT
+// Contract: apr-cli-longrunning-v1
+
+/// Preconditions for equation `concurrent_isolation`.
+/// Call at function entry: `contract_pre_concurrent_isolation!(input_expr)`
+macro_rules! contract_pre_concurrent_isolation {
+    () => {{}};
+    ($input:expr) => {{
+        let _contract_input = &$input;
+    }};
+}
+
+/// Postconditions for equation `concurrent_isolation`.
+/// Call before return: `contract_post_concurrent_isolation!(result_expr)`
+macro_rules! contract_post_concurrent_isolation {
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Invariants for equation `concurrent_isolation`.
+/// Check after computation: `contract_inv_concurrent_isolation!(result_expr)`
+macro_rules! contract_inv_concurrent_isolation {
+    () => {{}};
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Combined pre+post contract for equation `concurrent_isolation`.
+macro_rules! contract_concurrent_isolation {
+    ($input:expr, $body:expr) => {{
+        contract_pre_concurrent_isolation!($input);
+        let _contract_result = $body;
+        contract_post_concurrent_isolation!(_contract_result);
+        _contract_result
+    }};
+}
+
+/// Preconditions for equation `graceful_shutdown`.
+/// Call at function entry: `contract_pre_graceful_shutdown!(input_expr)`
+macro_rules! contract_pre_graceful_shutdown {
+    () => {{}};
+    ($input:expr) => {{
+        let _contract_input = &$input;
+    }};
+}
+
+/// Postconditions for equation `graceful_shutdown`.
+/// Call before return: `contract_post_graceful_shutdown!(result_expr)`
+macro_rules! contract_post_graceful_shutdown {
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Invariants for equation `graceful_shutdown`.
+/// Check after computation: `contract_inv_graceful_shutdown!(result_expr)`
+macro_rules! contract_inv_graceful_shutdown {
+    () => {{}};
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Combined pre+post contract for equation `graceful_shutdown`.
+macro_rules! contract_graceful_shutdown {
+    ($input:expr, $body:expr) => {{
+        contract_pre_graceful_shutdown!($input);
+        let _contract_result = $body;
+        contract_post_graceful_shutdown!(_contract_result);
+        _contract_result
+    }};
+}
+
+/// Preconditions for equation `resource_cleanup`.
+/// Call at function entry: `contract_pre_resource_cleanup!(input_expr)`
+macro_rules! contract_pre_resource_cleanup {
+    () => {{}};
+    ($input:expr) => {{
+        let _contract_input = &$input;
+    }};
+}
+
+/// Postconditions for equation `resource_cleanup`.
+/// Call before return: `contract_post_resource_cleanup!(result_expr)`
+macro_rules! contract_post_resource_cleanup {
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Invariants for equation `resource_cleanup`.
+/// Check after computation: `contract_inv_resource_cleanup!(result_expr)`
+macro_rules! contract_inv_resource_cleanup {
+    () => {{}};
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Combined pre+post contract for equation `resource_cleanup`.
+macro_rules! contract_resource_cleanup {
+    ($input:expr, $body:expr) => {{
+        contract_pre_resource_cleanup!($input);
+        let _contract_result = $body;
+        contract_post_resource_cleanup!(_contract_result);
+        _contract_result
+    }};
+}
+
+// Auto-generated from contracts/apr-cli-mutating-v1.yaml — DO NOT EDIT
+// Contract: apr-cli-mutating-v1
+
+/// Preconditions for equation `atomic_write_safety`.
+/// Call at function entry: `contract_pre_atomic_write_safety!(input_expr)`
+macro_rules! contract_pre_atomic_write_safety {
+    () => {{}};
+    ($input:expr) => {{
+        let _contract_input = &$input;
+    }};
+}
+
+/// Postconditions for equation `atomic_write_safety`.
+/// Call before return: `contract_post_atomic_write_safety!(result_expr)`
+macro_rules! contract_post_atomic_write_safety {
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Invariants for equation `atomic_write_safety`.
+/// Check after computation: `contract_inv_atomic_write_safety!(result_expr)`
+macro_rules! contract_inv_atomic_write_safety {
+    () => {{}};
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Combined pre+post contract for equation `atomic_write_safety`.
+macro_rules! contract_atomic_write_safety {
+    ($input:expr, $body:expr) => {{
+        contract_pre_atomic_write_safety!($input);
+        let _contract_result = $body;
+        contract_post_atomic_write_safety!(_contract_result);
+        _contract_result
+    }};
+}
+
+/// Preconditions for equation `exit_code_on_error`.
+/// Call at function entry: `contract_pre_exit_code_on_error!(input_expr)`
+macro_rules! contract_pre_exit_code_on_error {
+    () => {{}};
+    ($input:expr) => {{
+        let _contract_input = &$input;
+    }};
+}
+
+/// Postconditions for equation `exit_code_on_error`.
+/// Call before return: `contract_post_exit_code_on_error!(result_expr)`
+macro_rules! contract_post_exit_code_on_error {
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Invariants for equation `exit_code_on_error`.
+/// Check after computation: `contract_inv_exit_code_on_error!(result_expr)`
+macro_rules! contract_inv_exit_code_on_error {
+    () => {{}};
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Combined pre+post contract for equation `exit_code_on_error`.
+macro_rules! contract_exit_code_on_error {
+    ($input:expr, $body:expr) => {{
+        contract_pre_exit_code_on_error!($input);
+        let _contract_result = $body;
+        contract_post_exit_code_on_error!(_contract_result);
+        _contract_result
+    }};
+}
+
+/// Preconditions for equation `output_path_validation`.
+/// Call at function entry: `contract_pre_output_path_validation!(input_expr)`
+macro_rules! contract_pre_output_path_validation {
+    () => {{}};
+    ($input:expr) => {{
+        let _contract_input = &$input;
+    }};
+}
+
+/// Postconditions for equation `output_path_validation`.
+/// Call before return: `contract_post_output_path_validation!(result_expr)`
+macro_rules! contract_post_output_path_validation {
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Invariants for equation `output_path_validation`.
+/// Check after computation: `contract_inv_output_path_validation!(result_expr)`
+macro_rules! contract_inv_output_path_validation {
+    () => {{}};
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Combined pre+post contract for equation `output_path_validation`.
+macro_rules! contract_output_path_validation {
+    ($input:expr, $body:expr) => {{
+        contract_pre_output_path_validation!($input);
+        let _contract_result = $body;
+        contract_post_output_path_validation!(_contract_result);
+        _contract_result
+    }};
+}
+
+/// Preconditions for equation `rm_confirmation_gate`.
+/// Call at function entry: `contract_pre_rm_confirmation_gate!(input_expr)`
+macro_rules! contract_pre_rm_confirmation_gate {
+    () => {{}};
+    ($input:expr) => {{
+        let _contract_input = &$input;
+    }};
+}
+
+/// Postconditions for equation `rm_confirmation_gate`.
+/// Call before return: `contract_post_rm_confirmation_gate!(result_expr)`
+macro_rules! contract_post_rm_confirmation_gate {
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Invariants for equation `rm_confirmation_gate`.
+/// Check after computation: `contract_inv_rm_confirmation_gate!(result_expr)`
+macro_rules! contract_inv_rm_confirmation_gate {
+    () => {{}};
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Combined pre+post contract for equation `rm_confirmation_gate`.
+macro_rules! contract_rm_confirmation_gate {
+    ($input:expr, $body:expr) => {{
+        contract_pre_rm_confirmation_gate!($input);
+        let _contract_result = $body;
+        contract_post_rm_confirmation_gate!(_contract_result);
+        _contract_result
+    }};
+}
+
 // Auto-generated from contracts/apr-cli-operations-v1.yaml — DO NOT EDIT
 // Contract: apr-cli-operations-v1
 
@@ -1678,6 +1936,117 @@ macro_rules! contract_tokenizer_consistency {
         contract_pre_tokenizer_consistency!($input);
         let _contract_result = $body;
         contract_post_tokenizer_consistency!(_contract_result);
+        _contract_result
+    }};
+}
+
+// Auto-generated from contracts/apr-cli-readonly-v1.yaml — DO NOT EDIT
+// Contract: apr-cli-readonly-v1
+
+/// Preconditions for equation `exit_code_on_error`.
+/// Call at function entry: `contract_pre_exit_code_on_error!(input_expr)`
+macro_rules! contract_pre_exit_code_on_error {
+    () => {{}};
+    ($input:expr) => {{
+        let _contract_input = &$input;
+    }};
+}
+
+/// Postconditions for equation `exit_code_on_error`.
+/// Call before return: `contract_post_exit_code_on_error!(result_expr)`
+macro_rules! contract_post_exit_code_on_error {
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Invariants for equation `exit_code_on_error`.
+/// Check after computation: `contract_inv_exit_code_on_error!(result_expr)`
+macro_rules! contract_inv_exit_code_on_error {
+    () => {{}};
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Combined pre+post contract for equation `exit_code_on_error`.
+macro_rules! contract_exit_code_on_error {
+    ($input:expr, $body:expr) => {{
+        contract_pre_exit_code_on_error!($input);
+        let _contract_result = $body;
+        contract_post_exit_code_on_error!(_contract_result);
+        _contract_result
+    }};
+}
+
+/// Preconditions for equation `idempotent_output`.
+/// Call at function entry: `contract_pre_idempotent_output!(input_expr)`
+macro_rules! contract_pre_idempotent_output {
+    () => {{}};
+    ($input:expr) => {{
+        let _contract_input = &$input;
+    }};
+}
+
+/// Postconditions for equation `idempotent_output`.
+/// Call before return: `contract_post_idempotent_output!(result_expr)`
+macro_rules! contract_post_idempotent_output {
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Invariants for equation `idempotent_output`.
+/// Check after computation: `contract_inv_idempotent_output!(result_expr)`
+macro_rules! contract_inv_idempotent_output {
+    () => {{}};
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Combined pre+post contract for equation `idempotent_output`.
+macro_rules! contract_idempotent_output {
+    ($input:expr, $body:expr) => {{
+        contract_pre_idempotent_output!($input);
+        let _contract_result = $body;
+        contract_post_idempotent_output!(_contract_result);
+        _contract_result
+    }};
+}
+
+/// Preconditions for equation `no_side_effects`.
+/// Call at function entry: `contract_pre_no_side_effects!(input_expr)`
+macro_rules! contract_pre_no_side_effects {
+    () => {{}};
+    ($input:expr) => {{
+        let _contract_input = &$input;
+    }};
+}
+
+/// Postconditions for equation `no_side_effects`.
+/// Call before return: `contract_post_no_side_effects!(result_expr)`
+macro_rules! contract_post_no_side_effects {
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Invariants for equation `no_side_effects`.
+/// Check after computation: `contract_inv_no_side_effects!(result_expr)`
+macro_rules! contract_inv_no_side_effects {
+    () => {{}};
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Combined pre+post contract for equation `no_side_effects`.
+macro_rules! contract_no_side_effects {
+    ($input:expr, $body:expr) => {{
+        contract_pre_no_side_effects!($input);
+        let _contract_result = $body;
+        contract_post_no_side_effects!(_contract_result);
         _contract_result
     }};
 }
@@ -5169,6 +5538,10 @@ macro_rules! contract_pre_dequant {
 macro_rules! contract_post_dequant {
     ($result:expr) => {{
         let _contract_result = &$result;
+        debug_assert!(
+            _contract_result.iter().all(|v| v.is_finite()),
+            "Contract dequant: postcondition violated — result.iter().all(|v| v.is_finite())"
+        );
     }};
 }
 
@@ -5205,6 +5578,10 @@ macro_rules! contract_pre_throughput {
 macro_rules! contract_post_throughput {
     ($result:expr) => {{
         let _contract_result = &$result;
+        debug_assert!(
+            *_contract_result > 0.0,
+            "Contract throughput: postcondition violated — result > 0.0"
+        );
     }};
 }
 
@@ -5882,6 +6259,7 @@ macro_rules! contract_pre_elementwise_parity {
 macro_rules! contract_post_elementwise_parity {
     ($result:expr) => {{
         let _contract_result = &$result;
+        debug_assert!(_contract_result.iter().all(|v| v.is_finite()), "Contract elementwise_parity: postcondition violated — result.iter().all(|v| v.is_finite())");
     }};
 }
 
@@ -5918,6 +6296,7 @@ macro_rules! contract_pre_gemm_correctness {
 macro_rules! contract_post_gemm_correctness {
     ($result:expr) => {{
         let _contract_result = &$result;
+        debug_assert!(_contract_result.iter().all(|v| v.is_finite()), "Contract gemm_correctness: postcondition violated — result.iter().all(|v| v.is_finite())");
     }};
 }
 
@@ -5975,6 +6354,10 @@ macro_rules! contract_pre_amdahl_speedup {
 macro_rules! contract_post_amdahl_speedup {
     ($result:expr) => {{
         let _contract_result = &$result;
+        debug_assert!(
+            *_contract_result >= 1.0,
+            "Contract amdahl_speedup: postcondition violated — result >= 1.0"
+        );
     }};
 }
 
@@ -6002,6 +6385,10 @@ macro_rules! contract_pre_thread_cap_policy {
 macro_rules! contract_post_thread_cap_policy {
     ($result:expr) => {{
         let _contract_result = &$result;
+        debug_assert!(
+            *_contract_result >= 1,
+            "Contract thread_cap_policy: postcondition violated — result >= 1"
+        );
     }};
 }
 
@@ -6029,6 +6416,10 @@ macro_rules! contract_pre_working_set {
 macro_rules! contract_post_working_set {
     ($result:expr) => {{
         let _contract_result = &$result;
+        debug_assert!(
+            *_contract_result > 0,
+            "Contract working_set: postcondition violated — result > 0"
+        );
     }};
 }
 
@@ -16875,6 +17266,73 @@ macro_rules! contract_neon_scalar_equivalence {
     }};
 }
 
+// Auto-generated from contracts/nf4-backward-tensor-core-gemm-v1.yaml — DO NOT EDIT
+// Contract: nf4-backward-tensor-core-gemm-v1
+
+/// Preconditions for equation `backward_a_gemm`.
+/// Domain-specific. Call: `contract_pre_backward_a_gemm!(slice_expr)`
+macro_rules! contract_pre_backward_a_gemm {
+    () => {{}};
+    ($input:expr) => {{
+        let _pv_x = &$input;
+    }};
+}
+
+/// Postconditions for equation `backward_a_gemm`.
+/// Call before return: `contract_post_backward_a_gemm!(result_expr)`
+macro_rules! contract_post_backward_a_gemm {
+    ($result:expr) => {{
+        let _contract_result = &$result;
+        debug_assert!(_contract_result.iter().all(|v| v.is_finite()), "Contract backward_a_gemm: postcondition violated — result.iter().all(|v| v.is_finite())");
+    }};
+}
+
+/// Invariants for equation `backward_a_gemm`.
+/// Check after computation: `contract_inv_backward_a_gemm!(result_expr)`
+macro_rules! contract_inv_backward_a_gemm {
+    () => {{}};
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Combined pre+post contract for equation `backward_a_gemm`.
+macro_rules! contract_backward_a_gemm {
+    ($input:expr, $body:expr) => {{
+        contract_pre_backward_a_gemm!($input);
+        let _contract_result = $body;
+        contract_post_backward_a_gemm!(_contract_result);
+        _contract_result
+    }};
+}
+
+/// Invariants for equation `fused_pair_backward`.
+/// Check after computation: `contract_inv_fused_pair_backward!(result_expr)`
+macro_rules! contract_inv_fused_pair_backward {
+    () => {{}};
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Invariants for equation `nf4_column_dequant`.
+/// Check after computation: `contract_inv_nf4_column_dequant!(result_expr)`
+macro_rules! contract_inv_nf4_column_dequant {
+    () => {{}};
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
+/// Invariants for equation `wmma_backward_tile`.
+/// Check after computation: `contract_inv_wmma_backward_tile!(result_expr)`
+macro_rules! contract_inv_wmma_backward_tile {
+    () => {{}};
+    ($result:expr) => {{
+        let _contract_result = &$result;
+    }};
+}
+
 // Auto-generated from contracts/oci-manifest-v1.yaml — DO NOT EDIT
 // Contract: oci-manifest-v1
 
@@ -17723,6 +18181,10 @@ macro_rules! contract_pre_cache_hit_no_recompile {
 macro_rules! contract_post_cache_hit_no_recompile {
     ($result:expr) => {{
         let _contract_result = &$result;
+        debug_assert!(
+            _contract_result.is_some(),
+            "Contract cache_hit_no_recompile: postcondition violated — result.is_some()"
+        );
     }};
 }
 
@@ -17759,6 +18221,10 @@ macro_rules! contract_pre_single_encoder_batch {
 macro_rules! contract_post_single_encoder_batch {
     ($result:expr) => {{
         let _contract_result = &$result;
+        debug_assert!(
+            _contract_result.is_ok(),
+            "Contract single_encoder_batch: postcondition violated — result.is_ok()"
+        );
     }};
 }
 
@@ -24235,24 +24701,6 @@ macro_rules! contract_pre_barrier_correctness {
     }};
 }
 
-/// Postconditions for equation `barrier_correctness`.
-/// Call before return: `contract_post_barrier_correctness!(result_expr)`
-macro_rules! contract_post_barrier_correctness {
-    ($result:expr) => {{
-        let _contract_result = &$result;
-    }};
-}
-
-/// Combined pre+post contract for equation `barrier_correctness`.
-macro_rules! contract_barrier_correctness {
-    ($input:expr, $body:expr) => {{
-        contract_pre_barrier_correctness!($input);
-        let _contract_result = $body;
-        contract_post_barrier_correctness!(_contract_result);
-        _contract_result
-    }};
-}
-
 /// Preconditions for equation `tiled_naive_equivalence`.
 /// Domain-specific. Call: `contract_pre_tiled_naive_equivalence!(slice_expr)`
 macro_rules! contract_pre_tiled_naive_equivalence {
@@ -24271,6 +24719,7 @@ macro_rules! contract_pre_tiled_naive_equivalence {
 macro_rules! contract_post_tiled_naive_equivalence {
     ($result:expr) => {{
         let _contract_result = &$result;
+        debug_assert!(_contract_result.iter().all(|v| v.is_finite()), "Contract tiled_naive_equivalence: postcondition violated — result.iter().all(|v| v.is_finite())");
     }};
 }
 
@@ -26354,4 +26803,4 @@ macro_rules! contract_work_lifecycle {
     }};
 }
 
-// Total: 657 preconditions, 20 postconditions, 0 invariants from 290 contracts
+// Total: 657 preconditions, 31 postconditions, 0 invariants from 294 contracts

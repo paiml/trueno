@@ -92,6 +92,7 @@ impl VectorBackend for ScalarBackend {
             sum = a[i].mul_add(b[i], sum);
         }
 
+        contract_post_dot_product_parity!(sum);
         sum
     }
 
@@ -341,6 +342,7 @@ impl VectorBackend for ScalarBackend {
             let inner = SQRT_2_OVER_PI * (x + COEFF * x3);
             result[i] = 0.5 * x * (1.0 + inner.tanh());
         }
+        contract_post_gelu!(result);
     }
 
     // SAFETY: This function is safe because:
@@ -360,6 +362,7 @@ impl VectorBackend for ScalarBackend {
                 result[i] = x * sigmoid;
             }
         }
+        contract_post_silu!(result);
     }
 
     // SAFETY: This function is safe because:

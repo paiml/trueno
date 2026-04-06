@@ -46,23 +46,27 @@ pub fn relu(input: &[f32], output: &mut [f32]) -> Result<(), TruenoError> {
         // with better register allocation and loop fusion.
         if n > 4096 {
             relu_autovec(input, output);
+            contract_post_elementwise_parity!(output);
             return Ok(());
         }
         if is_x86_feature_detected!("avx512f") {
             unsafe {
                 relu_avx512(input, output);
             }
+            contract_post_elementwise_parity!(output);
             return Ok(());
         }
         if is_x86_feature_detected!("avx2") {
             unsafe {
                 relu_avx2(input, output);
             }
+            contract_post_elementwise_parity!(output);
             return Ok(());
         }
     }
 
     relu_autovec(input, output);
+    contract_post_elementwise_parity!(output);
     Ok(())
 }
 
@@ -318,6 +322,7 @@ pub fn add(a: &[f32], b: &[f32], output: &mut [f32]) -> Result<(), TruenoError> 
     }
 
     add_autovec(a, b, output);
+    contract_post_elementwise_parity!(output);
     Ok(())
 }
 
