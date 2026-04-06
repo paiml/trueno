@@ -143,11 +143,12 @@ pub fn transpose(rows: usize, cols: usize, a: &[f32], b: &mut [f32]) -> Result<(
     }
 
     // Parallel transpose for large matrices (DRAM-bound → multi-channel).
-    // Threshold: rows*cols >= 4M (2048×2048+). 1024×1024 regressed at 1M
-    // threshold (parallel overhead > compute time).
+    // CGP-DBUF: lowered threshold from 4M to 1M. Previous regression at 1M was
+    // likely from higher thread::scope overhead; Rayon dispatch is ~3µs.
+    // 1024×1024 = 1M elements, 4MB traffic, ~200µs single-thread → 3µs is 1.5%.
     #[cfg(feature = "parallel")]
     {
-        const PARALLEL_THRESHOLD: usize = 4_000_000;
+        const PARALLEL_THRESHOLD: usize = 1_000_000;
         if expected >= PARALLEL_THRESHOLD {
             return transpose_parallel(rows, cols, a, b);
         }
