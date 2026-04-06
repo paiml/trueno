@@ -3645,32 +3645,28 @@ hand-tuned ASM [45] or column-major C layout change (API-breaking).
 
 **Recommended next steps (ranked by impact/effort)**:
 
-1. **v0.17.x → v0.18.0 release** (HIGH IMPACT, LOW EFFORT)
-   - Bump version, publish crate, update docs
-   - New features: inference engine, GPU pipeline, 7 dequant formats
-   - All 3630 tests pass, contracts pass
+1. ✅ **v0.18.0 release** — published to crates.io (2026-04-06)
 
 2. **Close the 3× inference gap** (HIGH IMPACT, MEDIUM EFFORT)
-   The 0.33× gap vs llama.cpp is NOT kernel quality — it's glue code:
-   - **Arena allocator**: Replace per-token `Vec<f32>` allocs with bump allocator (~2× speedup expected)
-   - **Parallel F16→F32 decode**: The F16 weight matmul path is single-threaded
-   - **Op fusion**: Fuse RMSNorm+MatMul, fuse SiLU*Up in SwiGLU
-   Target: 0.5× llama.cpp (1200+ tok/s)
+   Arena allocator added (commit `538dcfd1`) but showed no speedup on
+   TinyLlama 5M — allocs are 256 bytes, too small to matter. The 3× gap
+   is **per-op dispatch overhead**, not allocation:
+   - Each `matmul_weight_into` call does a match + function call
+   - `fused_attention_decode` re-checks `is_x86_feature_detected` per call
+   - llama.cpp pre-compiles the forward graph, dispatches once
+   **Next**: Compute graph — build the forward pass as a reusable op graph,
+   dispatch SIMD features once, execute ops via function pointers.
+   Estimated improvement: 1.5-2× (target 0.5× llama.cpp)
 
 3. **GPU inference path** (HIGH IMPACT, HIGH EFFORT)
-   - Route large matmuls (Q4K GEMV, output projection) to CUDA kernels
-   - The GPU kernels already exist (BatchedHwDp4aQ4KGemvKernel, mma.sync GEMM)
-   - Needs CPU→GPU transfer orchestration and kernel launch scheduling
-   - Target: 10-50× CPU speed for 1B+ models
+   Route large matmuls to existing CUDA kernels (BatchedHwDp4aQ4KGemvKernel,
+   mma.sync GEMM). Needs CPU→GPU transfer orchestration.
+   Target: 10-50× CPU speed for 1B+ models.
 
-4. **Qwen2/Qwen3 correctness** (MEDIUM IMPACT, LOW EFFORT)
-   - Don't duplicate aprender — extract `aprender-tokenizer` crate (zero deps)
-   - Qwen2 needs: BPE tokenizer, attention biases (added), chat template
-   - Or: let aprender handle Qwen2+ inference, trueno provides primitives only
+4. **`aprender-tokenizer` crate extraction** (MEDIUM IMPACT, LOW EFFORT)
+   Break circular dependency: extract BPE tokenizer from aprender into a
+   standalone crate with zero deps on trueno or aprender. Both depend on it.
+   Unblocks Qwen2/Qwen3 inference without code duplication.
 
-3. **Industry baseline measurement** (MEDIUM-HIGH): Run QuantizedBrick +
-   PagedKvCache + ContinuousBatcher against vLLM/TGI. Even 10% parity
-   validates the sovereign stack approach.
-
-4. **ARM NEON microkernel parity** (MEDIUM): Apple M-series and Graviton are
+5. **ARM NEON microkernel parity** (MEDIUM): Apple M-series and Graviton
    deployment targets. Current NEON path functional but not optimized.
