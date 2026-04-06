@@ -142,18 +142,259 @@ pub fn build_cta128_wmma_fp16_cpasync(m: u32, n: u32, k: u32) -> PtxKernel {
             let frag_c11 = ctx.wmma_init_c_zero();
 
             let smem_single_reg = ctx.mov_u32_imm(smem_single as u32);
+            let store_buf_off = ctx.mov_u32_imm(0);
 
-            // ─── Pipeline: 3-stage prologue ───
-            // Stage 0: load into buf[0]
-            // TODO: implement 3-stage prologue + main loop + epilogue
-            // For now, use simplified 2-stage for correctness testing
+            // Helper: issue 2 cp.async per thread to load 128×16 A or 16×128 B
+            // For A threads: smem_off0/1, global addr from a_row0, a_col0_base + k_off
+            // For B threads: smem_off0/1, global addr from b_row0 + k_off, b_col0_base
 
-            // Placeholder: delegate to 64×64 kernel's pattern but with 128×128 constants
-            // This requires completing the load/compute/store pipeline
+            // ─── Prologue: cp.async tile 0 into buf[0] ───
+            {
+                let k_off = ctx.mov_u32_imm(0);
+                // A: (cta_row + a_row0) * K + k_off + a_col0_base
+                let a_row_global = ctx.add_u32_reg(cta_row, a_row0);
+                let a_rowk = ctx.mul_u32_reg(a_row_global, k_const);
+                let a_flat0 = ctx.add_u32_reg(a_rowk, a_col0_base);
+                let a_byte0 = ctx.mul_wide_u32(a_flat0, 2);
+                let a_addr0 = ctx.add_u64(a_ptr, a_byte0);
+                // Second cp.async: col + 4
+                let a_col1 = ctx.add_u32_reg(a_col0_base, c_4);
+                let a_flat1 = ctx.add_u32_reg(a_rowk, a_col1);
+                let a_byte1 = ctx.mul_wide_u32(a_flat1, 2);
+                let a_addr1 = ctx.add_u64(a_ptr, a_byte1);
 
-            // ─── Epilogue: store C ───
-            // Each warp stores 2×2 WMMA tiles (32×32 output) to global memory
-            // TODO: implement C store with 4 wmma_store_d calls
+                // B: (k_off + b_row0) * N + cta_col + b_col0_base
+                let b_row_global = ctx.add_u32_reg(k_off, b_row0);
+                let b_flat0 = ctx.mad_lo_u32(b_row_global, n_const, cta_col);
+                let b_flat0 = ctx.add_u32_reg(b_flat0, b_col0_base);
+                let b_byte0 = ctx.mul_wide_u32(b_flat0, 2);
+                let b_addr0 = ctx.add_u64(b_ptr, b_byte0);
+                let b_col1 = ctx.add_u32_reg(b_col0_base, c_4);
+                let b_flat1 = ctx.mad_lo_u32(b_row_global, n_const, cta_col);
+                let b_flat1 = ctx.add_u32_reg(b_flat1, b_col1);
+                let b_byte1 = ctx.mul_wide_u32(b_flat1, 2);
+                let b_addr1 = ctx.add_u64(b_ptr, b_byte1);
+
+                // Issue 2 cp.async per thread (A or B based on role)
+                let gaddr0 = ctx.selp_u64(is_a_thread, a_addr0, b_addr0);
+                let gaddr1 = ctx.selp_u64(is_a_thread, a_addr1, b_addr1);
+                let soff0 = ctx.selp_u32(is_a_thread, a_smem_off0, b_smem_off0);
+                let soff1 = ctx.selp_u32(is_a_thread, a_smem_off1, b_smem_off1);
+                ctx.cp_async_global_to_shared(soff0, gaddr0, 8);
+                ctx.cp_async_global_to_shared(soff1, gaddr1, 8);
+                let _ = k_off;
+            }
+            ctx.cp_async_commit_group();
+            ctx.cp_async_wait_group(0);
+            ctx.bar_sync(0);
+
+            // ─── Main K-loop (double-buffer) ───
+            let k_tile = ctx.mov_u32_imm(1);
+            ctx.label("k_loop");
+            let k_done = ctx.setp_ge_u32(k_tile, n_k_tiles_reg);
+            ctx.branch_if(k_done, "dbuf_epi");
+
+            // Swap buffer
+            let new_store = ctx.sub_u32_reg(smem_single_reg, store_buf_off);
+            ctx.mov_u32_reg(store_buf_off, new_store);
+            let compute_off = ctx.sub_u32_reg(smem_single_reg, store_buf_off);
+
+            // Async load next K-tile into store buffer
+            let k_off = ctx.mul_u32_reg(k_tile, c_16);
+            {
+                let a_row_global = ctx.add_u32_reg(cta_row, a_row0);
+                let a_rowk = ctx.mul_u32_reg(a_row_global, k_const);
+                let a_col_full = ctx.add_u32_reg(k_off, a_col0_base);
+                let a_flat0 = ctx.add_u32_reg(a_rowk, a_col_full);
+                let a_byte0 = ctx.mul_wide_u32(a_flat0, 2);
+                let a_addr0 = ctx.add_u64(a_ptr, a_byte0);
+                let a_col_full1 = ctx.add_u32_reg(a_col_full, c_4);
+                let a_flat1 = ctx.add_u32_reg(a_rowk, a_col_full1);
+                let a_byte1 = ctx.mul_wide_u32(a_flat1, 2);
+                let a_addr1 = ctx.add_u64(a_ptr, a_byte1);
+
+                let b_row_full = ctx.add_u32_reg(k_off, b_row0);
+                let b_flat0 = ctx.mad_lo_u32(b_row_full, n_const, cta_col);
+                let b_flat0 = ctx.add_u32_reg(b_flat0, b_col0_base);
+                let b_byte0 = ctx.mul_wide_u32(b_flat0, 2);
+                let b_addr0 = ctx.add_u64(b_ptr, b_byte0);
+                let b_col_full1 = ctx.add_u32_reg(b_col0_base, c_4);
+                let b_flat1 = ctx.mad_lo_u32(b_row_full, n_const, cta_col);
+                let b_flat1 = ctx.add_u32_reg(b_flat1, b_col_full1);
+                let b_byte1 = ctx.mul_wide_u32(b_flat1, 2);
+                let b_addr1 = ctx.add_u64(b_ptr, b_byte1);
+
+                let gaddr0 = ctx.selp_u64(is_a_thread, a_addr0, b_addr0);
+                let gaddr1 = ctx.selp_u64(is_a_thread, a_addr1, b_addr1);
+                let soff0 = ctx.selp_u32(is_a_thread, a_smem_off0, b_smem_off0);
+                let soff1 = ctx.selp_u32(is_a_thread, a_smem_off1, b_smem_off1);
+                let soff0_buf = ctx.add_u32_reg(soff0, store_buf_off);
+                let soff1_buf = ctx.add_u32_reg(soff1, store_buf_off);
+                ctx.cp_async_global_to_shared(soff0_buf, gaddr0, 8);
+                ctx.cp_async_global_to_shared(soff1_buf, gaddr1, 8);
+            }
+            ctx.cp_async_commit_group();
+
+            // ═══ WMMA compute on compute buffer (4 WMMAs per warp: 2×2 grid) ═══
+            // Each warp at (warp_row, warp_col) computes 32×32 output as:
+            //   (r,c) = (0,0), (0,1), (1,0), (1,1) sub-tiles of 16×16
+            {
+                // A fragment addresses: warp_m_off + {0, 16} rows, compute_off
+                // B fragment addresses: warp_n_off + {0, 16} cols, compute_off
+                let stride_a = ctx.mov_u32_imm(16); // A leading dim in smem = tile_k=16
+                let stride_b = ctx.mov_u32_imm(128); // B leading dim in smem = tile_n=128
+
+                // Top-left (0,0): A at warp_m_off, B at warp_n_off
+                let a00_bytes = ctx.mul_u32_reg(warp_m_off, c_16);
+                let a00_bytes = ctx.mul_u32_reg(a00_bytes, c_2);
+                let a00_buf = ctx.add_u32_reg(a00_bytes, compute_off);
+                let a00_off = ctx.cvt_u64_u32(a00_buf);
+                let a00_ptr = ctx.add_u64(smem_base, a00_off);
+                let frag_a0 = ctx.wmma_load_a_f16(a00_ptr, 16, WmmaLayout::RowMajor);
+
+                let b00_bytes = ctx.mul_u32_reg(warp_n_off, c_2);
+                let b00_base = ctx.add_u32_reg(c_a_smem, b00_bytes);
+                let b00_buf = ctx.add_u32_reg(b00_base, compute_off);
+                let b00_off = ctx.cvt_u64_u32(b00_buf);
+                let b00_ptr = ctx.add_u64(smem_base, b00_off);
+                let frag_b0 = ctx.wmma_load_b_f16(b00_ptr, 128, WmmaLayout::RowMajor);
+
+                // Top-right (0,1): same A row, B at warp_n_off+16
+                let b01_off_bytes = ctx.add_u32_reg(warp_n_off, c_16);
+                let b01_bytes = ctx.mul_u32_reg(b01_off_bytes, c_2);
+                let b01_base = ctx.add_u32_reg(c_a_smem, b01_bytes);
+                let b01_buf = ctx.add_u32_reg(b01_base, compute_off);
+                let b01_off = ctx.cvt_u64_u32(b01_buf);
+                let b01_ptr = ctx.add_u64(smem_base, b01_off);
+                let frag_b1 = ctx.wmma_load_b_f16(b01_ptr, 128, WmmaLayout::RowMajor);
+
+                // Bottom-left (1,0): A at warp_m_off+16, same B col
+                let a10_row = ctx.add_u32_reg(warp_m_off, c_16);
+                let a10_bytes = ctx.mul_u32_reg(a10_row, c_16);
+                let a10_bytes = ctx.mul_u32_reg(a10_bytes, c_2);
+                let a10_buf = ctx.add_u32_reg(a10_bytes, compute_off);
+                let a10_off = ctx.cvt_u64_u32(a10_buf);
+                let a10_ptr = ctx.add_u64(smem_base, a10_off);
+                let frag_a1 = ctx.wmma_load_a_f16(a10_ptr, 16, WmmaLayout::RowMajor);
+
+                // Compute 4 WMMAs
+                let d00 = ctx.wmma_mma_f16_f32_row_row(&frag_a0, &frag_b0, &frag_c00);
+                for (c_r, d_r) in frag_c00.iter().zip(d00.iter()) {
+                    ctx.mov_f32_reg(*c_r, *d_r);
+                }
+                let d01 = ctx.wmma_mma_f16_f32_row_row(&frag_a0, &frag_b1, &frag_c01);
+                for (c_r, d_r) in frag_c01.iter().zip(d01.iter()) {
+                    ctx.mov_f32_reg(*c_r, *d_r);
+                }
+                let d10 = ctx.wmma_mma_f16_f32_row_row(&frag_a1, &frag_b0, &frag_c10);
+                for (c_r, d_r) in frag_c10.iter().zip(d10.iter()) {
+                    ctx.mov_f32_reg(*c_r, *d_r);
+                }
+                let d11 = ctx.wmma_mma_f16_f32_row_row(&frag_a1, &frag_b1, &frag_c11);
+                for (c_r, d_r) in frag_c11.iter().zip(d11.iter()) {
+                    ctx.mov_f32_reg(*c_r, *d_r);
+                }
+            }
+
+            ctx.cp_async_wait_group(0);
+            ctx.bar_sync(0);
+            ctx.add_u32_inplace(k_tile, 1);
+            ctx.branch("k_loop");
+
+            // ─── Epilogue: last K-tile WMMA ───
+            ctx.label("dbuf_epi");
+            {
+                let stride_a = ctx.mov_u32_imm(16);
+
+                let a00_bytes = ctx.mul_u32_reg(warp_m_off, c_16);
+                let a00_bytes = ctx.mul_u32_reg(a00_bytes, c_2);
+                let a00_buf = ctx.add_u32_reg(a00_bytes, store_buf_off);
+                let a00_off = ctx.cvt_u64_u32(a00_buf);
+                let a00_ptr = ctx.add_u64(smem_base, a00_off);
+                let frag_a0 = ctx.wmma_load_a_f16(a00_ptr, 16, WmmaLayout::RowMajor);
+
+                let b00_bytes = ctx.mul_u32_reg(warp_n_off, c_2);
+                let b00_base = ctx.add_u32_reg(c_a_smem, b00_bytes);
+                let b00_buf = ctx.add_u32_reg(b00_base, store_buf_off);
+                let b00_off = ctx.cvt_u64_u32(b00_buf);
+                let b00_ptr = ctx.add_u64(smem_base, b00_off);
+                let frag_b0 = ctx.wmma_load_b_f16(b00_ptr, 128, WmmaLayout::RowMajor);
+
+                let b01_off_bytes = ctx.add_u32_reg(warp_n_off, c_16);
+                let b01_bytes = ctx.mul_u32_reg(b01_off_bytes, c_2);
+                let b01_base = ctx.add_u32_reg(c_a_smem, b01_bytes);
+                let b01_buf = ctx.add_u32_reg(b01_base, store_buf_off);
+                let b01_off = ctx.cvt_u64_u32(b01_buf);
+                let b01_ptr = ctx.add_u64(smem_base, b01_off);
+                let frag_b1 = ctx.wmma_load_b_f16(b01_ptr, 128, WmmaLayout::RowMajor);
+
+                let a10_row = ctx.add_u32_reg(warp_m_off, c_16);
+                let a10_bytes = ctx.mul_u32_reg(a10_row, c_16);
+                let a10_bytes = ctx.mul_u32_reg(a10_bytes, c_2);
+                let a10_buf = ctx.add_u32_reg(a10_bytes, store_buf_off);
+                let a10_off = ctx.cvt_u64_u32(a10_buf);
+                let a10_ptr = ctx.add_u64(smem_base, a10_off);
+                let frag_a1 = ctx.wmma_load_a_f16(a10_ptr, 16, WmmaLayout::RowMajor);
+
+                let d00 = ctx.wmma_mma_f16_f32_row_row(&frag_a0, &frag_b0, &frag_c00);
+                for (c_r, d_r) in frag_c00.iter().zip(d00.iter()) {
+                    ctx.mov_f32_reg(*c_r, *d_r);
+                }
+                let d01 = ctx.wmma_mma_f16_f32_row_row(&frag_a0, &frag_b1, &frag_c01);
+                for (c_r, d_r) in frag_c01.iter().zip(d01.iter()) {
+                    ctx.mov_f32_reg(*c_r, *d_r);
+                }
+                let d10 = ctx.wmma_mma_f16_f32_row_row(&frag_a1, &frag_b0, &frag_c10);
+                for (c_r, d_r) in frag_c10.iter().zip(d10.iter()) {
+                    ctx.mov_f32_reg(*c_r, *d_r);
+                }
+                let d11 = ctx.wmma_mma_f16_f32_row_row(&frag_a1, &frag_b1, &frag_c11);
+                for (c_r, d_r) in frag_c11.iter().zip(d11.iter()) {
+                    ctx.mov_f32_reg(*c_r, *d_r);
+                }
+
+                let _ = stride_a;
+            }
+
+            // ─── Store C: 4 wmma_store_d calls for 2×2 grid ───
+            {
+                // Sub-tile (0,0): C at (cta_row + warp_m_off, cta_col + warp_n_off)
+                let c_row0 = ctx.add_u32_reg(cta_row, warp_m_off);
+                let c_col0 = ctx.add_u32_reg(cta_col, warp_n_off);
+                let cr_ok = ctx.setp_lt_u32(c_row0, m_param);
+                ctx.branch_if_not(cr_ok, "exit");
+                let cc_ok = ctx.setp_lt_u32(c_col0, n_param);
+                ctx.branch_if_not(cc_ok, "exit");
+
+                let c_row_off = ctx.mul_wide_u32_reg(c_row0, n_param);
+                let c_col_off = ctx.cvt_u64_u32(c_col0);
+                let c_base = ctx.add_u64(c_row_off, c_col_off);
+                let c_base = ctx.mul_u64(c_base, 4); // f32 = 4 bytes
+                let c00_addr = ctx.add_u64(c_ptr, c_base);
+                ctx.wmma_store_d_f32(c00_addr, &frag_c00, n, WmmaLayout::RowMajor);
+
+                // Sub-tile (0,1): col + 16
+                let c_col1 = ctx.add_u32_reg(c_col0, c_16);
+                let c_col1_off = ctx.cvt_u64_u32(c_col1);
+                let c01_base = ctx.add_u64(c_row_off, c_col1_off);
+                let c01_base = ctx.mul_u64(c01_base, 4);
+                let c01_addr = ctx.add_u64(c_ptr, c01_base);
+                ctx.wmma_store_d_f32(c01_addr, &frag_c01, n, WmmaLayout::RowMajor);
+
+                // Sub-tile (1,0): row + 16
+                let c_row1 = ctx.add_u32_reg(c_row0, c_16);
+                let c_row1_off = ctx.mul_wide_u32_reg(c_row1, n_param);
+                let c10_base = ctx.add_u64(c_row1_off, c_col_off);
+                let c10_base = ctx.mul_u64(c10_base, 4);
+                let c10_addr = ctx.add_u64(c_ptr, c10_base);
+                ctx.wmma_store_d_f32(c10_addr, &frag_c10, n, WmmaLayout::RowMajor);
+
+                // Sub-tile (1,1): row + 16, col + 16
+                let c11_base = ctx.add_u64(c_row1_off, c_col1_off);
+                let c11_base = ctx.mul_u64(c11_base, 4);
+                let c11_addr = ctx.add_u64(c_ptr, c11_base);
+                ctx.wmma_store_d_f32(c11_addr, &frag_c11, n, WmmaLayout::RowMajor);
+            }
 
             ctx.label("exit");
             ctx.ret();
