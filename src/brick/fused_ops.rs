@@ -109,47 +109,40 @@ impl ComputeOp for FusedQKVOp {
             return Err(TruenoError::SizeMismatch { expected: self.hidden_size, actual: x.len() });
         }
 
+        let h = self.hidden_size;
+
         // Q projection: x @ W_q^T -> [hidden_size]
-        // Uninit: q[i] = sum (SET, not accumulate) for every i.
-        let mut q: Vec<f32> = Vec::with_capacity(self.hidden_size);
-        // SAFETY: Each q[i] is SET to the dot product sum before any read.
+        // CGP-DBUF: SIMD dot product per row (was scalar nested loop).
+        let mut q: Vec<f32> = Vec::with_capacity(h);
+        // SAFETY: Each q[i] is SET to simd_dot result before any read.
         unsafe {
-            q.set_len(self.hidden_size);
+            q.set_len(h);
         }
-        for i in 0..self.hidden_size {
-            let mut sum = 0.0f32;
-            for j in 0..self.hidden_size {
-                sum += x[j] * weights.q_weight[i * self.hidden_size + j];
-            }
-            q[i] = sum;
+        for i in 0..h {
+            q[i] =
+                super::attention::AttentionOp::simd_dot(&x, &weights.q_weight[i * h..(i + 1) * h]);
         }
 
         // K projection: x @ W_k^T -> [kv_dim]
         let mut k: Vec<f32> = Vec::with_capacity(self.kv_dim);
-        // SAFETY: Each k[i] is SET to the dot product sum before any read.
+        // SAFETY: Each k[i] is SET to simd_dot result before any read.
         unsafe {
             k.set_len(self.kv_dim);
         }
         for i in 0..self.kv_dim {
-            let mut sum = 0.0f32;
-            for j in 0..self.hidden_size {
-                sum += x[j] * weights.k_weight[i * self.hidden_size + j];
-            }
-            k[i] = sum;
+            k[i] =
+                super::attention::AttentionOp::simd_dot(&x, &weights.k_weight[i * h..(i + 1) * h]);
         }
 
         // V projection: x @ W_v^T -> [kv_dim]
         let mut v: Vec<f32> = Vec::with_capacity(self.kv_dim);
-        // SAFETY: Each v[i] is SET to the dot product sum before any read.
+        // SAFETY: Each v[i] is SET to simd_dot result before any read.
         unsafe {
             v.set_len(self.kv_dim);
         }
         for i in 0..self.kv_dim {
-            let mut sum = 0.0f32;
-            for j in 0..self.hidden_size {
-                sum += x[j] * weights.v_weight[i * self.hidden_size + j];
-            }
-            v[i] = sum;
+            v[i] =
+                super::attention::AttentionOp::simd_dot(&x, &weights.v_weight[i * h..(i + 1) * h]);
         }
 
         Ok((q, k, v))
@@ -251,7 +244,8 @@ impl ComputeOp for FusedGateUpOp {
         }
 
         // SIMD-optimized fused gate + up + SwiGLU
-        // Uses Vector dot product for ~4-8x speedup over scalar loops
+        // CGP-DBUF: Use slice-based SIMD dot directly — eliminates 2×intermediate_size
+        // Vector allocations per call (was ~38K allocs for Qwen 3B).
         // Uninit: output[i] = silu(gate) * up (SET) for every i.
         let mut output: Vec<f32> = Vec::with_capacity(self.intermediate_size);
         // SAFETY: Loop writes output[i] = silu(gate_sum) * up_sum for all i.
@@ -259,29 +253,18 @@ impl ComputeOp for FusedGateUpOp {
             output.set_len(self.intermediate_size);
         }
 
-        // Select best SIMD backend (AVX2/AVX-512/NEON)
-        let simd_backend = crate::Backend::select_best();
-
-        // Create SIMD vector for input (reused for both gate and up projections)
-        let x_vec = crate::Vector::from_slice_with_backend(&x, simd_backend);
-
+        let h = self.hidden_size;
         for i in 0..self.intermediate_size {
-            let row_start = i * self.hidden_size;
-            let row_end = row_start + self.hidden_size;
+            let row_start = i * h;
+            let row_end = row_start + h;
 
-            // Gate projection with SIMD dot product
-            let gate_row = crate::Vector::from_slice_with_backend(
+            // Direct SIMD dot on slices — no Vector allocation
+            let gate_sum = super::attention::AttentionOp::simd_dot(
+                &x,
                 &weights.gate_weight[row_start..row_end],
-                simd_backend,
             );
-            let gate_sum = x_vec.dot(&gate_row).unwrap_or(0.0);
-
-            // Up projection with SIMD dot product
-            let up_row = crate::Vector::from_slice_with_backend(
-                &weights.up_weight[row_start..row_end],
-                simd_backend,
-            );
-            let up_sum = x_vec.dot(&up_row).unwrap_or(0.0);
+            let up_sum =
+                super::attention::AttentionOp::simd_dot(&x, &weights.up_weight[row_start..row_end]);
 
             // SwiGLU: SiLU(gate) * up
             output[i] = Self::silu(gate_sum) * up_sum;

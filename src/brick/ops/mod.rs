@@ -137,7 +137,8 @@ impl ComputeOp for MatmulOp {
         let mat_b = crate::Matrix::from_vec_with_backend(self.k, self.n, b, simd_backend);
 
         let result = mat_a.matmul(&mat_b)?;
-        Ok(result.as_slice().to_vec())
+        // Take ownership of the data Vec directly — avoids redundant copy.
+        Ok(result.data)
     }
 
     fn tokens(&self, _input: &Self::Input) -> usize {
