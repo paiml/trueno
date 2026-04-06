@@ -184,10 +184,17 @@ PtxOp variant. Each `mma.sync` uses:
 - K-tile = 32 (two m16n8k16 per stage)
 - 4-stage cp.async pipeline
 
-**Shared memory layout**:
-- A tile: 128 × 32 × 2 bytes = 8 KB per stage
-- B tile: 32 × 128 × 2 bytes = 8 KB per stage
-- 4 stages: 64 KB total (fits in 48 KB static + 16 KB dynamic)
+**CUTLASS SM80 FP16 default (from default_gemm_configuration.h)**:
+- ThreadblockShape: `GemmShape<128, 256, 64>` — 128×256 CTA with K=64
+- WarpShape: `GemmShape<64, 64, 64>` — each warp owns 64×64 output
+- InstructionShape: `GemmShape<16, 8, 16>` — `mma.sync.m16n8k16`
+- Stages: 3
+
+**Our conservative 128×128 target (Phase 2)**:
+- CTA: 128×128, K-tile=32 (two m16n16k16 per stage)
+- Warp: 32×32 (4 warps per CTA, vs CUTLASS 4 warps for 64×64)
+- Shared memory per stage: A=128×32×2=8KB + B=32×128×2=8KB = 16KB
+- 3 stages: 48 KB total (fits in 48 KB static — no cuFuncSetAttribute needed)
 
 **Files to modify**:
 - New file: `trueno-gpu/src/kernels/gemm/basic/tensor_core/cta128_mma.rs`
