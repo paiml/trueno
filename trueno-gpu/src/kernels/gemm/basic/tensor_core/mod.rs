@@ -7,6 +7,7 @@
 //! - [`cta_wmma`]: CTA-level WMMA with 4 warps sharing 32×32 tiles
 //! - [`cta64_wmma`]: CTA-level WMMA with 16 warps sharing 64×64 tiles (2× data reuse)
 
+pub mod cta128_wmma;
 pub mod cta64_wmma;
 pub mod cta_wmma;
 mod simulated;
