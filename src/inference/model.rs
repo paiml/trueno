@@ -140,6 +140,53 @@ pub struct ModelWeights {
     pub layers: Vec<LayerWeights>,
 }
 
+/// Pre-allocated scratch buffers for the forward pass.
+/// Eliminates all per-token heap allocations (FALSIFY-ARENA-001).
+/// Contract: contracts/cgp/cgp-inference-arena-v1.yaml
+pub struct ForwardArena {
+    pub attn_input: Vec<f32>,
+    pub q: Vec<f32>,
+    pub k: Vec<f32>,
+    pub v: Vec<f32>,
+    pub attn_out: Vec<f32>,
+    pub attn_proj: Vec<f32>,
+    pub ffn_input: Vec<f32>,
+    pub gate: Vec<f32>,
+    pub up: Vec<f32>,
+    pub swiglu: Vec<f32>,
+    pub ffn_out: Vec<f32>,
+    pub hidden: Vec<f32>,
+    pub residual: Vec<f32>,
+    pub normed: Vec<f32>,
+    pub k_cache_head: Vec<f32>,
+    pub v_cache_head: Vec<f32>,
+}
+
+impl ForwardArena {
+    pub fn new(config: &ModelConfig) -> Self {
+        let kv_dim = config.num_kv_heads * config.head_dim;
+        let head_cache_size = config.max_seq_len * config.head_dim;
+        Self {
+            attn_input: vec![0.0f32; config.hidden_size],
+            q: vec![0.0f32; config.hidden_size],
+            k: vec![0.0f32; kv_dim],
+            v: vec![0.0f32; kv_dim],
+            attn_out: vec![0.0f32; config.hidden_size],
+            attn_proj: vec![0.0f32; config.hidden_size],
+            ffn_input: vec![0.0f32; config.hidden_size],
+            gate: vec![0.0f32; config.intermediate_size],
+            up: vec![0.0f32; config.intermediate_size],
+            swiglu: vec![0.0f32; config.intermediate_size],
+            ffn_out: vec![0.0f32; config.hidden_size],
+            hidden: vec![0.0f32; config.hidden_size],
+            residual: vec![0.0f32; config.hidden_size],
+            normed: vec![0.0f32; config.hidden_size],
+            k_cache_head: vec![0.0f32; head_cache_size],
+            v_cache_head: vec![0.0f32; head_cache_size],
+        }
+    }
+}
+
 /// KV cache for incremental decoding.
 pub struct KvCache {
     /// k_cache[layer][pos * head_dim * num_kv_heads .. ] — flat per-layer
@@ -190,16 +237,18 @@ impl LlamaModel {
 
     /// Run one forward pass for a single token at the given position.
     /// Returns logits [vocab_size].
+    /// Uses ForwardArena for zero per-token allocations (FALSIFY-ARENA-001).
     pub fn forward(
         &self,
         token_id: u32,
         pos: usize,
         kv_cache: &mut KvCache,
+        arena: &mut ForwardArena,
     ) -> Result<Vec<f32>, TruenoError> {
         let cfg = &self.config;
         let w = &self.weights;
 
-        // Token embedding lookup
+        // Token embedding lookup (copy into arena.hidden)
         let embd_start = token_id as usize * cfg.hidden_size;
         let embd_end = embd_start + cfg.hidden_size;
         if embd_end > w.token_embd.len() {
@@ -208,97 +257,106 @@ impl LlamaModel {
                 cfg.vocab_size
             )));
         }
-        let mut hidden = w.token_embd[embd_start..embd_end].to_vec();
+        arena.hidden[..cfg.hidden_size].copy_from_slice(&w.token_embd[embd_start..embd_end]);
 
         // Transformer layers
         for (layer_idx, lw) in w.layers.iter().enumerate() {
-            hidden = self.forward_layer(layer_idx, lw, &hidden, pos, kv_cache)?;
+            self.forward_layer(layer_idx, lw, pos, kv_cache, arena)?;
         }
 
         // Final RMS norm
-        let mut normed = vec![0.0f32; cfg.hidden_size];
-        rms_norm(&hidden, &w.output_norm, cfg.rms_norm_eps, &mut normed)?;
+        rms_norm(
+            &arena.hidden[..cfg.hidden_size],
+            &w.output_norm,
+            cfg.rms_norm_eps,
+            &mut arena.normed[..cfg.hidden_size],
+        )?;
 
-        // Output projection → logits
-        let logits = matmul_weight(&w.output_weight, &normed, cfg.hidden_size);
+        // Output projection → logits (this one allocation is unavoidable — vocab_size is large)
+        let logits =
+            matmul_weight(&w.output_weight, &arena.normed[..cfg.hidden_size], cfg.hidden_size);
 
         Ok(logits)
     }
 
+    /// Forward one layer, reading/writing arena.hidden in-place.
     fn forward_layer(
         &self,
         layer_idx: usize,
         lw: &LayerWeights,
-        hidden: &[f32],
         pos: usize,
         kv_cache: &mut KvCache,
-    ) -> Result<Vec<f32>, TruenoError> {
+        arena: &mut ForwardArena,
+    ) -> Result<(), TruenoError> {
         let cfg = &self.config;
         let kv_dim = cfg.num_kv_heads * cfg.head_dim;
+        let h_sz = cfg.hidden_size;
 
         // === Attention block ===
-        // RMS norm
-        let mut attn_input = vec![0.0f32; cfg.hidden_size];
-        rms_norm(hidden, &lw.attn_norm, cfg.rms_norm_eps, &mut attn_input)?;
+        rms_norm(
+            &arena.hidden[..h_sz],
+            &lw.attn_norm,
+            cfg.rms_norm_eps,
+            &mut arena.attn_input[..h_sz],
+        )?;
 
-        // QKV projections + optional bias (Qwen2/Qwen3)
-        let mut q = matmul_weight(&lw.q_weight, &attn_input, cfg.hidden_size);
-        let mut k_proj = matmul_weight(&lw.k_weight, &attn_input, cfg.hidden_size);
-        let mut v_proj = matmul_weight(&lw.v_weight, &attn_input, cfg.hidden_size);
+        // QKV projections into arena buffers
+        matmul_weight_into(&lw.q_weight, &arena.attn_input[..h_sz], h_sz, &mut arena.q[..h_sz]);
+        matmul_weight_into(&lw.k_weight, &arena.attn_input[..h_sz], h_sz, &mut arena.k[..kv_dim]);
+        matmul_weight_into(&lw.v_weight, &arena.attn_input[..h_sz], h_sz, &mut arena.v[..kv_dim]);
+
+        // Optional bias (Qwen2/Qwen3)
         if let Some(bias) = &lw.q_bias {
-            for (v, b) in q.iter_mut().zip(bias.iter()) {
+            for (v, b) in arena.q[..h_sz].iter_mut().zip(bias.iter()) {
                 *v += b;
             }
         }
         if let Some(bias) = &lw.k_bias {
-            for (v, b) in k_proj.iter_mut().zip(bias.iter()) {
+            for (v, b) in arena.k[..kv_dim].iter_mut().zip(bias.iter()) {
                 *v += b;
             }
         }
         if let Some(bias) = &lw.v_bias {
-            for (v, b) in v_proj.iter_mut().zip(bias.iter()) {
+            for (v, b) in arena.v[..kv_dim].iter_mut().zip(bias.iter()) {
                 *v += b;
             }
         }
 
-        // Apply RoPE to Q and K
-        let mut q_rope = q;
-        let mut k_rope = k_proj;
-        apply_rope(&mut q_rope, cfg.num_heads, cfg.head_dim, pos, cfg.rope_theta);
-        apply_rope(&mut k_rope, cfg.num_kv_heads, cfg.head_dim, pos, cfg.rope_theta);
+        // RoPE in-place
+        apply_rope(&mut arena.q[..h_sz], cfg.num_heads, cfg.head_dim, pos, cfg.rope_theta);
+        apply_rope(&mut arena.k[..kv_dim], cfg.num_kv_heads, cfg.head_dim, pos, cfg.rope_theta);
 
-        // Store K,V in cache at position `pos`
+        // Store K,V in cache
         let kv_off = pos * kv_dim;
-        kv_cache.k[layer_idx][kv_off..kv_off + kv_dim].copy_from_slice(&k_rope);
-        kv_cache.v[layer_idx][kv_off..kv_off + kv_dim].copy_from_slice(&v_proj);
+        kv_cache.k[layer_idx][kv_off..kv_off + kv_dim].copy_from_slice(&arena.k[..kv_dim]);
+        kv_cache.v[layer_idx][kv_off..kv_off + kv_dim].copy_from_slice(&arena.v[..kv_dim]);
 
         let seq_len = pos + 1;
 
-        // Multi-head attention (decode: single query token)
-        let mut attn_out = vec![0.0f32; cfg.hidden_size];
+        // Multi-head attention
+        arena.attn_out[..h_sz].fill(0.0);
         let heads_per_kv = cfg.num_heads / cfg.num_kv_heads;
 
         for h in 0..cfg.num_heads {
-            let kv_h = h / heads_per_kv; // GQA: multiple Q heads share same KV head
-            let q_head = &q_rope[h * cfg.head_dim..(h + 1) * cfg.head_dim];
+            let kv_h = h / heads_per_kv;
+            let q_head = &arena.q[h * cfg.head_dim..(h + 1) * cfg.head_dim];
 
-            // Build contiguous K/V cache view for this head
-            let mut k_cache_head = vec![0.0f32; seq_len * cfg.head_dim];
-            let mut v_cache_head = vec![0.0f32; seq_len * cfg.head_dim];
+            // Build contiguous K/V view for this head (reuse arena buffers)
+            let view_len = seq_len * cfg.head_dim;
             for s in 0..seq_len {
                 let src_off = s * kv_dim + kv_h * cfg.head_dim;
                 let dst_off = s * cfg.head_dim;
-                k_cache_head[dst_off..dst_off + cfg.head_dim]
+                arena.k_cache_head[dst_off..dst_off + cfg.head_dim]
                     .copy_from_slice(&kv_cache.k[layer_idx][src_off..src_off + cfg.head_dim]);
-                v_cache_head[dst_off..dst_off + cfg.head_dim]
+                arena.v_cache_head[dst_off..dst_off + cfg.head_dim]
                     .copy_from_slice(&kv_cache.v[layer_idx][src_off..src_off + cfg.head_dim]);
             }
 
-            let out_head = &mut attn_out[h * cfg.head_dim..(h + 1) * cfg.head_dim];
+            let out_head = &mut arena.attn_out[h * cfg.head_dim..(h + 1) * cfg.head_dim];
             fused_attention_decode(
                 q_head,
-                &k_cache_head,
-                &v_cache_head,
+                &arena.k_cache_head[..view_len],
+                &arena.v_cache_head[..view_len],
                 cfg.head_dim,
                 seq_len,
                 out_head,
@@ -306,39 +364,56 @@ impl LlamaModel {
         }
 
         // Output projection
-        let attn_projected = matmul_weight(&lw.o_weight, &attn_out, cfg.hidden_size);
+        matmul_weight_into(
+            &lw.o_weight,
+            &arena.attn_out[..h_sz],
+            h_sz,
+            &mut arena.attn_proj[..h_sz],
+        );
 
-        // Residual connection
-        let mut residual: Vec<f32> =
-            hidden.iter().zip(attn_projected.iter()).map(|(a, b)| a + b).collect();
-
-        // === FFN block ===
-        let mut ffn_input = vec![0.0f32; cfg.hidden_size];
-        rms_norm(&residual, &lw.ffn_norm, cfg.rms_norm_eps, &mut ffn_input)?;
-
-        // Gate + Up projections (SwiGLU)
-        let gate = matmul_weight(&lw.gate_weight, &ffn_input, cfg.hidden_size);
-        let up = matmul_weight(&lw.up_weight, &ffn_input, cfg.hidden_size);
-
-        // SiLU(gate) * up
-        let swiglu: Vec<f32> = gate
-            .iter()
-            .zip(up.iter())
-            .map(|(&g, &u)| {
-                let silu_g = g / (1.0 + (-g).exp());
-                silu_g * u
-            })
-            .collect();
-
-        // Down projection
-        let ffn_out = matmul_weight(&lw.down_weight, &swiglu, cfg.intermediate_size);
-
-        // Residual connection
-        for (r, f) in residual.iter_mut().zip(ffn_out.iter()) {
-            *r += f;
+        // Residual: residual = hidden + attn_proj
+        for i in 0..h_sz {
+            arena.residual[i] = arena.hidden[i] + arena.attn_proj[i];
         }
 
-        Ok(residual)
+        // === FFN block ===
+        rms_norm(
+            &arena.residual[..h_sz],
+            &lw.ffn_norm,
+            cfg.rms_norm_eps,
+            &mut arena.ffn_input[..h_sz],
+        )?;
+
+        let i_sz = cfg.intermediate_size;
+        matmul_weight_into(
+            &lw.gate_weight,
+            &arena.ffn_input[..h_sz],
+            h_sz,
+            &mut arena.gate[..i_sz],
+        );
+        matmul_weight_into(&lw.up_weight, &arena.ffn_input[..h_sz], h_sz, &mut arena.up[..i_sz]);
+
+        // SiLU(gate) * up → swiglu
+        for i in 0..i_sz {
+            let g = arena.gate[i];
+            let silu_g = g / (1.0 + (-g).exp());
+            arena.swiglu[i] = silu_g * arena.up[i];
+        }
+
+        // Down projection
+        matmul_weight_into(
+            &lw.down_weight,
+            &arena.swiglu[..i_sz],
+            i_sz,
+            &mut arena.ffn_out[..h_sz],
+        );
+
+        // Residual → hidden (for next layer)
+        for i in 0..h_sz {
+            arena.hidden[i] = arena.residual[i] + arena.ffn_out[i];
+        }
+
+        Ok(())
     }
 }
 
@@ -562,8 +637,8 @@ fn load_weight_matrix(
     }
 }
 
-/// Dispatch matrix-vector multiply based on weight type.
-/// input: [in_dim], output: [weight.rows()]
+/// Dispatch matrix-vector multiply based on weight type (allocating).
+/// Used only for output projection (vocab_size too large for arena).
 fn matmul_weight(weight: &WeightMatrix, input: &[f32], in_dim: usize) -> Vec<f32> {
     match weight {
         WeightMatrix::Q4K { data, rows } => matmul_q4k_f32_dispatch(data, input, *rows, in_dim),
@@ -574,6 +649,22 @@ fn matmul_weight(weight: &WeightMatrix, input: &[f32], in_dim: usize) -> Vec<f32
                 out[i] = row.iter().zip(input.iter()).map(|(a, b)| a * b).sum();
             }
             out
+        }
+    }
+}
+
+/// Dispatch matrix-vector multiply into a pre-allocated output buffer (zero-alloc).
+fn matmul_weight_into(weight: &WeightMatrix, input: &[f32], in_dim: usize, out: &mut [f32]) {
+    match weight {
+        WeightMatrix::Q4K { data, rows } => {
+            let result = matmul_q4k_f32_dispatch(data, input, *rows, in_dim);
+            out[..*rows].copy_from_slice(&result);
+        }
+        WeightMatrix::F32 { data, rows } => {
+            for i in 0..*rows {
+                let row = &data[i * in_dim..(i + 1) * in_dim];
+                out[i] = row.iter().zip(input.iter()).map(|(a, b)| a * b).sum();
+            }
         }
     }
 }

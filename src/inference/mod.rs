@@ -19,4 +19,4 @@ pub mod model;
 
 pub use generate::{generate, SampleParams};
 pub use gguf::GgufFile;
-pub use model::{KvCache, LlamaModel, ModelConfig};
+pub use model::{ForwardArena, KvCache, LlamaModel, ModelConfig};

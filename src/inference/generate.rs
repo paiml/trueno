@@ -1,7 +1,7 @@
 //! Token sampling and text generation loop.
 
 use crate::error::TruenoError;
-use crate::inference::model::{KvCache, LlamaModel};
+use crate::inference::model::{ForwardArena, KvCache, LlamaModel};
 
 /// Sampling parameters for text generation.
 #[derive(Debug, Clone)]
@@ -112,13 +112,14 @@ pub fn generate(
     eos_token: u32,
 ) -> Result<Vec<u32>, TruenoError> {
     let mut kv_cache = KvCache::new(&model.config);
+    let mut arena = ForwardArena::new(&model.config);
     let mut rng = Rng::new(params.seed);
     let mut generated = Vec::with_capacity(max_tokens);
 
     // Prefill: process prompt tokens
     let mut last_logits = Vec::new();
     for (pos, &token_id) in prompt_tokens.iter().enumerate() {
-        last_logits = model.forward(token_id, pos, &mut kv_cache)?;
+        last_logits = model.forward(token_id, pos, &mut kv_cache, &mut arena)?;
     }
 
     if last_logits.is_empty() {
@@ -138,7 +139,7 @@ pub fn generate(
         }
 
         generated.push(token);
-        last_logits = model.forward(token, pos, &mut kv_cache)?;
+        last_logits = model.forward(token, pos, &mut kv_cache, &mut arena)?;
         pos += 1;
     }
 
