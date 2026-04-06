@@ -1329,6 +1329,25 @@ fn cta64_vs_cta32_vs_cublas_fp16() {
                         }
                     }
                     stream.synchronize().ok();
+
+                    // Correctness spot-check: all-ones inputs → C[i] should be K
+                    if n == 256 {
+                        let mut result = vec![0.0f32; m * n];
+                        c_buf.copy_to_host(&mut result).expect("D2H");
+                        let expected = k as f32;
+                        let max_err =
+                            result.iter().map(|&v| (v - expected).abs()).fold(0.0f32, f32::max);
+                        assert!(
+                            max_err < 1.0,
+                            "64x128 correctness FAILED at {n}: max_err={max_err}, expected={expected}"
+                        );
+                        eprintln!("  64x128 correctness OK at {n}: max_err={max_err:.4}");
+                        // Reset C buffer for timing
+                        let c32 = vec![0.0f32; m * n];
+                        let c_buf_fresh = GpuBuffer::from_host(&ctx, &c32).expect("C reset");
+                        c_ptr = c_buf_fresh.as_ptr();
+                    }
+
                     start.elapsed().as_micros() as f64 / iters as f64
                 }
                 Err(e) => {
