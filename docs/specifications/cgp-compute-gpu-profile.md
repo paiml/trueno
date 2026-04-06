@@ -3384,10 +3384,24 @@ is in the unified multi-backend architecture (CPU+GPU+WASM from one codebase),
 not in beating hand-tuned per-operation C code. The 0.81× ratio at 4096 is
 competitive for a pure-Rust implementation.
 
-**P3c. GPU GEMM pure-Rust PTX improvement.**
-Current 11.6 TFLOP/s (3.5% of FP16 peak) is the largest gap. CUTLASS-style
-tiled shared-memory GEMM with double buffering is the path to 0.5x cuBLAS.
-Effort: High (2-4 weeks). See trueno#200, trueno#203.
+**P3c. GPU GEMM pure-Rust PTX improvement. IN PROGRESS**
+
+Two parallel tracks (2026-04-06):
+
+**Track 1 (cuBLAS backend) ✅ DONE**: `Matrix::matmul` routes through cuBLAS
+when `--features cuda` enabled. 105-150 TFLOP/s production path via trueno-gpu
+own FFI bindings. Falls back to wgpu if CUDA unavailable.
+
+**Track 2 (128×128 PTX kernel) SCAFFOLD BUILT**: `cta128_wmma.rs` created with:
+- 128×128 CTA tile (2× compute-to-load ratio vs 64×64)
+- 16 warps, 4×4 grid, each warp → 2×2 WMMA tiles (32×32 output)
+- 3-stage cp.async pipeline, 24KB smem (fits in 48KB static)
+- 3 FALSIFY tests pass (build, smem size, compute ratio)
+- Load/compute pipeline TODO — needs 2 cp.async per thread for A/B loading
+
+CUTLASS SM80 FP16 reference (from source): `GemmShape<128,256,64>`,
+`WarpShape<64,64,64>`, `InstructionShape<16,8,16>` (mma.sync.m16n8k16), 3 stages.
+Bridge plan: `docs/specifications/sub/gpu-gemm-bridge-plan.md`.
 
 ### Priority 4: Research & Future
 
@@ -3414,7 +3428,7 @@ and Graviton are deployment targets that need dedicated 8x8 NEON microkernels.
 | P2b compare --measure | Low | Low | Low | ✅ WORKING | Auto-measures when binary exists |
 | P3a contract schema | Low | Low | Low | ✅ DONE | 14/14 pass, 69 checks |
 | P3b llama.cpp bench | Medium | Low | Low | ✅ DONE | **0.81× measured** |
-| P3c GPU PTX | Medium | High | High | NOT STARTED | Long-term |
+| P3c GPU PTX | Medium | High | High | IN PROGRESS | cuBLAS backend ✅ + 128×128 scaffold |
 | **CGP-DBUF micro-opt** | **Medium** | **Low** | **Low** | ✅ **7 PHASES DONE** | **Diminishing returns** |
 
 **CGP-DBUF conclusion**: After 7 phases and 35+ experiments, the CPU optimization
