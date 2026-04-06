@@ -3147,22 +3147,43 @@ The 8×32 tile with KC=256 is optimal for row-major C on AVX-512.
 Source: `gemm-0.19.0` (faer's GEMM engine), `gemm-common-0.19.0`, `nano-gemm-0.2.2`.
 Analysis via `decy audit` + `pmat query` + direct source comparison.
 
-## Appendix E: Recommended Next Steps (2026-04-05)
+## Appendix E: Recommended Next Steps (2026-04-06, updated)
 
-### Current State Summary (updated 2026-04-05)
+### Current State Summary
 
 **cgp tool**: 18/18 CLI commands implemented (only `cgp tui` is STUB).
-3623 tests passing (updated 2026-04-06). 16 FALSIFY tests: 11 UNINIT + 3 PARALLEL + 2 SIMD.
+3623 tests passing. 16 FALSIFY tests (11 UNINIT + 3 PARALLEL + 2 SIMD).
+65 peer-reviewed citations [1]-[65]. 11 provable-contracts, all pass.
 
-**SIMD softmax sweep (2026-04-06, CGP-DBUF Phase 6)**:
+**CGP-DBUF optimization sweep (7 phases, 2026-04-05 through 2026-04-06)**:
 
-- AttentionOp::simd_softmax_row: scalar exp() → AVX2 fast_exp polynomial (6th-order
-  Remez minimax, <1 ULP). For seq_len=512: 64 SIMD iterations vs 512 scalar exp().
-  3-pass: AVX2 max, fused fast_exp+sum, SIMD normalize.
-- brick::SoftmaxOp: replaced 4-step pipeline (3 intermediate allocs) with single
-  call to blis::softmax::softmax_1d_alloc (AVX2 fused, 1 alloc).
-65 peer-reviewed citations [1]-[65]. 11 provable-contracts.
-All 11 contracts pass (53 checks pass, 0 fail, 44 skip).
+35+ experiments (15 positive, 20 negative/documented). Systematic
+optimization of the CPU compute pipeline from allocation through compute
+to output. Key results:
+
+| Category | Optimization | Impact |
+|----------|-------------|--------|
+| **Allocation** | Uninit alloc: sqrt, recip, Q4K, Q6K, softmax, attention, fused ops | sqrt **3×**, Q4K **+5%** |
+| **Allocation** | FusedGateUpOp: 38K allocs/call → 0 (direct simd_dot) | eliminates heap pressure |
+| **Allocation** | SoftmaxOp: 4-step 3-alloc → 1-call delegation to blis | 3 allocs eliminated |
+| **Allocation** | MatmulOp: as_slice().to_vec() → .data move | zero copies |
+| **Allocation** | matvec/vecmat: from_slice → from_vec | 4 copies eliminated |
+| **Compute** | AttentionOp softmax: scalar exp → AVX2 fast_exp polynomial | seq_len=512: 64 vs 512 iters |
+| **Compute** | AttentionOp weighted sum: scalar → AVX2 VFMADD axpy | head_dim=128: 16 vs 128 ops |
+| **Compute** | FusedQkvOp: scalar nested loops → SIMD dot | ~4-8× per projection |
+| **Compute** | matmul_naive: .get().expect() → direct slice indexing | ~30% for <64 matrices |
+| **Compute** | B-packing: 2-way K-unroll in AVX-512 kernel | marginal (memory-bound) |
+| **Parallel** | Transpose threshold: 4M→1M elements | 1024×1024: **+31%** (29→38 GB/s) |
+| **Parallel** | MatVec threshold: 4096→2048 rows | 2048×2048: **+29%** (47→61 GFLOPS) |
+| **Cleanup** | 230 lines dead code removed (SoftmaxOp SIMD helpers) | — |
+| **Cleanup** | Vec collect eliminated in Q4K/Q6K parallel dispatch | — |
+
+**Negative results (documented with root cause)**:
+- Shared-B parallel GEMM: **4 attempts**, all regressed (-47% to -36%). Root cause:
+  barrier synchronization > redundant packing cost. Future: producer-consumer model.
+- matmul/batched_matmul/vecmat uninit: BLIS accumulates (load_c_tile reads c).
+- AVX-512 GEMV: net loss on bandwidth-bound ops (frequency throttle [60]).
+- K-unroll, MC=192, broadcast-B, Q4K ceiling (6 attempts): see Appendix D.
 
 **GPU GEMM (2026-04-05 measurements)**:
 
@@ -3251,21 +3272,9 @@ write every element before reading.
 | Matrix::batched_matmul | gemm_blis accumulates | N/A | **NO** — requires zeros |
 | Matrix::vecmat (gemv) | c[j] += a[k]*b[...] | N/A | **NO** — requires zeros |
 
-3608 tests pass across all changes. The key insight: BLIS GEMM and GEMV use
-accumulation patterns that require zero-initialized output buffers. Only
-operations with SET semantics (dot product, unary transform, local accumulator)
-benefit from uninit allocation.
-
-**Optimization experiments**: 14+14 total (5+8 positive, 9+6 negative/neutral).
-Positive: 8×32 NR, SIMD B-packing, 8T cap, fused attention (scalar+AVX2),
-uninit alloc (sqrt 3×, Q4K +5%, softmax, attention, fused ops),
-SIMD fused QKV/GateUp, zero-copy MatmulOp, matmul_naive direct indexing,
-parallel transpose threshold 4M→1M (+31%), parallel matvec threshold 4096→2048 (+29%).
-Negative: 8×48 KC, broadcast-B scatter, shared-B parallel (4× — three 2026-04-05
-attempts + one 2026-04-06 per-(jc,pc) barrier attempt), AVX-512 GEMV,
-K-unroll, MC=192, prefetch, Q4K ceiling (6 attempts),
-matmul/batched_matmul/vecmat uninit (BLIS accumulates, requires zeros).
-All grounded with arXiv citations [44][45][60]-[65].
+3623 tests pass. Key insight: BLIS GEMM/GEMV use accumulation patterns
+requiring zero-initialized output. Only SET-semantic operations benefit
+from uninit allocation. All results grounded with arXiv citations [44][45][60]-[65].
 
 ### Priority 1: Performance (highest impact, ship-blocking)
 
@@ -3287,15 +3296,19 @@ loop-carried deps) and the register-spill risk we observed with hand-written unr
 Estimated gain: 10-20% at small sizes, 3-5% at 1024. Closes faer gap fully.
 Effort: Medium (1-2 weeks). Sovereign — no external dependencies.
 
-**P1b. Job-level parallel GEMM with shared B packing.**
-Current approach: M-split parallelism with per-thread B packing (redundant).
-New approach: pack B once (shared immutable), then distribute (ir, jr) micro-tiles
-across Rayon's work-stealing pool. Each thread packs its own A slice but reads
-shared B. Eliminates O(threads × B_size) redundant packing.
-Estimated gain: 10-20% parallel scaling (645 → 750+ GFLOPS at 8T).
-Effort: Medium (1 week). Already partially implemented in `gemm_blis_parallel_with_prepacked_b`.
-Note: previous shared-B attempt regressed (495→316) because sharing was at the
-wrong level (full B, not NR-panel level). Job-level sharing avoids this.
+**P1b. Job-level parallel GEMM with shared B packing. ⚠️ 4 NEGATIVE RESULTS**
+4 attempts at shared-B packing have all regressed (36-47%). Root causes:
+1. Full-B sharing: cross-core L3 fetch latency (495→316 GFLOPS)
+2. Panel-level sharing: same root cause
+3. Per-(jc,pc) barrier: Rayon sync overhead (597→318 GFLOPS)
+4. Per-(jc,pc) with thread-local A: same barrier issue
+
+The 8× redundant B packing (~8MB) fits in L3 (64MB) and avoids all
+inter-thread synchronization. Per-thread packing is faster than sharing.
+**Future path**: producer-consumer model (one thread packs B asynchronously
+while others compute on the previous tile), avoiding both redundant packing
+AND barriers. This requires a custom thread pool, not Rayon's fork-join model.
+Effort: High (custom threading). Estimated gain: 10-15% at 8T.
 
 **P1c. Dynamic cache blocking from CPU topology. ✅ DONE**
 `cache_topology.rs` reads `/sys/` at runtime, computes MC/KC/NC dynamically.
@@ -3379,16 +3392,23 @@ Production monitoring mode with near-zero overhead. Own the eBPF probes.
 Current NEON path is functional but not optimized to AVX-512 level. Apple M-series
 and Graviton are deployment targets that need dedicated 8x8 NEON microkernels.
 
-### Decision Matrix
+### Decision Matrix (updated 2026-04-06)
 
-| Item | Impact | Effort | Risk | Sovereign | Recommendation |
-|------|--------|--------|------|-----------|---------------|
-| P1a microkernel codegen | High | Medium | Medium | Yes | **DO FIRST** — closes faer gap |
-| P1b job-level parallel | High | Medium | Medium | Yes | Do after P1a |
-| P1c dynamic cache blocking | Medium | Low | Low | Yes | **Quick win** |
-| P1d VBMI2 header | Medium | High | High | Yes | Investigate |
-| P2a cgp tui | Low | Medium | Low | Yes | Nice-to-have |
-| P2b compare --measure | Low | Low | Low | Yes | Quick win |
-| P3a contract schema | Low | Low | Low | Yes | Quick win |
-| P3b llama.cpp bench | Medium | Low | Low | Yes | **DO SOON** — validates Q4K |
-| P3c GPU PTX | Medium | High | High | Yes | Long-term |
+| Item | Impact | Effort | Risk | Status | Recommendation |
+|------|--------|--------|------|--------|---------------|
+| P1a microkernel codegen | High | Medium | Medium | NOT STARTED | **DO NEXT** — closes faer gap |
+| P1b shared-B parallel | High | High | **High** | ⚠️ 4× NEGATIVE | Producer-consumer model needed |
+| P1c dynamic cache blocking | Medium | Low | Low | ✅ DONE | — |
+| P1d VBMI2 header | Medium | High | High | NOT STARTED | Investigate after P1a |
+| P2a cgp tui | Low | Medium | Low | NOT STARTED | Nice-to-have |
+| P2b compare --measure | Low | Low | Low | NOT STARTED | Quick win |
+| P3a contract schema | Low | Low | Low | NOT STARTED | Quick win |
+| P3b llama.cpp bench | Medium | Low | Low | ✅ DONE | **0.81× measured** |
+| P3c GPU PTX | Medium | High | High | NOT STARTED | Long-term |
+| **CGP-DBUF micro-opt** | **Medium** | **Low** | **Low** | ✅ **7 PHASES DONE** | **Diminishing returns** |
+
+**CGP-DBUF conclusion**: After 7 phases and 35+ experiments, the CPU micro-optimization
+surface is largely exhausted. Remaining gains require architectural changes (P1a
+microkernel codegen) or custom threading (P1b producer-consumer). The attention inner
+loop is fully SIMD-vectorized (dot, softmax, axpy). All allocation overhead has been
+eliminated where safe. Parallel thresholds are tuned for Rayon dispatch overhead.
