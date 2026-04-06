@@ -158,7 +158,7 @@ memory reads.
 
 ## Bridge Plan: 0.39x → 0.6x+
 
-### Phase 1: Add `mma.sync.m16n8k16` to PTX builder (Est: +20%)
+### Phase 1: Add `mma.sync.m16n8k16` to PTX builder (Est: +20%) ✅ DONE
 
 **What**: Add `mma.sync.aligned.m16n8k16.row.col.f16.f16.f16.f16` as new
 PtxOp variant. Each `mma.sync` uses:
