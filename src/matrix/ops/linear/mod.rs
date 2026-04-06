@@ -173,13 +173,13 @@ impl Matrix<f32> {
             result_data.set_len(n);
         }
 
-        // Parallel execution for very large matrices (≥4096 rows)
-        // Note: Thread overhead dominates for smaller matrices.
-        // Measured 2026-04-05: threshold=2048 regressed 2048×2048 from
-        // 42 → 23 GFLOPS (thread overhead exceeded compute time).
+        // Parallel execution for large matrices (≥2048 rows)
+        // CGP-DBUF: lowered from 4096 to 2048. Previous regression at 2048 was
+        // from thread::scope (~40µs). Rayon par_chunks_mut is ~3µs overhead.
+        // 2048×2048 matvec: ~180µs compute → 3µs is 1.7% acceptable.
         #[cfg(feature = "parallel")]
         {
-            const PARALLEL_THRESHOLD: usize = 4096;
+            const PARALLEL_THRESHOLD: usize = 2048;
 
             if self.rows >= PARALLEL_THRESHOLD {
                 use rayon::prelude::*;
