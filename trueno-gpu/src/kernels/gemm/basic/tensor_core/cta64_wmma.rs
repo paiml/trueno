@@ -524,18 +524,85 @@ pub fn build_cta64_mma_fp16_cpasync(_m: u32, n: u32, k: u32) -> PtxKernel {
                 ctx.mov_f32_reg(acc_r3, d_r[3]);
             }
 
-            // === Store C ===
-            // mma.sync m16n8k16 output: 4 F32 per thread per 16×8 half.
-            // Thread t holds C[row][col] where:
-            //   row = (t/4)*2 + (t%2) for the first pair, +8 for second pair
-            //   col = (t%4)/2 * ... (complex mapping)
-            // For now, use wmma_store_d which accepts any F32 fragment:
-            // Actually, mma.sync output layout IS compatible with wmma store
-            // if we combine left+right halves into the 16×16 fragment.
-            // Simplest correct approach: store via explicit per-thread st.global.
-            //
-            // TEMPORARY: skip C store — focus on compile test first.
-            // TODO: implement per-thread C store for mma.sync output layout.
+            // === Store C: per-thread st.global for mma.sync output layout ===
+            // mma.sync m16n8k16 row.col: thread lane_id holds D[0..3] mapping to:
+            //   group = lane/4, tid_in_group = lane%4
+            //   row0 = group*2, row1 = row0+1
+            //   col0 = tid_in_group*2, col1 = col0+1
+            //   D[0]→C[row0][col0], D[1]→C[row0][col1]
+            //   D[2]→C[row1][col0], D[3]→C[row1][col1]
+            {
+                let c_row_base = ctx.add_u32_reg(cta_row, warp_m_off); // global row
+                let c_col_base = ctx.add_u32_reg(cta_col, warp_n_off); // global col
+
+                // Per-thread row/col within 16×16 tile
+                let group = ctx.shr_u32(lane_id, c_2); // lane / 4
+                let tid_in_grp = ctx.and_u32(lane_id, c_3); // lane % 4
+                let row0_local = ctx.mul_u32_reg(group, c_2); // group * 2
+                let row1_local = ctx.add_u32_reg(row0_local, c_1); // +1
+                let col0_local = ctx.mul_u32_reg(tid_in_grp, c_2); // tid_in_grp * 2
+                let col1_local = ctx.add_u32_reg(col0_local, c_1); // +1
+
+                let row0 = ctx.add_u32_reg(c_row_base, row0_local);
+                let row1 = ctx.add_u32_reg(c_row_base, row1_local);
+
+                // Left half: cols 0-7
+                let col0_l = ctx.add_u32_reg(c_col_base, col0_local);
+                let col1_l = ctx.add_u32_reg(c_col_base, col1_local);
+
+                // Right half: cols 8-15
+                let col0_r = ctx.add_u32_reg(col0_l, c_8);
+                let col1_r = ctx.add_u32_reg(col1_l, c_8);
+
+                // Helper: compute C address = c_ptr + (row * N + col) * 4
+                let n_param_val = n_param;
+
+                // Store left half D[0..3] = acc_l[0..3]
+                // D[0] → C[row0][col0_l]
+                let off00 = ctx.mad_lo_u32(row0, n_param_val, col0_l);
+                let off00_bytes = ctx.mul_wide_u32(off00, 4);
+                let addr00 = ctx.add_u64(c_ptr, off00_bytes);
+                ctx.st_global_f32(addr00, acc_l0);
+
+                // D[1] → C[row0][col1_l]
+                let off01 = ctx.mad_lo_u32(row0, n_param_val, col1_l);
+                let off01_bytes = ctx.mul_wide_u32(off01, 4);
+                let addr01 = ctx.add_u64(c_ptr, off01_bytes);
+                ctx.st_global_f32(addr01, acc_l1);
+
+                // D[2] → C[row1][col0_l]
+                let off10 = ctx.mad_lo_u32(row1, n_param_val, col0_l);
+                let off10_bytes = ctx.mul_wide_u32(off10, 4);
+                let addr10 = ctx.add_u64(c_ptr, off10_bytes);
+                ctx.st_global_f32(addr10, acc_l2);
+
+                // D[3] → C[row1][col1_l]
+                let off11 = ctx.mad_lo_u32(row1, n_param_val, col1_l);
+                let off11_bytes = ctx.mul_wide_u32(off11, 4);
+                let addr11 = ctx.add_u64(c_ptr, off11_bytes);
+                ctx.st_global_f32(addr11, acc_l3);
+
+                // Store right half D[0..3] = acc_r[0..3]
+                let off00r = ctx.mad_lo_u32(row0, n_param_val, col0_r);
+                let off00r_bytes = ctx.mul_wide_u32(off00r, 4);
+                let addr00r = ctx.add_u64(c_ptr, off00r_bytes);
+                ctx.st_global_f32(addr00r, acc_r0);
+
+                let off01r = ctx.mad_lo_u32(row0, n_param_val, col1_r);
+                let off01r_bytes = ctx.mul_wide_u32(off01r, 4);
+                let addr01r = ctx.add_u64(c_ptr, off01r_bytes);
+                ctx.st_global_f32(addr01r, acc_r1);
+
+                let off10r = ctx.mad_lo_u32(row1, n_param_val, col0_r);
+                let off10r_bytes = ctx.mul_wide_u32(off10r, 4);
+                let addr10r = ctx.add_u64(c_ptr, off10r_bytes);
+                ctx.st_global_f32(addr10r, acc_r2);
+
+                let off11r = ctx.mad_lo_u32(row1, n_param_val, col1_r);
+                let off11r_bytes = ctx.mul_wide_u32(off11r, 4);
+                let addr11r = ctx.add_u64(c_ptr, off11r_bytes);
+                ctx.st_global_f32(addr11r, acc_r3);
+            }
 
             ctx.label("exit");
             ctx.ret();
