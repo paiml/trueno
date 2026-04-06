@@ -961,6 +961,468 @@ pub fn build_cta64x128_mma_fp16_cpasync(_m: u32, n: u32, k: u32) -> PtxKernel {
         })
 }
 
+/// Software-pipelined 64×128 mma.sync kernel — overlaps load and compute.
+///
+/// Architecture: same warp layout as `build_cta64x128_mma_fp16_cpasync` but with
+/// a 3-stage software pipeline:
+///   - Prologue: load tiles 0 and 1 into buffers 0 and 1
+///   - K-loop: compute buffer i%3 (wait_group 1), load tile i+2 into buffer (i+2)%3
+///   - Epilogue: compute remaining tiles without new loads
+///
+/// This overlaps cp.async latency (~200-400 cycles) with mma.sync compute,
+/// potentially hiding global memory latency for higher TFLOP/s.
+///
+/// Smem: 3 × 6KB = 18KB (fits in 48KB static smem).
+/// Contract: cgp-gpu-mma-64x128-pipeline-v1.yaml
+pub fn build_cta64x128_mma_pipeline_fp16(_m: u32, n: u32, k: u32) -> PtxKernel {
+    let tile_m: u32 = 64;
+    let tile_n: u32 = 128;
+    let tile_k: u32 = 16;
+    let a_smem_bytes = (tile_m * tile_k * 2) as usize; // 2048
+    let b_smem_bytes = (tile_k * tile_n * 2) as usize; // 4096
+    let smem_single = a_smem_bytes + b_smem_bytes; // 6144
+    let smem_bytes = smem_single * 3; // 3-stage pipeline
+    let n_k_tiles = (k + tile_k - 1) / tile_k;
+    let a_threads: u32 = 256;
+
+    PtxKernel::new("gemm_cta64x128_mma_pipeline_fp16")
+        .param(PtxType::U64, "a_ptr")
+        .param(PtxType::U64, "b_ptr")
+        .param(PtxType::U64, "c_ptr")
+        .param(PtxType::U32, "m_param")
+        .param(PtxType::U32, "n_param")
+        .param(PtxType::U32, "k_param")
+        .shared_memory(smem_bytes)
+        .build(move |ctx| {
+            let tid = ctx.special_reg(PtxReg::TidX);
+            let ctaid_x = ctx.special_reg(PtxReg::CtaIdX);
+            let ctaid_y = ctx.special_reg(PtxReg::CtaIdY);
+
+            // === Constants ===
+            let c_1 = ctx.mov_u32_imm(1);
+            let c_2 = ctx.mov_u32_imm(2);
+            let c_3 = ctx.mov_u32_imm(3);
+            let c_4 = ctx.mov_u32_imm(4);
+            let c_5 = ctx.mov_u32_imm(5);
+            let c_7 = ctx.mov_u32_imm(7);
+            let c_8 = ctx.mov_u32_imm(8);
+            let c_16 = ctx.mov_u32_imm(16);
+            let c_32 = ctx.mov_u32_imm(32);
+            let c_64 = ctx.mov_u32_imm(64);
+            let c_128 = ctx.mov_u32_imm(128);
+            let c_256 = ctx.mov_u32_imm(a_threads);
+            let c_a_smem = ctx.mov_u32_imm(a_smem_bytes as u32);
+            let k_const = ctx.mov_u32_imm(k);
+            let n_const = ctx.mov_u32_imm(n);
+            let n_k_tiles_reg = ctx.mov_u32_imm(n_k_tiles);
+            let smem_single_reg = ctx.mov_u32_imm(smem_single as u32);
+            let smem_2x = ctx.mov_u32_imm((smem_single * 2) as u32);
+
+            let cta_row = ctx.mul_u32_reg(ctaid_y, c_64);
+            let cta_col = ctx.mul_u32_reg(ctaid_x, c_128);
+            let m_param = ctx.load_param_u32("m_param");
+            let n_param = ctx.load_param_u32("n_param");
+            let _k_param = ctx.load_param_u32("k_param");
+
+            let cta_oob = ctx.setp_ge_u32(cta_row, m_param);
+            ctx.branch_if(cta_oob, "exit_pipe");
+            let cta_oob2 = ctx.setp_ge_u32(cta_col, n_param);
+            ctx.branch_if(cta_oob2, "exit_pipe");
+
+            let a_ptr = ctx.load_param_u64("a_ptr");
+            let b_ptr = ctx.load_param_u64("b_ptr");
+            let c_ptr = ctx.load_param_u64("c_ptr");
+
+            // === Warp layout: 4×4 grid, 16×32 per warp ===
+            let warp_id = ctx.shr_u32(tid, c_5);
+            let c_31 = ctx.mov_u32_imm(31);
+            let lane_id = ctx.and_u32(tid, c_31);
+            let warp_row = ctx.shr_u32(warp_id, c_2);
+            let warp_col = ctx.and_u32(warp_id, c_3);
+            let warp_m_off = ctx.mul_u32_reg(warp_row, c_16);
+            let warp_n_off = ctx.mul_u32_reg(warp_col, c_32);
+
+            let _smem_base = ctx.shared_base_addr();
+            let is_a_thread = ctx.setp_lt_u32(tid, c_256);
+
+            // === cp.async load offsets (same as non-pipelined) ===
+            let c_mask3 = ctx.mov_u32_imm(3);
+            let a_row_in_tile = ctx.shr_u32(tid, c_2);
+            let a_col_mod = ctx.and_u32(tid, c_mask3);
+            let a_col_in_tile = ctx.mul_u32_reg(a_col_mod, c_4);
+            let a_global_row = ctx.add_u32_reg(cta_row, a_row_in_tile);
+
+            let b_local = ctx.sub_u32_reg(tid, c_256);
+            let c_mask15 = ctx.mov_u32_imm(15);
+            let b_row_in_tile = ctx.shr_u32(b_local, c_4);
+            let b_col_mod = ctx.and_u32(b_local, c_mask15);
+            let b_col_in_tile = ctx.mul_u32_reg(b_col_mod, c_8);
+            let b_global_col = ctx.add_u32_reg(cta_col, b_col_in_tile);
+
+            let a_smem_off = ctx.mul_u32_reg(tid, c_8);
+            let b_local_16 = ctx.mul_u32_reg(b_local, c_16);
+            let b_smem_off = ctx.add_u32_reg(c_a_smem, b_local_16);
+            let base_smem_off = ctx.selp_u32(is_a_thread, a_smem_off, b_smem_off);
+
+            // === Accumulators: 4 mma × 4 regs = 16 ===
+            let acc_ll0 = ctx.mov_f32_imm(0.0);
+            let acc_ll1 = ctx.mov_f32_imm(0.0);
+            let acc_ll2 = ctx.mov_f32_imm(0.0);
+            let acc_ll3 = ctx.mov_f32_imm(0.0);
+            let acc_lr0 = ctx.mov_f32_imm(0.0);
+            let acc_lr1 = ctx.mov_f32_imm(0.0);
+            let acc_lr2 = ctx.mov_f32_imm(0.0);
+            let acc_lr3 = ctx.mov_f32_imm(0.0);
+            let acc_rl0 = ctx.mov_f32_imm(0.0);
+            let acc_rl1 = ctx.mov_f32_imm(0.0);
+            let acc_rl2 = ctx.mov_f32_imm(0.0);
+            let acc_rl3 = ctx.mov_f32_imm(0.0);
+            let acc_rr0 = ctx.mov_f32_imm(0.0);
+            let acc_rr1 = ctx.mov_f32_imm(0.0);
+            let acc_rr2 = ctx.mov_f32_imm(0.0);
+            let acc_rr3 = ctx.mov_f32_imm(0.0);
+
+            // === ldmatrix pre-computation ===
+            let lane_sub = ctx.shr_u32(lane_id, c_3);
+            let lane_row_in_8 = ctx.and_u32(lane_id, c_7);
+            let sub_half = ctx.shr_u32(lane_sub, c_1);
+            let sub_col = ctx.and_u32(lane_sub, c_1);
+            let phys_row = ctx.mad_lo_u32(sub_half, c_8, lane_row_in_8);
+            let col_bytes = ctx.mul_u32_reg(sub_col, c_16);
+            let a_row_bytes = ctx.mul_u32_reg(phys_row, c_32);
+            let a_ldm_off_base = ctx.add_u32_reg(a_row_bytes, col_bytes);
+
+            let c_tile_n_bytes = ctx.mov_u32_imm(tile_n * 2); // 256
+            let b_lane_row = ctx.and_u32(lane_id, c_mask15);
+            let b_row_bytes_ldm = ctx.mul_u32_reg(b_lane_row, c_tile_n_bytes);
+
+            // === Global address init + stride ===
+            let a_addr_init;
+            let b_addr_init;
+            {
+                let a_rowk = ctx.mul_u32_reg(a_global_row, k_const);
+                let a_flat = ctx.add_u32_reg(a_rowk, a_col_in_tile);
+                let a_byte_off = ctx.mul_wide_u32(a_flat, 2);
+                a_addr_init = ctx.add_u64(a_ptr, a_byte_off);
+                let b_flat = ctx.mad_lo_u32(b_row_in_tile, n_const, b_global_col);
+                let b_byte_off = ctx.mul_wide_u32(b_flat, 2);
+                b_addr_init = ctx.add_u64(b_ptr, b_byte_off);
+            }
+            let gaddr_run = ctx.selp_u64(is_a_thread, a_addr_init, b_addr_init);
+            let a_stride_u64 = ctx.mov_u64_imm(tile_k as u64 * 2);
+            let b_stride_u64 = ctx.mul_wide_u32(n_const, tile_k * 2);
+            let gaddr_stride = ctx.selp_u64(is_a_thread, a_stride_u64, b_stride_u64);
+
+            // Hoisted smem offsets for ldmatrix
+            let a_warp_bytes = ctx.mul_u32_reg(warp_m_off, c_32);
+            let b_warp_bytes = ctx.mul_u32_reg(warp_n_off, c_2);
+            let b_base_smem = ctx.add_u32_reg(c_a_smem, b_warp_bytes);
+
+            // === Prologue: load tile 0 into buffer 0 ===
+            {
+                let smem_off_b0 = base_smem_off; // buffer 0 at offset 0
+                ctx.branch_if(is_a_thread, "pro0_a");
+                ctx.cp_async_global_to_shared(smem_off_b0, gaddr_run, 16);
+                ctx.branch("pro0_done");
+                ctx.label("pro0_a");
+                ctx.cp_async_global_to_shared(smem_off_b0, gaddr_run, 8);
+                ctx.label("pro0_done");
+            }
+            ctx.cp_async_commit_group();
+
+            // Skip if only 1 K-tile
+            let only_one = ctx.setp_le_u32(n_k_tiles_reg, c_1);
+            ctx.branch_if(only_one, "pipe_wait_last");
+
+            // === Prologue: load tile 1 into buffer 1 ===
+            {
+                let gaddr_next = ctx.add_u64(gaddr_run, gaddr_stride);
+                ctx.mov_u64_reg(gaddr_run, gaddr_next);
+                let smem_off_b1 = ctx.add_u32_reg(base_smem_off, smem_single_reg);
+                ctx.branch_if(is_a_thread, "pro1_a");
+                ctx.cp_async_global_to_shared(smem_off_b1, gaddr_run, 16);
+                ctx.branch("pro1_done");
+                ctx.label("pro1_a");
+                ctx.cp_async_global_to_shared(smem_off_b1, gaddr_run, 8);
+                ctx.label("pro1_done");
+            }
+            ctx.cp_async_commit_group();
+
+            // Wait for tile 0 (oldest group), tile 1 still in flight
+            ctx.cp_async_wait_group(1);
+            ctx.bar_sync(0);
+
+            // === Main K-loop: compute buf[k%3], load into buf[(k+2)%3] ===
+            // buf_compute cycles: 0, 1, 2, 0, 1, 2, ...
+            // buf_load cycles: 2, 0, 1, 2, 0, 1, ...
+            let compute_buf_off = ctx.mov_u32_imm(0); // start computing buffer 0
+            let load_buf_off = ctx.mov_u32_imm(0); // next load goes to buffer 2 initially
+            let k_tile = ctx.mov_u32_imm(2); // first 2 tiles already loaded
+            ctx.label("k_loop_pipe");
+            let k_done = ctx.setp_ge_u32(k_tile, n_k_tiles_reg);
+            ctx.branch_if(k_done, "pipe_epi");
+
+            // Issue cp.async for tile k into buffer (k%3)
+            // Load buffer offset = ((k_tile) % 3) * smem_single
+            // Simple approach: cycle through 0, smem_single, 2*smem_single using add+mod
+            {
+                let gaddr_next = ctx.add_u64(gaddr_run, gaddr_stride);
+                ctx.mov_u64_reg(gaddr_run, gaddr_next);
+                // load_buf cycles: 2*smem_single, 0, smem_single, 2*smem_single, ...
+                // Since compute starts at 0, load starts at 2*smem_single.
+                // We advance load_buf_off by smem_single each iteration, mod 3*smem_single.
+                let load_off = ctx.add_u32_reg(load_buf_off, smem_2x); // buffer 2 first
+                                                                       // Modular: if load_off >= 3*smem_single, subtract 3*smem_single
+                let c_3smem = ctx.mov_u32_imm((smem_single * 3) as u32);
+                let over = ctx.setp_ge_u32(load_off, c_3smem);
+                let load_off_wrapped = ctx.sub_u32_reg(load_off, c_3smem);
+                let load_off_mod = ctx.selp_u32(over, load_off_wrapped, load_off);
+                ctx.mov_u32_reg(load_buf_off, load_off_mod);
+
+                let smem_off_load = ctx.add_u32_reg(base_smem_off, load_off_mod);
+                ctx.branch_if(is_a_thread, "loop_cpa_pipe");
+                ctx.cp_async_global_to_shared(smem_off_load, gaddr_run, 16);
+                ctx.branch("loop_cpdone_pipe");
+                ctx.label("loop_cpa_pipe");
+                ctx.cp_async_global_to_shared(smem_off_load, gaddr_run, 8);
+                ctx.label("loop_cpdone_pipe");
+            }
+            ctx.cp_async_commit_group();
+
+            // === Compute on compute_buf_off (data is ready from wait_group(1)) ===
+            {
+                let a_tile_base = ctx.add_u32_reg(a_warp_bytes, compute_buf_off);
+                let a_addr_u32 = ctx.add_u32_reg(a_tile_base, a_ldm_off_base);
+                let a_frags = ctx.ldmatrix_x4(a_addr_u32);
+
+                let b_tile_base = ctx.add_u32_reg(b_base_smem, compute_buf_off);
+                let b_row_addr = ctx.add_u32_reg(b_tile_base, b_row_bytes_ldm);
+
+                let b_frags_ll = ctx.ldmatrix_x2_trans(b_row_addr);
+                let b_addr_lr = ctx.add_u32_reg(b_row_addr, c_16);
+                let b_frags_lr = ctx.ldmatrix_x2_trans(b_addr_lr);
+                let b_addr_rl = ctx.add_u32_reg(b_row_addr, c_32);
+                let b_frags_rl = ctx.ldmatrix_x2_trans(b_addr_rl);
+                let c_48 = ctx.mov_u32_imm(48);
+                let b_addr_rr = ctx.add_u32_reg(b_row_addr, c_48);
+                let b_frags_rr = ctx.ldmatrix_x2_trans(b_addr_rr);
+
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_ll,
+                    &[acc_ll0, acc_ll1, acc_ll2, acc_ll3],
+                );
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_lr,
+                    &[acc_lr0, acc_lr1, acc_lr2, acc_lr3],
+                );
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_rl,
+                    &[acc_rl0, acc_rl1, acc_rl2, acc_rl3],
+                );
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_rr,
+                    &[acc_rr0, acc_rr1, acc_rr2, acc_rr3],
+                );
+            }
+
+            // Advance compute buffer: 0 → smem_single → 2*smem_single → 0 ...
+            {
+                let next_compute = ctx.add_u32_reg(compute_buf_off, smem_single_reg);
+                let c_3smem = ctx.mov_u32_imm((smem_single * 3) as u32);
+                let wrap = ctx.setp_ge_u32(next_compute, c_3smem);
+                let next_wrapped = ctx.sub_u32_reg(next_compute, c_3smem);
+                let next_mod = ctx.selp_u32(wrap, next_wrapped, next_compute);
+                ctx.mov_u32_reg(compute_buf_off, next_mod);
+            }
+
+            // Wait for oldest in-flight group (keep 1 in flight)
+            ctx.cp_async_wait_group(1);
+            ctx.bar_sync(0);
+            ctx.add_u32_inplace(k_tile, 1);
+            ctx.branch("k_loop_pipe");
+
+            // === Epilogue: compute remaining 2 tiles (no new loads) ===
+            ctx.label("pipe_epi");
+            // Tile at compute_buf_off is ready (wait_group(1) above ensured it)
+            // Compute tile n-2
+            {
+                let a_tile_base = ctx.add_u32_reg(a_warp_bytes, compute_buf_off);
+                let a_addr_u32 = ctx.add_u32_reg(a_tile_base, a_ldm_off_base);
+                let a_frags = ctx.ldmatrix_x4(a_addr_u32);
+
+                let b_tile_base = ctx.add_u32_reg(b_base_smem, compute_buf_off);
+                let b_row_addr = ctx.add_u32_reg(b_tile_base, b_row_bytes_ldm);
+
+                let b_frags_ll = ctx.ldmatrix_x2_trans(b_row_addr);
+                let b_addr_lr = ctx.add_u32_reg(b_row_addr, c_16);
+                let b_frags_lr = ctx.ldmatrix_x2_trans(b_addr_lr);
+                let b_addr_rl = ctx.add_u32_reg(b_row_addr, c_32);
+                let b_frags_rl = ctx.ldmatrix_x2_trans(b_addr_rl);
+                let c_48 = ctx.mov_u32_imm(48);
+                let b_addr_rr = ctx.add_u32_reg(b_row_addr, c_48);
+                let b_frags_rr = ctx.ldmatrix_x2_trans(b_addr_rr);
+
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_ll,
+                    &[acc_ll0, acc_ll1, acc_ll2, acc_ll3],
+                );
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_lr,
+                    &[acc_lr0, acc_lr1, acc_lr2, acc_lr3],
+                );
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_rl,
+                    &[acc_rl0, acc_rl1, acc_rl2, acc_rl3],
+                );
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_rr,
+                    &[acc_rr0, acc_rr1, acc_rr2, acc_rr3],
+                );
+            }
+
+            // Advance compute buffer for last tile
+            {
+                let next_compute = ctx.add_u32_reg(compute_buf_off, smem_single_reg);
+                let c_3smem = ctx.mov_u32_imm((smem_single * 3) as u32);
+                let wrap = ctx.setp_ge_u32(next_compute, c_3smem);
+                let next_wrapped = ctx.sub_u32_reg(next_compute, c_3smem);
+                let next_mod = ctx.selp_u32(wrap, next_wrapped, next_compute);
+                ctx.mov_u32_reg(compute_buf_off, next_mod);
+            }
+
+            // Wait for final tile
+            ctx.cp_async_wait_group(0);
+            ctx.bar_sync(0);
+
+            // Compute last tile (n-1)
+            ctx.label("pipe_wait_last");
+            // For the single K-tile case, we jump here with tile 0 ready
+            {
+                // If only_one=true, we need wait_group(0) + bar_sync first
+                // (already done above for multi-tile path; for single-tile, add it here)
+                // Actually for single-tile: prologue loaded into buf 0, committed group,
+                // then jumped here. Need to wait.
+                // Use a conditional wait: only if we came from "only_one" path
+                // Simpler: always do wait_group(0) + bar_sync here (idempotent)
+                ctx.cp_async_wait_group(0);
+                ctx.bar_sync(0);
+
+                let a_tile_base = ctx.add_u32_reg(a_warp_bytes, compute_buf_off);
+                let a_addr_u32 = ctx.add_u32_reg(a_tile_base, a_ldm_off_base);
+                let a_frags = ctx.ldmatrix_x4(a_addr_u32);
+
+                let b_tile_base = ctx.add_u32_reg(b_base_smem, compute_buf_off);
+                let b_row_addr = ctx.add_u32_reg(b_tile_base, b_row_bytes_ldm);
+
+                let b_frags_ll = ctx.ldmatrix_x2_trans(b_row_addr);
+                let b_addr_lr = ctx.add_u32_reg(b_row_addr, c_16);
+                let b_frags_lr = ctx.ldmatrix_x2_trans(b_addr_lr);
+                let b_addr_rl = ctx.add_u32_reg(b_row_addr, c_32);
+                let b_frags_rl = ctx.ldmatrix_x2_trans(b_addr_rl);
+                let c_48 = ctx.mov_u32_imm(48);
+                let b_addr_rr = ctx.add_u32_reg(b_row_addr, c_48);
+                let b_frags_rr = ctx.ldmatrix_x2_trans(b_addr_rr);
+
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_ll,
+                    &[acc_ll0, acc_ll1, acc_ll2, acc_ll3],
+                );
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_lr,
+                    &[acc_lr0, acc_lr1, acc_lr2, acc_lr3],
+                );
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_rl,
+                    &[acc_rl0, acc_rl1, acc_rl2, acc_rl3],
+                );
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_rr,
+                    &[acc_rr0, acc_rr1, acc_rr2, acc_rr3],
+                );
+            }
+
+            // === Store C: 8 v2 stores (same as non-pipelined 64×128) ===
+            {
+                let c_row_base = ctx.add_u32_reg(cta_row, warp_m_off);
+                let c_col_base = ctx.add_u32_reg(cta_col, warp_n_off);
+
+                let group = ctx.shr_u32(lane_id, c_2);
+                let tid_in_grp = ctx.and_u32(lane_id, c_3);
+                let row0_local = ctx.mul_u32_reg(group, c_2);
+                let row1_local = ctx.add_u32_reg(row0_local, c_1);
+                let col0_local = ctx.mul_u32_reg(tid_in_grp, c_2);
+
+                let row0 = ctx.add_u32_reg(c_row_base, row0_local);
+                let row1 = ctx.add_u32_reg(c_row_base, row1_local);
+                let n_param_val = n_param;
+
+                // Left block (cols 0-15)
+                let col0_ll = ctx.add_u32_reg(c_col_base, col0_local);
+                let col0_lr = ctx.add_u32_reg(col0_ll, c_8);
+
+                let off = ctx.mad_lo_u32(row0, n_param_val, col0_ll);
+                let off_b = ctx.mul_wide_u32(off, 4);
+                let addr = ctx.add_u64(c_ptr, off_b);
+                ctx.st_global_f32_v2(addr, acc_ll0, acc_ll1);
+
+                let off = ctx.mad_lo_u32(row1, n_param_val, col0_ll);
+                let off_b = ctx.mul_wide_u32(off, 4);
+                let addr = ctx.add_u64(c_ptr, off_b);
+                ctx.st_global_f32_v2(addr, acc_ll2, acc_ll3);
+
+                let off = ctx.mad_lo_u32(row0, n_param_val, col0_lr);
+                let off_b = ctx.mul_wide_u32(off, 4);
+                let addr = ctx.add_u64(c_ptr, off_b);
+                ctx.st_global_f32_v2(addr, acc_lr0, acc_lr1);
+
+                let off = ctx.mad_lo_u32(row1, n_param_val, col0_lr);
+                let off_b = ctx.mul_wide_u32(off, 4);
+                let addr = ctx.add_u64(c_ptr, off_b);
+                ctx.st_global_f32_v2(addr, acc_lr2, acc_lr3);
+
+                // Right block (cols 16-31)
+                let col0_rl = ctx.add_u32_reg(col0_ll, c_16);
+                let c_24 = ctx.mov_u32_imm(24);
+                let col0_rr = ctx.add_u32_reg(col0_ll, c_24);
+
+                let off = ctx.mad_lo_u32(row0, n_param_val, col0_rl);
+                let off_b = ctx.mul_wide_u32(off, 4);
+                let addr = ctx.add_u64(c_ptr, off_b);
+                ctx.st_global_f32_v2(addr, acc_rl0, acc_rl1);
+
+                let off = ctx.mad_lo_u32(row1, n_param_val, col0_rl);
+                let off_b = ctx.mul_wide_u32(off, 4);
+                let addr = ctx.add_u64(c_ptr, off_b);
+                ctx.st_global_f32_v2(addr, acc_rl2, acc_rl3);
+
+                let off = ctx.mad_lo_u32(row0, n_param_val, col0_rr);
+                let off_b = ctx.mul_wide_u32(off, 4);
+                let addr = ctx.add_u64(c_ptr, off_b);
+                ctx.st_global_f32_v2(addr, acc_rr0, acc_rr1);
+
+                let off = ctx.mad_lo_u32(row1, n_param_val, col0_rr);
+                let off_b = ctx.mul_wide_u32(off, 4);
+                let addr = ctx.add_u64(c_ptr, off_b);
+                ctx.st_global_f32_v2(addr, acc_rr2, acc_rr3);
+            }
+
+            ctx.label("exit_pipe");
+            ctx.ret();
+        })
+}
+
 fn build_cta64_wmma_fp16_impl(_m: u32, n: u32, k: u32, double_buffer: bool) -> PtxKernel {
     let tile_m: u32 = 64;
     let tile_n: u32 = 64;
@@ -1777,5 +2239,67 @@ mod tests {
         let has_16 = ptx.lines().any(|l| l.contains("cp.async") && l.contains(", 16;"));
         assert!(has_8, "must have 8-byte cp.async for A tile");
         assert!(has_16, "must have 16-byte cp.async for B tile");
+    }
+
+    // ── Software-pipelined 64×128 FALSIFY tests ──
+
+    /// FALSIFY-PIPELINE-001: Pipelined kernel generates valid PTX with mma.sync
+    #[test]
+    fn test_pipeline_valid_ptx() {
+        let kernel = build_cta64x128_mma_pipeline_fp16(1024, 1024, 1024);
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+        assert!(ptx.contains(".entry gemm_cta64x128_mma_pipeline_fp16"));
+        assert!(ptx.contains("mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32"));
+        assert!(ptx.contains("cp.async.ca.shared.global"));
+    }
+
+    /// FALSIFY-PIPELINE-002: 18KB shared memory (6KB × 3 buffers)
+    #[test]
+    fn test_pipeline_smem_size() {
+        let kernel = build_cta64x128_mma_pipeline_fp16(512, 512, 512);
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+        let extract_smem = |ptx: &str| -> usize {
+            for line in ptx.lines() {
+                if line.contains(".shared") && line.contains("smem[") {
+                    let start = line.find("smem[").unwrap() + 5;
+                    let end = line[start..].find(']').unwrap() + start;
+                    return line[start..end].parse().unwrap();
+                }
+            }
+            panic!("no .shared smem found");
+        };
+        assert_eq!(extract_smem(&ptx), 18432, "pipeline needs 18432 bytes (3×6144)");
+    }
+
+    /// FALSIFY-PIPELINE-003: 12× mma.sync (4 loop + 4 epi_n-2 + 4 epi_n-1)
+    #[test]
+    fn test_pipeline_mma_count() {
+        let kernel = build_cta64x128_mma_pipeline_fp16(512, 512, 512);
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+        let mma_count = ptx.matches("mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32").count();
+        assert_eq!(
+            mma_count, 12,
+            "pipeline needs 12 mma.sync (4 loop + 4 epi + 4 last), got {mma_count}"
+        );
+    }
+
+    /// FALSIFY-PIPELINE-004: 8 v2 stores (same as non-pipelined)
+    #[test]
+    fn test_pipeline_v2_store_count() {
+        let kernel = build_cta64x128_mma_pipeline_fp16(512, 512, 512);
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+        let v2_count = ptx.matches("st.global.v2.f32").count();
+        assert_eq!(v2_count, 8, "pipeline needs 8 st.global.v2.f32, got {v2_count}");
+    }
+
+    /// FALSIFY-PIPELINE-005: uses wait_group(1) for pipelining
+    #[test]
+    fn test_pipeline_wait_group_1() {
+        let kernel = build_cta64x128_mma_pipeline_fp16(512, 512, 512);
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+        assert!(
+            ptx.contains("cp.async.wait_group 1"),
+            "pipeline must use wait_group(1) for overlapped execution"
+        );
     }
 }

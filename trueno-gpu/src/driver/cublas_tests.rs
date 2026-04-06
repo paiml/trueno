@@ -933,6 +933,7 @@ fn cta64_vs_cta32_vs_cublas_fp16() {
     use crate::kernels::gemm::basic::tensor_core::cta64_wmma::{
         build_cta64_mma_fp16_cpasync, build_cta64_wmma_fp16, build_cta64_wmma_fp16_cpasync,
         build_cta64_wmma_fp16_dbuf, build_cta64x128_mma_fp16_cpasync,
+        build_cta64x128_mma_pipeline_fp16,
     };
     use crate::kernels::gemm::basic::tensor_core::cta_wmma::build_cta_wmma_fp16;
     use crate::ptx::PtxModule;
@@ -1360,8 +1361,71 @@ fn cta64_vs_cta32_vs_cublas_fp16() {
         };
         let mma128_tflops = flops / (mma128_us * 1e6);
 
+        // ─── 64×128 pipelined mma.sync (3-stage sw pipeline) ───
+        let pipe_us = if n >= 256 {
+            let kernel_pipe = build_cta64x128_mma_pipeline_fp16(m as u32, n as u32, k as u32);
+            let ptx_pipe = PtxModule::new().target("sm_80").add_kernel(kernel_pipe).emit();
+            match CudaModule::from_ptx(&ctx, &ptx_pipe) {
+                Ok(mut mod_pipe) => {
+                    let cfg_pipe = LaunchConfig {
+                        grid: (((n + 127) / 128) as u32, ((m + 63) / 64) as u32, 1),
+                        block: (512, 1, 1),
+                        shared_mem: 18432,
+                    };
+                    // Reset C
+                    let c32 = vec![0.0f32; m * n];
+                    let c_buf_p = GpuBuffer::from_host(&ctx, &c32).expect("C pipe");
+                    let mut c_ptr_p = c_buf_p.as_ptr();
+                    let mut args_pipe: Vec<*mut c_void> = vec![
+                        &mut a_ptr as *mut _ as *mut c_void,
+                        &mut b_ptr as *mut _ as *mut c_void,
+                        &mut c_ptr_p as *mut _ as *mut c_void,
+                        &mut m_v as *mut _ as *mut c_void,
+                        &mut n_v as *mut _ as *mut c_void,
+                        &mut k_v as *mut _ as *mut c_void,
+                    ];
+                    // Warmup
+                    for _ in 0..5 {
+                        unsafe {
+                            stream
+                                .launch_kernel(
+                                    &mut mod_pipe,
+                                    "gemm_cta64x128_mma_pipeline_fp16",
+                                    &cfg_pipe,
+                                    &mut args_pipe,
+                                )
+                                .ok();
+                        }
+                    }
+                    stream.synchronize().ok();
+                    let start = Instant::now();
+                    for _ in 0..iters {
+                        unsafe {
+                            stream
+                                .launch_kernel(
+                                    &mut mod_pipe,
+                                    "gemm_cta64x128_mma_pipeline_fp16",
+                                    &cfg_pipe,
+                                    &mut args_pipe,
+                                )
+                                .ok();
+                        }
+                    }
+                    stream.synchronize().ok();
+                    start.elapsed().as_micros() as f64 / iters as f64
+                }
+                Err(e) => {
+                    eprintln!("  pipeline compile failed: {e}");
+                    f64::INFINITY
+                }
+            }
+        } else {
+            f64::INFINITY
+        };
+        let pipe_tflops = flops / (pipe_us * 1e6);
+
         eprintln!(
-            "{:<6} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>5.2}x | mma: {:>8.1} {:>8.1} | 128: {:>8.1} {:>8.1}",
+            "{:<6} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>5.2}x | mma: {:>8.1} {:>8.1} | 128: {:>8.1} {:>8.1} | pipe: {:>8.1} {:>8.1}",
             n,
             cta32_us,
             cta64_us,
@@ -1374,6 +1438,8 @@ fn cta64_vs_cta32_vs_cublas_fp16() {
             mma_tflops,
             mma128_us,
             mma128_tflops,
+            pipe_us,
+            pipe_tflops,
         );
     }
     eprintln!();

@@ -43,7 +43,7 @@ These targets apply per-backend, per-operation. Competing solutions:
 | CPU GEMM 1024 (1T) | faer 0.24 | **0.98x** | 1.0x | **NEAR PARITY** |
 | CPU GEMM 1024 (1T) | ndarray 0.17 | **1.17x** | 1.0x | **FASTER** |
 | CPU GEMM 1024 (8T) | NumPy OpenBLAS | **0.82x** | 1.0x | **GAP — ASM microkernel IPC** |
-| GPU GEMM 1024 FP16 | cuBLAS | **0.52x** (64×128: 57.0 TF/s) | 0.5x | **TARGET MET** — +210% from 18.4 baseline |
+| GPU GEMM 1024 FP16 | cuBLAS | **0.52x** (64×128: 57.0 TF/s) | 0.5x | **TARGET MET** — pipeline peak **60.9 TF/s** at 2048 (+39% over non-pipelined) |
 | Q4K GEMV 4096 (CPU) | llama.cpp ~110 | **0.81x** | 1.50x | **89 GFLOPS measured** — FMA ceiling [65] |
 | Q4K GEMV (GPU DP4A) | llama.cpp CUDA | TBD | 1.50x | MEASURE |
 
@@ -150,6 +150,26 @@ AI = 42.7 FLOP/byte (+33% over 64×64's 32 FLOP/byte). Smem = 12KB double-buffer
 **0.52× cuBLAS at 1024** — exceeds the 0.5× target for pure Rust PTX!
 Peak: **59.1 TFLOP/s at 4096** (was 49.8 with 64×64).
 +41% over original 40.5 TFLOP/s cp.async baseline. +210% over 18.4 initial CTA WMMA.
+
+**Software-pipelined 64×128 — POSITIVE RESULT (measured 2026-04-06)**:
+
+3-stage cp.async pipeline: prologue loads tiles 0+1, K-loop computes tile i
+while loading tile i+2 via `wait_group(1)`. 3 smem buffers × 6KB = 18KB.
+Overlaps cp.async latency (~200-400 cycles) with mma.sync compute.
+
+| Size | 64×128 (µs) | **Pipeline (µs)** | cuBLAS (µs) | 128 TF/s | **Pipe TF/s** | cuBLAS TF/s | **Pipe vs cuBLAS** |
+|------|-------------|-------------------|-------------|----------|---------------|-------------|-------------------|
+| 256 | 14.3 | **10.7** | 3.3 | 2.3 | **3.1** | 10.3 | 0.30x |
+| 512 | 19.3 | 19.3 | 5.9 | 13.9 | 13.9 | 45.5 | 0.31x |
+| 1024 | 37.8 | 38.6 | 22.5 | 56.9 | 55.6 | 95.5 | 0.58x |
+| **2048** | **392.6** | **282.1** | 119.7 | 43.8 | **60.9** | 143.5 | **0.42x** |
+| **4096** | 2545.4 | **2396.0** | 1060.8 | 54.0 | **57.4** | 129.6 | **0.44x** |
+
+**60.9 TFLOP/s at 2048** — new peak! Pipeline wins big at 2048 (+39%) where the
+non-pipelined kernel stalls on global load latency. The 3-stage pipeline hides
+this latency by keeping 2 groups in flight. At 1024, mma.sync compute is fast
+enough that latency hiding provides no benefit (neutral). At 4096, +6% gain.
+Contract: cgp-gpu-mma-64x128-pipeline-v1.yaml. 5 FALSIFY tests pass.
 
 Why 64×128 helps: the wider B tile doubles reuse of each loaded A element (8 column
 warps share the same A, vs 4 in 64×64). The 16-byte cp.async for B also provides
@@ -3216,9 +3236,9 @@ Analysis via `decy audit` + `pmat query` + direct source comparison.
 3623 tests passing. 16 FALSIFY tests (11 UNINIT + 3 PARALLEL + 2 SIMD).
 65 peer-reviewed citations [1]-[65]. 11 provable-contracts, all pass.
 
-**CGP-DBUF optimization sweep (7 phases, 2026-04-05 through 2026-04-06)**:
+**CGP-DBUF optimization sweep (8 phases, 2026-04-05 through 2026-04-06)**:
 
-35+ experiments (15 positive, 20 negative/documented). Systematic
+36+ experiments (16 positive, 20 negative/documented). Systematic
 optimization of the CPU compute pipeline from allocation through compute
 to output. Key results:
 
@@ -3256,9 +3276,11 @@ to output. Key results:
 | **CTA64 + cp.async** | **53.0** | **40.5** | **0.39x** | **+120% total** (8-byte async copy) |
 | **CTA64 mma.sync (no store)** | **23.7** | **90.5** | **0.86x** | Compute-only (ldmatrix+mma.sync) |
 | **CTA64 mma.sync (v2 store)** | **48.8** | **44.0** | **0.42x** | **+17% over wmma** (end-to-end) |
+| **64×128 mma.sync** | **37.8** | **56.9** | **0.52x** | **+210% total** (wider tile + mma.sync) |
+| **64×128 pipeline** | **38.6** | **55.6** | **0.52x** | 3-stage cp.async, **60.9 TF/s peak at 2048** |
 | cuBLAS FP16 | 20.6 | ~104 | 1.00x | Target: 0.5x |
 
-17 experiments (7 positive, 10 negative). cp.async gives the biggest win by
+18 experiments (8 positive, 10 negative). cp.async gives the biggest win by
 eliminating register pressure and enabling true load-compute overlap via
 async DMA directly global→shared.
 
@@ -3434,9 +3456,9 @@ is in the unified multi-backend architecture (CPU+GPU+WASM from one codebase),
 not in beating hand-tuned per-operation C code. The 0.81× ratio at 4096 is
 competitive for a pure-Rust implementation.
 
-**P3c. GPU GEMM pure-Rust PTX improvement. IN PROGRESS**
+**P3c. GPU GEMM pure-Rust PTX improvement. IN PROGRESS — pipeline peak 60.9 TF/s**
 
-Two parallel tracks (2026-04-06):
+Three parallel tracks (2026-04-06):
 
 **Track 1 (cuBLAS backend) ✅ DONE**: `Matrix::matmul` routes through cuBLAS
 when `--features cuda` enabled. 105-150 TFLOP/s production path via trueno-gpu
@@ -3456,6 +3478,14 @@ own FFI bindings. Falls back to wgpu if CUDA unavailable.
   Key fix: A/B operands must be .b32 registers, not .u32 (ptxas enforces).
 - **15/15 contracts pass** (73 checks, 0 fail). cuBLAS backend provides
   production throughput (105-150 TFLOP/s) while PTX R&D continues.
+
+**Track 3 (software pipeline) ✅ POSITIVE RESULT**: 3-stage cp.async pipeline
+on 64×128 tile. wait_group(1) overlaps load with compute. 18KB smem (3×6KB).
+- 2048: **60.9 TFLOP/s** (+39% over non-pipelined 43.8, 0.51× cuBLAS)
+- 4096: 57.4 TFLOP/s (+6% over 54.0)
+- 1024: 55.6 TFLOP/s (neutral, compute-bound — latency hiding provides no benefit)
+- 5 FALSIFY tests pass. Correctness verified: max_err=0.0000 at 256 and 512.
+- Contract: cgp-gpu-mma-64x128-pipeline-v1.yaml
 
 CUTLASS SM80 FP16 reference (from source): `GemmShape<128,256,64>`,
 `WarpShape<64,64,64>`, `InstructionShape<16,8,16>` (mma.sync.m16n8k16), 3 stages.

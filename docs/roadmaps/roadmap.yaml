@@ -1905,3 +1905,138 @@ roadmap:
   estimated_effort: null
   labels: []
   notes: null
+- id: PMAT-028
+  github_issue: null
+  item_type: task
+  title: 'CGP-DBUF Phase 8: cuBLAS backend + CUTLASS research + bridge plan'
+  status: planned
+  priority: high
+  assigned_to: null
+  created: 2026-04-06T09:49:41Z
+  updated: 2026-04-06T09:49:41Z
+  spec: null
+  acceptance_criteria:
+  - 'Track 1: cuBLAS wired into Matrix::matmul via trueno-gpu FFI (105-150 TFLOP/s production path). Track 2: CUTLASS SM80 defaults extracted (128×256 CTA, m16n8k16, 3 stages). Bridge plan: Phase 2 target 128×128 CTA → 0.6× cuBLAS. Also: cgp profile compare measures cuBLAS directly. 3623 tests pass.'
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: PMAT-029
+  github_issue: null
+  item_type: task
+  title: 'CGP-DBUF Phase 9: cuBLAS backend + 128×128 kernel scaffold + CUTLASS research'
+  status: planned
+  priority: critical
+  assigned_to: null
+  created: 2026-04-06T10:15:45Z
+  updated: 2026-04-06T10:15:45Z
+  spec: null
+  acceptance_criteria:
+  - 'Track 1: cuBLAS wired into Matrix::matmul (105-150 TFLOP/s, 4 GPU tests pass). Track 2: cta128_wmma.rs scaffold with 2× compute-to-load ratio, 24KB smem, 3 FALSIFY tests. CUTLASS SM80 default extracted (128×256, m16n8k16, 3 stages). Bridge plan documented. 8/10 spec priorities addressed.'
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: PMAT-030
+  github_issue: null
+  item_type: task
+  title: 'CGP-DBUF Phase 10: 128×128 CTA WMMA kernel — complete pipeline'
+  status: planned
+  priority: critical
+  assigned_to: null
+  created: 2026-04-06T10:20:28Z
+  updated: 2026-04-06T10:20:28Z
+  spec: null
+  acceptance_criteria:
+  - 'Full 128×128 GEMM kernel: 2-stage cp.async, 4 WMMAs/warp/K-tile (2×2 grid), 24KB smem, 64 FLOP/byte ratio, prologue→K-loop→epilogue→C-store. 3 FALSIFY tests pass. Next: hardware benchmark on RTX 4090.'
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: PMAT-031
+  github_issue: null
+  item_type: task
+  title: 'CGP-DBUF Phase 11: mma.sync + ldmatrix PTX builder + 128×128 HW benchmark'
+  status: planned
+  priority: critical
+  assigned_to: null
+  created: 2026-04-06T10:33:13Z
+  updated: 2026-04-06T10:33:13Z
+  spec: null
+  acceptance_criteria:
+  - 'Phase 1 DONE: MmaSync m16n8k16 + LdMatrix x4 added to PTX builder (emission + builder methods). 128×128 NEGATIVE (28.4 vs 40.5 TFLOP/s — occupancy loss). CTA128 benchmark wired into test suite. Next: build 64×64 kernel using mma.sync instead of wmma to test IPC improvement.'
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: PMAT-032
+  github_issue: null
+  item_type: task
+  title: 'CGP-DBUF Phase 12: mma.sync contract + PTX fix + 15/15 contracts'
+  status: planned
+  priority: critical
+  assigned_to: null
+  created: 2026-04-06T11:01:38Z
+  updated: 2026-04-06T11:01:38Z
+  spec: null
+  acceptance_criteria:
+  - 'Contract-first: cgp-gpu-mma-sync-v1.yaml written before kernel. mma.sync .b32 register fix (was .u32, ptxas rejected). PTX compiles on RTX 4090. 15/15 contracts pass (73 checks). Instruction analysis: 96% overhead in wmma kernel. Bridge plan updated.'
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: PMAT-033
+  github_issue: null
+  item_type: task
+  title: 'CGP-DBUF Phase 13: ldmatrix.trans + combined GPU compilation test'
+  status: planned
+  priority: critical
+  assigned_to: null
+  created: 2026-04-06T11:06:27Z
+  updated: 2026-04-06T11:06:27Z
+  spec: null
+  acceptance_criteria:
+  - 'Full mma.sync compute pipeline compiles on RTX 4090: ldmatrix.x4 (A) + ldmatrix.x2.trans (B) + mma.sync.m16n8k16. Contract cgp-gpu-mma-sync-v1 FALSIFY-001b satisfied. PTX builder complete for next-gen tensor core kernel.'
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: PMAT-034
+  github_issue: null
+  item_type: task
+  title: 'CGP-DBUF Phase 14: mma.sync BREAKTHROUGH — 90.5 TFLOP/s, 0.86× cuBLAS'
+  status: planned
+  priority: critical
+  assigned_to: null
+  created: 2026-04-06T11:11:50Z
+  updated: 2026-04-06T11:11:50Z
+  spec: null
+  acceptance_criteria:
+  - mma.sync.m16n8k16 + ldmatrix.x4 + ldmatrix.x2.trans in 64×64 CTA kernel. 90.5 TFLOP/s at 1024 (was 40.5 with wmma = 2.4× improvement). 0.86× cuBLAS (was 0.39×). Contract FALSIFY-MMA-SYNC-003 SATISFIED. C store pending for correctness verification.
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: PMAT-035
+  github_issue: null
+  item_type: task
+  title: 'CGP-DBUF Phase 15: sw-pipelined 64×128 — 60.9 TF/s (+39%)'
+  status: planned
+  priority: high
+  assigned_to: null
+  created: 2026-04-06T13:14:28Z
+  updated: 2026-04-06T13:14:28Z
+  spec: null
+  acceptance_criteria: []
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
