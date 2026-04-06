@@ -179,7 +179,7 @@ falsification:
     citation: "[1] Polars: single workspace version for 28 crates"
 
   - name: FALSIFY-MONO-010
-    description: "Crate naming violates the definitive registry"
+    description: "Crate naming violates the definitive registry (Appendix A)"
     check: |
       Every [package] name in the workspace MUST appear in Appendix A
       of aprender-monorepo-consolidation.md. No crate may be added,
@@ -194,6 +194,39 @@ falsification:
         | grep -oP '`[^`]+`' | tr -d '`' | sort > /tmp/registered-crates.txt
       diff /tmp/registered-crates.txt /tmp/actual-crates.txt \
         || (echo "FALSIFY-MONO-010: unregistered crate name found"; exit 1)
+
+  - name: FALSIFY-MONO-011
+    description: "Non-apr-cli binary found in workspace"
+    check: |
+      apr-cli is THE ONLY user-facing binary. No other crate may
+      contain [[bin]] sections (exception: aprender-contracts-cli for
+      build tooling only, not user-facing ML tooling).
+    enforcement: |
+      # Scan all Cargo.toml files for [[bin]] sections
+      violations=$(find crates/ -name Cargo.toml -exec grep -l '\[\[bin\]\]' {} \; \
+        | grep -v 'apr-cli' | grep -v 'aprender-contracts-cli')
+      if [ -n "$violations" ]; then
+        echo "FALSIFY-MONO-011: unauthorized [[bin]] in: $violations"
+        echo "Only apr-cli may produce user-facing binaries."
+        exit 1
+      fi
+
+  - name: FALSIFY-MONO-012
+    description: "apr subcommand has no provable contract"
+    check: |
+      Every variant in apr-cli's Commands enum must have a matching
+      contract YAML in contracts/. Missing contracts = unspecified behavior.
+    enforcement: |
+      grep -oP '^\s+(\w+)\s*[{,]' crates/apr-cli/src/commands_enum.rs \
+        | tr -d ' {,' | tr '[:upper:]' '[:lower:]' | sort -u > /tmp/cmds.txt
+      ls contracts/apr-cli-*.yaml 2>/dev/null \
+        | xargs -I{} basename {} .yaml | sed 's/apr-cli-//' \
+        | sed 's/-v[0-9].*//' | sort -u > /tmp/contracts.txt
+      missing=$(comm -23 /tmp/cmds.txt /tmp/contracts.txt)
+      if [ -n "$missing" ]; then
+        echo "FALSIFY-MONO-012: subcommands missing contracts: $missing"
+        exit 1
+      fi
 
 # ── Migration Phases ──
 

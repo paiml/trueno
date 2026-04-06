@@ -6,7 +6,97 @@
 **Priority**: P0 — Unblocks daily apr-cli releases
 **Author**: PAIML Team + Claude
 **Contract**: `contracts/cgp/cgp-monorepo-consolidation-v1.yaml`
-**Falsification**: 9 conditions (FALSIFY-MONO-001 through 009)
+**Falsification**: 10 conditions (FALSIFY-MONO-001 through 010)
+
+---
+
+## Architectural Invariant: apr-cli Is THE Binary
+
+**This is a HARD REQUIREMENT. No exceptions.**
+
+### Rule 1: One Binary, One Entry Point
+
+`apr-cli` (binary name: `apr`) is the **only** user-facing CLI binary in the
+monorepo. All functionality — inference, training, serving, profiling,
+orchestration, data management, model registry — is accessed via `apr`
+subcommands. No other crate in the workspace may produce a user-facing binary.
+
+**Before (7+ binaries across repos):**
+```
+cargo install batuta        # batuta binary
+cargo install entrenar      # entrenar binary
+cargo install realizar      # realizar binary
+cargo install cbtop         # cbtop binary
+cargo install renacer       # renacer binary
+cargo install presentar     # presentar binary
+cargo install trueno-rag    # trueno-rag binary
+```
+
+**After (1 binary):**
+```
+cargo install apr-cli       # apr binary — THE entry point
+apr run                     # inference (was: realizar)
+apr train                   # training (was: entrenar)
+apr serve                   # serving (was: realizar serve)
+apr orchestrate             # agents, playbooks (was: batuta)
+apr profile                 # profiling (was: renacer)
+apr monitor                 # GPU/system monitoring (was: cbtop)
+apr rag                     # RAG pipeline (was: trueno-rag)
+apr registry                # model registry (was: pacha)
+apr present                 # TUI dashboards (was: presentar)
+apr test                    # WASM/browser testing (was: probar)
+apr contracts               # provable contracts (was: pv)
+```
+
+### Rule 2: Libraries Are Libraries
+
+Every `aprender-*` crate is a **library**. They expose `pub fn` APIs consumed
+by `apr-cli` or by external Rust code via `use aprender_compute::*;`.
+They do NOT produce binaries, CLIs, or executables.
+
+Exception: `aprender-contracts-cli` may produce a `pv` binary for standalone
+contract validation (build tooling, not user-facing ML tooling).
+
+### Rule 3: CLI Contract Coverage
+
+Every `apr` subcommand MUST have:
+
+1. **A provable contract** in `contracts/` defining inputs, outputs, and
+   falsification conditions
+2. **A clap `#[derive(Parser)]`** with `#[command(about = "...")]` doc
+3. **An integration test** in `apr-cli/tests/` verifying the subcommand
+   runs without error
+4. **A cookbook entry** in `cookbook/` showing usage with real models
+
+**Enforcement**: CI checks that every `Commands` enum variant has a
+matching contract YAML:
+
+```bash
+# Extract subcommand names from clap derive
+grep -oP '^\s+(\w+)\s*[{,]' crates/apr-cli/src/commands_enum.rs \
+  | tr -d ' {,' | tr '[:upper:]' '[:lower:]' > /tmp/subcommands.txt
+
+# Check each has a contract
+while read cmd; do
+  if ! ls contracts/apr-cli-${cmd}-*.yaml 2>/dev/null | head -1 > /dev/null; then
+    echo "MISSING CONTRACT: apr $cmd"
+    FAIL=1
+  fi
+done < /tmp/subcommands.txt
+[ -z "$FAIL" ] || exit 1
+```
+
+### Rule 4: Namespace Discipline
+
+| Pattern | Allowed | Example |
+|---------|---------|---------|
+| `apr <subcommand>` | Yes — user-facing CLI | `apr run model.apr` |
+| `aprender-*` crate name | Yes — library crate | `aprender-compute = "0.29"` |
+| `aprender::*` Rust import | Yes — library API | `use aprender::format::AprFile;` |
+| Standalone binary from `aprender-*` crate | **NO** | ~~`aprender-serve` binary~~ |
+| Old binary names (`batuta`, `entrenar`, etc.) | **NO** (archived) | ~~`cargo install batuta`~~ |
+
+---
 
 ### Citations
 
@@ -513,6 +603,8 @@ If ANY of these become true, the migration hypothesis is wrong:
 | FALSIFY-MONO-008 | Shim crates fail re-export | `trueno = "0.19"` produces type mismatches | Integration test shim crates in CI |
 | FALSIFY-MONO-009 | Workspace version bump breaks downstream | Patch bump causes API incompatibility | Polars pattern: shared version [1] |
 | FALSIFY-MONO-010 | Crate name not in Appendix A registry | Any `[package] name` not listed in spec | CI script validates against registry |
+| FALSIFY-MONO-011 | Non-apr-cli binary found in workspace | Any `[[bin]]` section outside apr-cli | CI grep for `[[bin]]` in Cargo.toml files |
+| FALSIFY-MONO-012 | apr subcommand missing contract | Any Commands enum variant without contract YAML | CI cross-checks enum vs contracts/ |
 
 ---
 
