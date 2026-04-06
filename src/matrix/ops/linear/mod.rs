@@ -201,7 +201,8 @@ impl Matrix<f32> {
                     }
                 });
 
-                return Ok(Vector::from_slice(&result_data));
+                // Move result_data — avoids redundant from_slice copy.
+                return Ok(Vector::from_vec(result_data));
             }
         }
 
@@ -214,7 +215,8 @@ impl Matrix<f32> {
             *result = dispatch_dot!(self.backend, row, v_slice);
         }
 
-        Ok(Vector::from_slice(&result_data))
+        // Move result_data — avoids redundant from_slice copy.
+        Ok(Vector::from_vec(result_data))
     }
 
     /// Vector-matrix multiplication (row vector): v^T × A
@@ -304,12 +306,12 @@ impl Matrix<f32> {
                         result_data[i] += v;
                     }
                 }
-                return Ok(Vector::from_slice(&result_data));
+                return Ok(Vector::from_vec(result_data));
             }
         }
 
         crate::blis::gemv::gemv(m.rows, m.cols, v.as_slice(), &m.data, &mut result_data);
-        Ok(Vector::from_slice(&result_data))
+        Ok(Vector::from_vec(result_data))
     }
 }
 
