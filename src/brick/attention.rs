@@ -191,28 +191,112 @@ impl AttentionOp {
         }
     }
 
-    /// Row-wise softmax with SIMD max/sum.
+    /// Row-wise softmax with AVX2 SIMD exp + horizontal ops.
+    /// CGP-DBUF: replaced scalar exp() loop with AVX2 polynomial fast_exp
+    /// from blis::softmax (6th-order Remez minimax, <1 ULP error).
+    /// For seq_len=512: 64 AVX2 iterations vs 512 scalar exp() calls.
     #[inline]
     pub(crate) fn simd_softmax_row(scores: &mut [f32]) {
         if scores.is_empty() {
             return;
         }
 
-        // Find max for numerical stability
-        let max = scores.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        #[cfg(target_arch = "x86_64")]
+        if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
+            // SAFETY: AVX2+FMA verified. scores is valid mutable slice.
+            unsafe {
+                Self::avx2_softmax_row(scores);
+            }
+            return;
+        }
 
-        // Compute exp(x - max) and sum
+        // Scalar fallback
+        Self::scalar_softmax_row(scores);
+    }
+
+    /// Scalar softmax fallback.
+    fn scalar_softmax_row(scores: &mut [f32]) {
+        let max = scores.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
         let mut sum = 0.0f32;
         for s in scores.iter_mut() {
             *s = (*s - max).exp();
             sum += *s;
         }
-
-        // Normalize (guard against sum=0 from underflow)
         let inv_sum = 1.0 / sum.max(f32::EPSILON);
         for s in scores.iter_mut() {
             *s *= inv_sum;
         }
+    }
+
+    /// AVX2 softmax: fused exp+sum in one pass, then SIMD normalize.
+    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "avx2", enable = "fma")]
+    unsafe fn avx2_softmax_row(scores: &mut [f32]) {
+        unsafe {
+            use std::arch::x86_64::*;
+
+            let n = scores.len();
+            let n8 = n / 8 * 8;
+
+            // Pass 1: find max (AVX2 horizontal max)
+            let mut max_v = _mm256_set1_ps(f32::NEG_INFINITY);
+            let mut i = 0;
+            while i < n8 {
+                let v = _mm256_loadu_ps(scores.as_ptr().add(i));
+                max_v = _mm256_max_ps(max_v, v);
+                i += 8;
+            }
+            // Horizontal reduce max_v
+            let hi = _mm256_permute2f128_ps(max_v, max_v, 1);
+            max_v = _mm256_max_ps(max_v, hi);
+            let shuf = _mm256_shuffle_ps(max_v, max_v, 0b01_00_11_10);
+            max_v = _mm256_max_ps(max_v, shuf);
+            let shuf2 = _mm256_shuffle_ps(max_v, max_v, 0b10_11_00_01);
+            max_v = _mm256_max_ps(max_v, shuf2);
+            let mut max_val = _mm_cvtss_f32(_mm256_castps256_ps128(max_v));
+            for j in n8..n {
+                max_val = max_val.max(scores[j]);
+            }
+
+            // Pass 2: fused exp(x-max) + sum (using fast_exp_avx2)
+            let max_broadcast = _mm256_set1_ps(max_val);
+            let mut sum_v = _mm256_setzero_ps();
+            i = 0;
+            while i < n8 {
+                let x = _mm256_sub_ps(_mm256_loadu_ps(scores.as_ptr().add(i)), max_broadcast);
+                let e = crate::blis::softmax::fast_exp_avx2(x);
+                _mm256_storeu_ps(scores.as_mut_ptr().add(i), e);
+                sum_v = _mm256_add_ps(sum_v, e);
+                i += 8;
+            }
+            // Horizontal reduce sum_v
+            let hi = _mm256_permute2f128_ps(sum_v, sum_v, 1);
+            sum_v = _mm256_add_ps(sum_v, hi);
+            let shuf = _mm256_shuffle_ps(sum_v, sum_v, 0b01_00_11_10);
+            sum_v = _mm256_add_ps(sum_v, shuf);
+            let shuf2 = _mm256_shuffle_ps(sum_v, sum_v, 0b10_11_00_01);
+            sum_v = _mm256_add_ps(sum_v, shuf2);
+            let mut sum_val = _mm_cvtss_f32(_mm256_castps256_ps128(sum_v));
+            // Scalar remainder for exp+sum
+            for j in n8..n {
+                let e = (scores[j] - max_val).exp();
+                scores[j] = e;
+                sum_val += e;
+            }
+
+            // Pass 3: normalize (SIMD multiply by 1/sum)
+            let inv_sum = 1.0 / sum_val.max(f32::EPSILON);
+            let inv_v = _mm256_set1_ps(inv_sum);
+            i = 0;
+            while i < n8 {
+                let v = _mm256_loadu_ps(scores.as_ptr().add(i));
+                _mm256_storeu_ps(scores.as_mut_ptr().add(i), _mm256_mul_ps(v, inv_v));
+                i += 8;
+            }
+            for j in n8..n {
+                scores[j] *= inv_sum;
+            }
+        } // unsafe
     }
 }
 
