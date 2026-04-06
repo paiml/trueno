@@ -235,6 +235,13 @@ The 2× compute-to-load ratio improvement is offset by occupancy loss.
 CUTLASS compensates with mma.sync + ldmatrix (8× fewer smem load instructions)
 + more pipeline stages.
 
+**Instruction analysis (2026-04-06)**: PTX instruction count reveals the kernel
+is 96% address-computation overhead (152/158 instructions are non-compute).
+Incremental optimization (stride-based addressing) REGRESSED because ptxas
+instruction reordering is affected by register dependencies. Only a full
+rewrite using mma.sync+ldmatrix (which fundamentally changes the fragment
+load pattern) can improve the ratio.
+
 **Revised estimate**: 0.5x cuBLAS achievable with mma.sync+ldmatrix at 64×64.
 0.6x+ requires solving the occupancy/tile-size tradeoff (needs warp specialization).
 
