@@ -1497,6 +1497,13 @@ impl WgslForwardPass {
                 );
             });
         }
+        // PMAT-509: RoPE on Q and K before attention
+        run("rope_q", &|e| {
+            self.encode_batch_rope(e, &self.q_buf, seq_len, self.num_heads, self.head_dim)
+        });
+        run("rope_k", &|e| {
+            self.encode_batch_rope(e, &self.k_buf, seq_len, self.num_kv_heads, self.head_dim)
+        });
         run("attention", &|e| self.encode_attention(e, seq_len));
         {
             let mut e = self.device.create_command_encoder(&Default::default());
