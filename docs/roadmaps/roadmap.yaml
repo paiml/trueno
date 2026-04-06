@@ -2028,11 +2028,11 @@ roadmap:
   github_issue: null
   item_type: task
   title: 'CGP-DBUF Phase 15: sw-pipelined 64×128 — 60.9 TF/s (+39%)'
-  status: planned
+  status: inprogress
   priority: high
   assigned_to: null
   created: 2026-04-06T13:14:28Z
-  updated: 2026-04-06T13:14:28Z
+  updated: 2026-04-06T13:26:15.305962971+00:00
   spec: null
   acceptance_criteria: []
   phases: []
