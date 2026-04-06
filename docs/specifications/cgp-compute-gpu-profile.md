@@ -3153,6 +3153,14 @@ Analysis via `decy audit` + `pmat query` + direct source comparison.
 
 **cgp tool**: 18/18 CLI commands implemented (only `cgp tui` is STUB).
 3623 tests passing (updated 2026-04-06). 16 FALSIFY tests: 11 UNINIT + 3 PARALLEL + 2 SIMD.
+
+**SIMD softmax sweep (2026-04-06, CGP-DBUF Phase 6)**:
+
+- AttentionOp::simd_softmax_row: scalar exp() → AVX2 fast_exp polynomial (6th-order
+  Remez minimax, <1 ULP). For seq_len=512: 64 SIMD iterations vs 512 scalar exp().
+  3-pass: AVX2 max, fused fast_exp+sum, SIMD normalize.
+- brick::SoftmaxOp: replaced 4-step pipeline (3 intermediate allocs) with single
+  call to blis::softmax::softmax_1d_alloc (AVX2 fused, 1 alloc).
 65 peer-reviewed citations [1]-[65]. 11 provable-contracts.
 All 11 contracts pass (53 checks pass, 0 fail, 44 skip).
 
