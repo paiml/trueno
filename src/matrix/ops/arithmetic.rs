@@ -290,20 +290,31 @@ impl Matrix<f32> {
         Ok(Matrix::from_vec(1, n, c)?)
     }
 
-    /// Naive O(n³) matrix multiplication (baseline for small matrices)
+    /// Naive O(n³) matrix multiplication (baseline for small matrices < 64)
     fn matmul_naive(
         &self,
         other: &Matrix<f32>,
         result: &mut Matrix<f32>,
     ) -> Result<(), TruenoError> {
-        for i in 0..self.rows {
-            for j in 0..other.cols {
-                let mut sum = 0.0;
-                for k in 0..self.cols {
-                    sum += self.get(i, k).expect("bounds validated")
-                        * other.get(k, j).expect("bounds validated");
+        let m = self.rows;
+        let k = self.cols;
+        let n = other.cols;
+        // Direct slice access — eliminates bounds-check + Option::expect
+        // per element in the innermost loop (~30% overhead for small matrices).
+        let a = &self.data;
+        let b = &other.data;
+        let c = &mut result.data;
+
+        for i in 0..m {
+            let a_row = i * k;
+            let c_row = i * n;
+            for j in 0..n {
+                let mut sum = 0.0f32;
+                for kk in 0..k {
+                    // a[i,kk] * b[kk,j] — row-major layout
+                    sum += a[a_row + kk] * b[kk * n + j];
                 }
-                *result.get_mut(i, j).expect("bounds validated") = sum;
+                c[c_row + j] = sum;
             }
         }
         Ok(())
