@@ -3399,8 +3399,13 @@ own FFI bindings. Falls back to wgpu if CUDA unavailable.
 - Full pipeline: prologue → K-loop → epilogue → C-store (4 WMMAs per warp)
 - **NEGATIVE RESULT**: 28.4 TFLOP/s at 1024 (vs 40.5 for 64×64) — lower occupancy
   dominates the 2× compute-to-load improvement. 24KB smem per CTA → fewer CTAs/SM.
-  CUTLASS compensates with 3-5 stage pipeline and mma.sync (higher IPC).
-- Next: try 128×64 tile (12KB smem, better occupancy) or 3-stage pipeline
+- **Instruction analysis**: 96% of PTX is overhead (6/158 compute instructions).
+  Stride-based addressing REGRESSED. Only mma.sync+ldmatrix rewrite can help.
+- **mma.sync PTX support**: DONE. Builder + emission + GPU compilation verified.
+  Contract: cgp-gpu-mma-sync-v1.yaml (FALSIFY-MMA-SYNC-001 through 003).
+  Key fix: A/B operands must be .b32 registers, not .u32 (ptxas enforces).
+- **15/15 contracts pass** (73 checks, 0 fail). cuBLAS backend provides
+  production throughput (105-150 TFLOP/s) while PTX R&D continues.
 
 CUTLASS SM80 FP16 reference (from source): `GemmShape<128,256,64>`,
 `WarpShape<64,64,64>`, `InstructionShape<16,8,16>` (mma.sync.m16n8k16), 3 stages.
