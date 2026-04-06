@@ -178,6 +178,23 @@ falsification:
       unless major version bump). Polars uses this pattern for 28 crates.
     citation: "[1] Polars: single workspace version for 28 crates"
 
+  - name: FALSIFY-MONO-010
+    description: "Crate naming violates the definitive registry"
+    check: |
+      Every [package] name in the workspace MUST appear in Appendix A
+      of aprender-monorepo-consolidation.md. No crate may be added,
+      renamed, or removed without updating the spec first.
+      Enforcement: CI script checks `cargo metadata --format-version 1`
+      workspace member names against the registry.
+    enforcement: |
+      # Add to sovereign-ci.yml:
+      cargo metadata --format-version 1 --no-deps \
+        | jq -r '.packages[].name' | sort > /tmp/actual-crates.txt
+      grep '| `aprender' docs/specifications/aprender-monorepo-consolidation.md \
+        | grep -oP '`[^`]+`' | tr -d '`' | sort > /tmp/registered-crates.txt
+      diff /tmp/registered-crates.txt /tmp/actual-crates.txt \
+        || (echo "FALSIFY-MONO-010: unregistered crate name found"; exit 1)
+
 # ── Migration Phases ──
 
 phases:

@@ -512,6 +512,7 @@ If ANY of these become true, the migration hypothesis is wrong:
 | FALSIFY-MONO-007 | Git history lost during migration | `git log --follow` doesn't show pre-merge commits | Verify `git subtree` preservation |
 | FALSIFY-MONO-008 | Shim crates fail re-export | `trueno = "0.19"` produces type mismatches | Integration test shim crates in CI |
 | FALSIFY-MONO-009 | Workspace version bump breaks downstream | Patch bump causes API incompatibility | Polars pattern: shared version [1] |
+| FALSIFY-MONO-010 | Crate name not in Appendix A registry | Any `[package] name` not listed in spec | CI script validates against registry |
 
 ---
 
@@ -552,52 +553,143 @@ The following infra specs must be updated BEFORE or DURING migration:
 
 ---
 
-## Appendix A: Crate Rename Mapping
+## Appendix A: Definitive Crate Name Registry (ENFORCED BY CONTRACT)
 
-| Old Name | New Name | Published Shim? |
-|----------|----------|----------------|
-| trueno | aprender-compute | Yes (trueno 0.19) |
-| trueno-gpu | aprender-gpu | Yes |
-| trueno-quant | aprender-quant | Yes |
-| trueno-db | aprender-db | Yes |
-| trueno-viz | aprender-viz | Yes |
-| trueno-explain | aprender-explain | Yes |
-| trueno-rag | aprender-rag | Yes |
-| trueno-graph | aprender-graph | Yes |
-| trueno-gemm-codegen | aprender-gemm-codegen | Yes |
-| trueno-zram-core | aprender-zram | Yes |
-| trueno-zram-adaptive | aprender-zram-adaptive | Yes |
-| trueno-cuda-edge | aprender-cuda-edge | Yes |
-| trueno-fft | aprender-fft | Yes |
-| trueno-sparse | aprender-sparse | Yes |
-| trueno-solve | aprender-solve | Yes |
-| trueno-rand | aprender-rand | Yes |
-| trueno-image | aprender-image | Yes |
-| trueno-tensor | aprender-tensor | Yes |
-| trueno-ptx-debug | aprender-ptx-debug | No (internal) |
-| entrenar | aprender-train | Yes (entrenar 0.8) |
-| entrenar-common | aprender-train-common | Yes |
-| entrenar-lora | aprender-train-lora | Yes |
-| realizar | aprender-serve | Yes (realizar 0.9) |
-| batuta | aprender-orchestrate | Yes (batuta 0.8) |
-| apr-cli | apr-cli | No rename needed |
-| aprender | aprender | No rename needed |
-| presentar | aprender-present | Yes (presentar 0.4) |
-| renacer | aprender-profile | Yes (renacer 0.11) |
-| certeza | aprender-verify | Yes (certeza 0.2) |
-| batuta-common | (folded into aprender-orchestrate) | Yes |
-| repartir | aprender-distribute | Yes (repartir 2.1) |
-| alimentar | aprender-data | Yes (alimentar 0.3) |
-| simular | aprender-simulate | Yes (simular 0.4) |
-| verificar | aprender-verify-ml | Yes (verificar 0.6) |
-| probar | aprender-test | Yes (probar 1.1) |
-| probar-derive | aprender-test-derive | Yes |
-| probar-cli | aprender-test-cli | Yes |
-| probar-js-gen | aprender-test-js-gen | Yes |
-| provable-contracts | aprender-contracts | Yes (provable-contracts 0.3) |
-| provable-contracts-macros | aprender-contracts-macros | Yes |
-| provable-contracts-cli | aprender-contracts-cli | Yes |
-| pacha | aprender-registry | Yes (pacha 0.3) |
+**This table is the single source of truth for all crate names in the monorepo.**
+Any crate not listed here MUST NOT be added without updating this spec.
+Contract: `cgp-monorepo-consolidation-v1.yaml` FALSIFY-MONO-010.
+
+### A.1 Core ML (unchanged names)
+
+| # | Crate Name | Workspace Path | Source Repo | Description |
+|---|-----------|---------------|-------------|-------------|
+| 1 | `aprender` | `crates/aprender/` | paiml/aprender | ML format (.apr), tokenizers, model ops |
+| 2 | `apr-cli` | `crates/apr-cli/` | paiml/aprender | `apr` binary — user-facing CLI |
+| 3 | `aprender-shell` | `crates/aprender-shell/` | paiml/aprender | Interactive REPL |
+| 4 | `aprender-tsp` | `crates/aprender-tsp/` | paiml/aprender | TSP solver examples |
+| 5 | `aprender-monte-carlo` | `crates/aprender-monte-carlo/` | paiml/aprender | Monte Carlo simulations |
+
+### A.2 Compute Primitives (was trueno)
+
+| # | Crate Name | Workspace Path | Old Name | Shim Version |
+|---|-----------|---------------|----------|-------------|
+| 6 | `aprender-compute` | `crates/aprender-compute/` | `trueno` | trueno 0.19 |
+| 7 | `aprender-gpu` | `crates/aprender-gpu/` | `trueno-gpu` | trueno-gpu 0.5 |
+| 8 | `aprender-quant` | `crates/aprender-quant/` | `trueno-quant` | trueno-quant 0.2 |
+| 9 | `aprender-gemm-codegen` | `crates/aprender-gemm-codegen/` | `trueno-gemm-codegen` | trueno-gemm-codegen 0.2 |
+| 10 | `aprender-fft` | `crates/aprender-fft/` | `trueno-fft` | trueno-fft 0.2 |
+| 11 | `aprender-sparse` | `crates/aprender-sparse/` | `trueno-sparse` | trueno-sparse 0.2 |
+| 12 | `aprender-solve` | `crates/aprender-solve/` | `trueno-solve` | trueno-solve 0.2 |
+| 13 | `aprender-rand` | `crates/aprender-rand/` | `trueno-rand` | trueno-rand 0.2 |
+| 14 | `aprender-image` | `crates/aprender-image/` | `trueno-image` | trueno-image 0.2 |
+| 15 | `aprender-tensor` | `crates/aprender-tensor/` | `trueno-tensor` | trueno-tensor 0.2 |
+| 16 | `aprender-cuda-edge` | `crates/aprender-cuda-edge/` | `trueno-cuda-edge` | trueno-cuda-edge 0.2 |
+| 17 | `aprender-ptx-debug` | `crates/aprender-ptx-debug/` | `trueno-ptx-debug` | No (internal only) |
+| 18 | `aprender-explain` | `crates/aprender-explain/` | `trueno-explain` | trueno-explain 0.3 |
+| 19 | `aprender-cbtop` | `crates/aprender-cbtop/` | `cbtop` | cbtop 0.2 |
+| 20 | `aprender-cgp` | `crates/aprender-cgp/` | `cgp` | No (internal only) |
+
+### A.3 Data & Storage
+
+| # | Crate Name | Workspace Path | Old Name | Shim Version |
+|---|-----------|---------------|----------|-------------|
+| 21 | `aprender-db` | `crates/aprender-db/` | `trueno-db` | trueno-db 0.4 |
+| 22 | `aprender-graph` | `crates/aprender-graph/` | `trueno-graph` | trueno-graph 0.2 |
+| 23 | `aprender-rag` | `crates/aprender-rag/` | `trueno-rag` | trueno-rag 0.3 |
+| 24 | `aprender-rag-cli` | `crates/aprender-rag-cli/` | `trueno-rag-cli` | trueno-rag-cli 0.2 |
+| 25 | `aprender-data` | `crates/aprender-data/` | `alimentar` | alimentar 0.3 |
+| 26 | `aprender-registry` | `crates/aprender-registry/` | `pacha` | pacha 0.3 |
+
+### A.4 Training (was entrenar)
+
+| # | Crate Name | Workspace Path | Old Name | Shim Version |
+|---|-----------|---------------|----------|-------------|
+| 27 | `aprender-train` | `crates/aprender-train/` | `entrenar` | entrenar 0.8 |
+| 28 | `aprender-train-common` | `crates/aprender-train-common/` | `entrenar-common` | entrenar-common 0.2 |
+| 29 | `aprender-train-lora` | `crates/aprender-train-lora/` | `entrenar-lora` | entrenar-lora 0.4 |
+| 30 | `aprender-train-distill` | `crates/aprender-train-distill/` | `entrenar-distill` | entrenar-distill 0.2 |
+| 31 | `aprender-train-inspect` | `crates/aprender-train-inspect/` | `entrenar-inspect` | entrenar-inspect 0.2 |
+| 32 | `aprender-train-shell` | `crates/aprender-train-shell/` | `entrenar-shell` | entrenar-shell 0.2 |
+
+### A.5 Serving (was realizar)
+
+| # | Crate Name | Workspace Path | Old Name | Shim Version |
+|---|-----------|---------------|----------|-------------|
+| 33 | `aprender-serve` | `crates/aprender-serve/` | `realizar` | realizar 0.9 |
+
+### A.6 Orchestration (was batuta)
+
+| # | Crate Name | Workspace Path | Old Name | Shim Version |
+|---|-----------|---------------|----------|-------------|
+| 34 | `aprender-orchestrate` | `crates/aprender-orchestrate/` | `batuta` | batuta 0.8 |
+
+### A.7 Visualization & TUI (was presentar + trueno-viz)
+
+| # | Crate Name | Workspace Path | Old Name | Shim Version |
+|---|-----------|---------------|----------|-------------|
+| 35 | `aprender-viz` | `crates/aprender-viz/` | `trueno-viz` | trueno-viz 0.3 |
+| 36 | `aprender-present-core` | `crates/aprender-present-core/` | `presentar-core` | presentar-core 0.4 |
+| 37 | `aprender-present-terminal` | `crates/aprender-present-terminal/` | `presentar-terminal` | presentar-terminal 0.4 |
+| 38 | `aprender-present-widgets` | `crates/aprender-present-widgets/` | `presentar-widgets` | presentar-widgets 0.4 |
+| 39 | `aprender-present-layout` | `crates/aprender-present-layout/` | `presentar-layout` | presentar-layout 0.4 |
+| 40 | `aprender-present-yaml` | `crates/aprender-present-yaml/` | `presentar-yaml` | presentar-yaml 0.4 |
+| 41 | `aprender-present-cli` | `crates/aprender-present-cli/` | `presentar-cli` | presentar-cli 0.4 |
+| 42 | `aprender-present` | `crates/aprender-present/` | `presentar` | presentar 0.4 |
+
+### A.8 Profiling & Quality
+
+| # | Crate Name | Workspace Path | Old Name | Shim Version |
+|---|-----------|---------------|----------|-------------|
+| 43 | `aprender-profile` | `crates/aprender-profile/` | `renacer` | renacer 0.11 |
+| 44 | `aprender-profile-core` | `crates/aprender-profile-core/` | `renacer-core` | renacer-core 0.2 |
+| 45 | `aprender-verify` | `crates/aprender-verify/` | `certeza` | certeza 0.2 |
+| 46 | `aprender-verify-ml` | `crates/aprender-verify-ml/` | `verificar` | verificar 0.6 |
+| 47 | `aprender-simulate` | `crates/aprender-simulate/` | `simular` | simular 0.4 |
+| 48 | `aprender-distribute` | `crates/aprender-distribute/` | `repartir` | repartir 2.1 |
+
+### A.9 Testing Framework (was probar)
+
+| # | Crate Name | Workspace Path | Old Name | Shim Version |
+|---|-----------|---------------|----------|-------------|
+| 49 | `aprender-test` | `crates/aprender-test/` | `probar` | probar 1.1 |
+| 50 | `aprender-test-derive` | `crates/aprender-test-derive/` | `probar-derive` | probar-derive 1.1 |
+| 51 | `aprender-test-cli` | `crates/aprender-test-cli/` | `probar-cli` | probar-cli 1.1 |
+| 52 | `aprender-test-js-gen` | `crates/aprender-test-js-gen/` | `probar-js-gen` | probar-js-gen 1.1 |
+
+### A.10 Contracts & Build Infrastructure (was provable-contracts)
+
+| # | Crate Name | Workspace Path | Old Name | Shim Version |
+|---|-----------|---------------|----------|-------------|
+| 53 | `aprender-contracts` | `crates/aprender-contracts/` | `provable-contracts` | provable-contracts 0.3 |
+| 54 | `aprender-contracts-macros` | `crates/aprender-contracts-macros/` | `provable-contracts-macros` | provable-contracts-macros 0.3 |
+| 55 | `aprender-contracts-cli` | `crates/aprender-contracts-cli/` | `provable-contracts-cli` | provable-contracts-cli 0.3 |
+
+### A.11 Compressed Memory (was trueno-zram)
+
+| # | Crate Name | Workspace Path | Old Name | Shim Version |
+|---|-----------|---------------|----------|-------------|
+| 56 | `aprender-zram` | `crates/aprender-zram/` | `trueno-zram-core` | trueno-zram-core 0.4 |
+| 57 | `aprender-zram-adaptive` | `crates/aprender-zram-adaptive/` | `trueno-zram-adaptive` | trueno-zram-adaptive 0.4 |
+| 58 | `aprender-zram-generator` | `crates/aprender-zram-generator/` | `trueno-zram-generator` | trueno-zram-generator 0.4 |
+| 59 | `aprender-zram-cli` | `crates/aprender-zram-cli/` | `trueno-zram-cli` | trueno-zram-cli 0.4 |
+| 60 | `aprender-ublk` | `crates/aprender-ublk/` | `trueno-ublk` | trueno-ublk 0.4 |
+
+### A.12 Benchmarks (internal, not published)
+
+| # | Crate Name | Workspace Path | Old Name | Published? |
+|---|-----------|---------------|----------|-----------|
+| 61 | `aprender-bench-tokenizer` | `crates/aprender-bench-tokenizer/` | (same) | No |
+| 62 | `aprender-bench-compute` | `crates/aprender-bench-compute/` | (same) | No |
+| 63 | `aprender-train-bench` | `crates/aprender-train-bench/` | `entrenar-bench` | No |
+
+**Total: 63 workspace crates (49 published + 14 internal)**
+
+### A.13 Shim Crate Count
+
+- **Published shim crates needed**: ~45 (one per renamed crate)
+- **Each shim**: ~10 lines (`pub use new_name::*;`)
+- **Published once, never updated again**
+- **Purpose**: backward compatibility + namespace reservation
 
 ### Appendix B: Kept Separate (NOT merged)
 
