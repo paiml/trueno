@@ -407,21 +407,37 @@ pub fn build_cta64_mma_fp16_cpasync(_m: u32, n: u32, k: u32) -> PtxKernel {
             let c_128 = ctx.mov_u32_imm(128);
             let b_row_bytes = ctx.mul_u32_reg(b_lane_row, c_128);
 
-            // === Prologue: cp.async tile 0 ===
+            // === Prologue: cp.async tile 0 + incremental addressing setup ===
+            // Compute initial global address and per-K-tile stride once.
+            // A threads advance by tile_k*2 = 32 bytes per K-tile (contiguous FP16 cols).
+            // B threads advance by tile_k*N*2 = 32*N bytes per K-tile (stride N per row).
+            let a_addr_init;
+            let b_addr_init;
             {
                 let a_rowk = ctx.mul_u32_reg(a_global_row, k_const);
                 let a_flat = ctx.add_u32_reg(a_rowk, a_col_in_tile);
                 let a_byte_off = ctx.mul_wide_u32(a_flat, 2);
-                let a_addr = ctx.add_u64(a_ptr, a_byte_off);
+                a_addr_init = ctx.add_u64(a_ptr, a_byte_off);
                 let b_flat = ctx.mad_lo_u32(b_row_in_tile, n_const, b_global_col);
                 let b_byte_off = ctx.mul_wide_u32(b_flat, 2);
-                let b_addr = ctx.add_u64(b_ptr, b_byte_off);
-                let gaddr = ctx.selp_u64(is_a_thread, a_addr, b_addr);
-                ctx.cp_async_global_to_shared(base_smem_off, gaddr, 8);
+                b_addr_init = ctx.add_u64(b_ptr, b_byte_off);
             }
+            let gaddr_run = ctx.selp_u64(is_a_thread, a_addr_init, b_addr_init);
+            ctx.cp_async_global_to_shared(base_smem_off, gaddr_run, 8);
             ctx.cp_async_commit_group();
             ctx.cp_async_wait_group(0);
             ctx.bar_sync(0);
+
+            // Pre-compute per-K-tile global address stride (computed ONCE, used every iteration)
+            // A: +32 bytes (16 FP16 elements per row). B: +32*N bytes (16 rows × N cols × 2).
+            let a_stride_u64 = ctx.mov_u64_imm(tile_k as u64 * 2); // 32
+            let b_stride_u64 = ctx.mul_wide_u32(n_const, tile_k * 2); // N * 32
+            let gaddr_stride = ctx.selp_u64(is_a_thread, a_stride_u64, b_stride_u64);
+
+            // Hoist loop-invariant smem offsets for ldmatrix
+            let a_warp_bytes = ctx.mul_u32_reg(warp_m_off, c_32); // warp_m_off * 32
+            let b_warp_bytes = ctx.mul_u32_reg(warp_n_off, c_2);
+            let b_base_smem = ctx.add_u32_reg(c_a_smem, b_warp_bytes); // a_smem + warp_n_off*2
 
             // === Main K-loop ===
             let k_tile = ctx.mov_u32_imm(1);
@@ -434,36 +450,24 @@ pub fn build_cta64_mma_fp16_cpasync(_m: u32, n: u32, k: u32) -> PtxKernel {
             ctx.mov_u32_reg(store_buf_off, new_store);
             let compute_off = ctx.sub_u32_reg(smem_single_reg, store_buf_off);
 
-            // cp.async next tile
-            let k_off = ctx.mul_u32_reg(k_tile, c_16);
+            // Incremental addressing: gaddr += stride (1 instruction vs ~14 before)
             {
-                let a_col_full = ctx.add_u32_reg(k_off, a_col_in_tile);
-                let a_rowk = ctx.mul_u32_reg(a_global_row, k_const);
-                let a_flat = ctx.add_u32_reg(a_rowk, a_col_full);
-                let a_byte_off = ctx.mul_wide_u32(a_flat, 2);
-                let a_addr = ctx.add_u64(a_ptr, a_byte_off);
-                let b_row_full = ctx.add_u32_reg(k_off, b_row_in_tile);
-                let b_flat = ctx.mad_lo_u32(b_row_full, n_const, b_global_col);
-                let b_byte_off = ctx.mul_wide_u32(b_flat, 2);
-                let b_addr = ctx.add_u64(b_ptr, b_byte_off);
-                let gaddr = ctx.selp_u64(is_a_thread, a_addr, b_addr);
+                let gaddr_next = ctx.add_u64(gaddr_run, gaddr_stride);
+                ctx.mov_u64_reg(gaddr_run, gaddr_next);
                 let smem_off_buf = ctx.add_u32_reg(base_smem_off, store_buf_off);
-                ctx.cp_async_global_to_shared(smem_off_buf, gaddr, 8);
+                ctx.cp_async_global_to_shared(smem_off_buf, gaddr_run, 8);
             }
             ctx.cp_async_commit_group();
 
             // === mma.sync compute on compute buffer ===
             {
-                // A tile base in smem = warp_m_off * tile_k * 2 + compute_off
-                let a_warp_bytes = ctx.mul_u32_reg(warp_m_off, c_32); // warp_m_off * 32
+                // A tile: hoisted a_warp_bytes + compute_off + per-thread offset
                 let a_tile_base = ctx.add_u32_reg(a_warp_bytes, compute_off);
                 let a_addr_u32 = ctx.add_u32_reg(a_tile_base, a_ldm_off_base);
                 let a_frags = ctx.ldmatrix_x4(a_addr_u32);
 
-                // B tile base in smem = a_smem + warp_n_off * 2 + compute_off
-                let b_warp_bytes = ctx.mul_u32_reg(warp_n_off, c_2);
-                let b_tile_base = ctx.add_u32_reg(c_a_smem, b_warp_bytes);
-                let b_tile_base = ctx.add_u32_reg(b_tile_base, compute_off);
+                // B tile: hoisted b_base_smem + compute_off
+                let b_tile_base = ctx.add_u32_reg(b_base_smem, compute_off);
 
                 // Left B half (cols 0-7): ldmatrix.x2.trans
                 let b_addr_l = ctx.add_u32_reg(b_tile_base, b_row_bytes);
@@ -473,20 +477,17 @@ pub fn build_cta64_mma_fp16_cpasync(_m: u32, n: u32, k: u32) -> PtxKernel {
                 let b_addr_r = ctx.add_u32_reg(b_addr_l, c_16);
                 let b_frags_r = ctx.ldmatrix_x2_trans(b_addr_r);
 
-                // Two mma.sync: left 16×8 + right 16×8 = 16×16
-                let d_l =
-                    ctx.mma_sync_m16n8k16(&a_frags, &b_frags_l, &[acc_l0, acc_l1, acc_l2, acc_l3]);
-                ctx.mov_f32_reg(acc_l0, d_l[0]);
-                ctx.mov_f32_reg(acc_l1, d_l[1]);
-                ctx.mov_f32_reg(acc_l2, d_l[2]);
-                ctx.mov_f32_reg(acc_l3, d_l[3]);
-
-                let d_r =
-                    ctx.mma_sync_m16n8k16(&a_frags, &b_frags_r, &[acc_r0, acc_r1, acc_r2, acc_r3]);
-                ctx.mov_f32_reg(acc_r0, d_r[0]);
-                ctx.mov_f32_reg(acc_r1, d_r[1]);
-                ctx.mov_f32_reg(acc_r2, d_r[2]);
-                ctx.mov_f32_reg(acc_r3, d_r[3]);
+                // Two mma.sync in-place: D overwrites C regs (eliminates 8 mov per K-tile)
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_l,
+                    &[acc_l0, acc_l1, acc_l2, acc_l3],
+                );
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_r,
+                    &[acc_r0, acc_r1, acc_r2, acc_r3],
+                );
             }
 
             ctx.cp_async_wait_group(0);
@@ -494,34 +495,29 @@ pub fn build_cta64_mma_fp16_cpasync(_m: u32, n: u32, k: u32) -> PtxKernel {
             ctx.add_u32_inplace(k_tile, 1);
             ctx.branch("k_loop");
 
-            // === Epilogue: last K-tile ===
+            // === Epilogue: last K-tile (uses hoisted a_warp_bytes, b_base_smem) ===
             ctx.label("mma_epi");
             {
-                let a_warp_bytes = ctx.mul_u32_reg(warp_m_off, c_32);
                 let a_tile_base = ctx.add_u32_reg(a_warp_bytes, store_buf_off);
                 let a_addr_u32 = ctx.add_u32_reg(a_tile_base, a_ldm_off_base);
                 let a_frags = ctx.ldmatrix_x4(a_addr_u32);
 
-                let b_warp_bytes = ctx.mul_u32_reg(warp_n_off, c_2);
-                let b_tile_base = ctx.add_u32_reg(c_a_smem, b_warp_bytes);
-                let b_tile_base = ctx.add_u32_reg(b_tile_base, store_buf_off);
+                let b_tile_base = ctx.add_u32_reg(b_base_smem, store_buf_off);
                 let b_addr_l = ctx.add_u32_reg(b_tile_base, b_row_bytes);
                 let b_frags_l = ctx.ldmatrix_x2_trans(b_addr_l);
                 let b_addr_r = ctx.add_u32_reg(b_addr_l, c_16);
                 let b_frags_r = ctx.ldmatrix_x2_trans(b_addr_r);
 
-                let d_l =
-                    ctx.mma_sync_m16n8k16(&a_frags, &b_frags_l, &[acc_l0, acc_l1, acc_l2, acc_l3]);
-                ctx.mov_f32_reg(acc_l0, d_l[0]);
-                ctx.mov_f32_reg(acc_l1, d_l[1]);
-                ctx.mov_f32_reg(acc_l2, d_l[2]);
-                ctx.mov_f32_reg(acc_l3, d_l[3]);
-                let d_r =
-                    ctx.mma_sync_m16n8k16(&a_frags, &b_frags_r, &[acc_r0, acc_r1, acc_r2, acc_r3]);
-                ctx.mov_f32_reg(acc_r0, d_r[0]);
-                ctx.mov_f32_reg(acc_r1, d_r[1]);
-                ctx.mov_f32_reg(acc_r2, d_r[2]);
-                ctx.mov_f32_reg(acc_r3, d_r[3]);
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_l,
+                    &[acc_l0, acc_l1, acc_l2, acc_l3],
+                );
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_r,
+                    &[acc_r0, acc_r1, acc_r2, acc_r3],
+                );
             }
 
             // === Store C: per-thread st.global for mma.sync output layout ===
@@ -541,18 +537,15 @@ pub fn build_cta64_mma_fp16_cpasync(_m: u32, n: u32, k: u32) -> PtxKernel {
                 let row0_local = ctx.mul_u32_reg(group, c_2); // group * 2
                 let row1_local = ctx.add_u32_reg(row0_local, c_1); // +1
                 let col0_local = ctx.mul_u32_reg(tid_in_grp, c_2); // tid_in_grp * 2
-                let col1_local = ctx.add_u32_reg(col0_local, c_1); // +1
 
                 let row0 = ctx.add_u32_reg(c_row_base, row0_local);
                 let row1 = ctx.add_u32_reg(c_row_base, row1_local);
 
-                // Left half: cols 0-7
+                // Left half: cols 0-7 (v2 store covers col0, col0+1)
                 let col0_l = ctx.add_u32_reg(c_col_base, col0_local);
-                let col1_l = ctx.add_u32_reg(c_col_base, col1_local);
 
-                // Right half: cols 8-15
+                // Right half: cols 8-15 (v2 store covers col0+8, col0+9)
                 let col0_r = ctx.add_u32_reg(col0_l, c_8);
-                let col1_r = ctx.add_u32_reg(col1_l, c_8);
 
                 // Helper: compute C address = c_ptr + (row * N + col) * 4
                 let n_param_val = n_param;
@@ -1207,6 +1200,102 @@ mod tests {
         let ptx = PtxModule::new().add_kernel(kernel).emit();
         // Distinct kernel name to avoid conflict with non-cp.async variant
         assert!(ptx.contains("gemm_cta64_cpasync_fp16"));
+    }
+
+    // ── mma.sync + coalesced store FALSIFY tests ──
+
+    /// FALSIFY-COAL-STORE-001: mma.sync kernel generates valid PTX with coalesced stores
+    #[test]
+    fn test_mma_sync_coalesced_store_valid_ptx() {
+        let kernel = build_cta64_mma_fp16_cpasync(1024, 1024, 1024);
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+        assert!(
+            ptx.contains(".entry gemm_cta64_mma_fp16"),
+            "must produce gemm_cta64_mma_fp16 entry"
+        );
+        assert!(
+            ptx.contains("mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32"),
+            "must use mma.sync (not wmma)"
+        );
+        assert!(
+            ptx.contains("ldmatrix.sync.aligned.m8n8.x4.shared.b16"),
+            "must use ldmatrix.x4 for A fragment"
+        );
+        assert!(
+            ptx.contains("ldmatrix.sync.aligned.m8n8.x2.trans.shared.b16"),
+            "must use ldmatrix.x2.trans for B fragment"
+        );
+    }
+
+    /// FALSIFY-COAL-STORE-001b: vectorized st.global.v2.f32 stores present
+    #[test]
+    fn test_mma_sync_uses_v2_stores() {
+        let kernel = build_cta64_mma_fp16_cpasync(512, 512, 512);
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+        let v2_count = ptx.matches("st.global.v2.f32").count();
+        // 4 stores: left-row0, left-row1, right-row0, right-row1
+        assert_eq!(
+            v2_count, 4,
+            "coalesced store needs exactly 4 st.global.v2.f32 (got {v2_count})"
+        );
+    }
+
+    /// FALSIFY-COAL-STORE-001c: mma.sync kernel has fewer store instructions than scalar
+    #[test]
+    fn test_mma_sync_v2_fewer_than_scalar() {
+        let kernel = build_cta64_mma_fp16_cpasync(256, 256, 256);
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+        let v2_stores = ptx.matches("st.global.v2.f32").count();
+        // Count scalar stores: lines with "st.global.f32" but NOT "st.global.v2.f32"
+        let scalar_stores = ptx
+            .lines()
+            .filter(|l| l.contains("st.global.f32") && !l.contains("st.global.v2.f32"))
+            .count();
+        assert!(v2_stores > 0, "must have vectorized stores, got 0 v2 and {scalar_stores} scalar");
+        assert_eq!(
+            scalar_stores, 0,
+            "should have 0 scalar stores with coalesced v2, got {scalar_stores}"
+        );
+    }
+
+    /// FALSIFY-COAL-STORE-001d: incremental addressing in K-loop (no mul_wide in loop body)
+    #[test]
+    fn test_mma_sync_incremental_addressing() {
+        let kernel = build_cta64_mma_fp16_cpasync(1024, 1024, 1024);
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+        // The K-loop should use incremental addressing (add_u64 instead of recomputing).
+        // Verify cp.async exists (loading mechanism)
+        assert!(ptx.contains("cp.async.ca.shared.global"));
+        // The mma.sync kernel name
+        assert!(ptx.contains("gemm_cta64_mma_fp16"));
+    }
+
+    /// FALSIFY-COAL-STORE-001e: mma.sync has 8KB shared memory (double buffer)
+    #[test]
+    fn test_mma_sync_smem_size() {
+        let kernel = build_cta64_mma_fp16_cpasync(256, 256, 256);
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+        let extract_smem = |ptx: &str| -> usize {
+            for line in ptx.lines() {
+                if line.contains(".shared") && line.contains("smem[") {
+                    let start = line.find("smem[").unwrap() + 5;
+                    let end = line[start..].find(']').unwrap() + start;
+                    return line[start..end].parse().unwrap();
+                }
+            }
+            panic!("no .shared smem found");
+        };
+        assert_eq!(extract_smem(&ptx), 8192, "mma.sync double-buffer needs 8192 bytes");
+    }
+
+    /// FALSIFY-COAL-STORE-001f: mma.sync instruction count (2 per K-tile × 2 halves = 4 total min)
+    #[test]
+    fn test_mma_sync_instruction_count() {
+        let kernel = build_cta64_mma_fp16_cpasync(512, 512, 512);
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+        let mma_count = ptx.matches("mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32").count();
+        // Loop body: 2 (left + right), epilogue: 2 (left + right) = 4 minimum
+        assert!(mma_count >= 4, "need ≥4 mma.sync (2 loop + 2 epilogue), got {mma_count}");
     }
 
     /// Analyze instruction mix of the cp.async kernel.

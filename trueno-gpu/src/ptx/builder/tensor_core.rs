@@ -333,6 +333,40 @@ impl<'a> KernelBuilder<'a> {
         [d0, d1, d2, d3]
     }
 
+    /// In-place mma.sync: D overwrites C registers (D = C, no extra mov needed).
+    ///
+    /// PTX allows D and C to alias when the instruction uses `.row.col` layout.
+    /// This eliminates 4 mov instructions per call (8 per K-tile for left+right).
+    pub fn mma_sync_m16n8k16_inplace(
+        &mut self,
+        a_regs: &[VirtualReg; 4],
+        b_regs: &[VirtualReg; 2],
+        c_regs: &[VirtualReg; 4],
+    ) {
+        // Extend live ranges so register allocator keeps C regs alive through the instruction
+        for &c in c_regs {
+            self.registers.extend_live_range(c);
+        }
+
+        let mut instr = PtxInstruction::new(PtxOp::MmaSync, PtxType::F32);
+        // D = C (same registers)
+        instr = instr.dst(Operand::Reg(c_regs[0]));
+        instr.dsts.push(Operand::Reg(c_regs[1]));
+        instr.dsts.push(Operand::Reg(c_regs[2]));
+        instr.dsts.push(Operand::Reg(c_regs[3]));
+        // Sources: A[0..3], B[0..1], C[0..3]
+        for &a in a_regs {
+            instr = instr.src(Operand::Reg(a));
+        }
+        for &b in b_regs {
+            instr = instr.src(Operand::Reg(b));
+        }
+        for &c in c_regs {
+            instr = instr.src(Operand::Reg(c));
+        }
+        self.instructions.push(instr);
+    }
+
     /// ldmatrix.sync.aligned.m8n8.x4.shared.b16
     ///
     /// Loads 4 8×8 FP16 matrices from shared memory in one instruction.

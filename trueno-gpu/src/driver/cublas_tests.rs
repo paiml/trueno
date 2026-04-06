@@ -952,7 +952,7 @@ fn cta64_vs_cta32_vs_cublas_fp16() {
     );
     eprintln!("{}", "-".repeat(80));
 
-    for &n in &[128_usize, 256, 512, 1024] {
+    for &n in &[128_usize, 256, 512, 1024, 2048, 4096] {
         let m = n;
         let k = n;
         let flops = 2.0 * m as f64 * n as f64 * k as f64;
@@ -965,7 +965,14 @@ fn cta64_vs_cta32_vs_cublas_fp16() {
         let b_buf = GpuBuffer::from_host(&ctx, &b16).expect("B");
         let c_buf = GpuBuffer::from_host(&ctx, &c32).expect("C");
 
-        let iters = 50;
+        // Scale iterations for larger sizes
+        let iters = if n <= 1024 {
+            50
+        } else if n <= 2048 {
+            20
+        } else {
+            10
+        };
 
         // ─── 32×32 CTA (baseline) ───
         let kernel_32 = build_cta_wmma_fp16(m as u32, n as u32, k as u32);

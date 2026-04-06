@@ -8,13 +8,17 @@ hardware:
 
 bounds:
   - size: 1024
-    description: "mma.sync 64×64 must match or exceed wmma 64×64 cp.async"
-    min_tflops: 40.0
+    description: "mma.sync 64×64 must match or exceed wmma 64×64 cp.async (measured 45.5 TF/s)"
+    min_tflops: 42.0
     max_regression_pct: 5.0
 
   - size: 512
-    description: "mma.sync must not regress at smaller sizes"
-    min_tflops: 15.0
+    description: "mma.sync must not regress at smaller sizes (measured 20.2 TF/s)"
+    min_tflops: 18.0
+
+  - size: 4096
+    description: "mma.sync scales well at large sizes (measured 49.8 TF/s)"
+    min_tflops: 45.0
 
 metrics:
   ptx_instruction_count:

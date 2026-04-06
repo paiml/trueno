@@ -43,7 +43,7 @@ These targets apply per-backend, per-operation. Competing solutions:
 | CPU GEMM 1024 (1T) | faer 0.24 | **0.98x** | 1.0x | **NEAR PARITY** |
 | CPU GEMM 1024 (1T) | ndarray 0.17 | **1.17x** | 1.0x | **FASTER** |
 | CPU GEMM 1024 (8T) | NumPy OpenBLAS | **0.82x** | 1.0x | **GAP — ASM microkernel IPC** |
-| GPU GEMM 1024 FP16 | cuBLAS | **0.39x** (cp.async: 40.5 TF/s) | 0.5x | +120% from baseline via cp.async |
+| GPU GEMM 1024 FP16 | cuBLAS | **0.42x** (mma.sync: 45.5 TF/s) | 0.5x | +150% from baseline via mma.sync+v2 |
 | Q4K GEMV 4096 (CPU) | llama.cpp ~110 | **0.81x** | 1.50x | **89 GFLOPS measured** — FMA ceiling [65] |
 | Q4K GEMV (GPU DP4A) | llama.cpp CUDA | TBD | 1.50x | MEASURE |
 
@@ -108,6 +108,30 @@ IPC than Rust intrinsics. Shared-B packing tested and disproven (see negative re
 
 cuBLAS peaks at 150 TFLOP/s (45.5%) at 4096. Our PTX at 40.5 = 0.39× cuBLAS at 1024.
 Note: previous cuBLAS column used nsys estimates; these are direct cublasGemmEx measurements.
+
+**mma.sync + coalesced v2 stores (measured 2026-04-06, RTX 4090 SM 8.9)**:
+
+| Size | mma.sync (µs) | cuBLAS (µs) | mma TFLOP/s | cuBLAS TFLOP/s | Ratio |
+|------|---------------|-------------|-------------|----------------|-------|
+| 128 | 4.5 | 3.1 | 0.9 | 1.4 | 0.66x |
+| 256 | 7.5 | 3.4 | 4.5 | 10.0 | 0.45x |
+| 512 | 13.3 | 5.9 | 20.2 | 45.5 | 0.44x |
+| 1024 | 47.2 | 19.8 | 45.5 | 108.5 | 0.42x |
+| 2048 | 388 | 124 | 44.3 | 138.4 | 0.32x |
+| 4096 | 2759 | 905 | 49.8 | 151.9 | 0.33x |
+
+**Optimizations applied (cumulative improvement over 40.5 TFLOP/s cp.async baseline)**:
+1. **mma.sync.m16n8k16 + ldmatrix**: Replaces wmma_load (~32 ld.shared) with 2 instructions
+   (ldmatrix.x4 + ldmatrix.x2.trans). Result: 44.0 TFLOP/s (+9%).
+2. **Coalesced st.global.v2.f32**: 4 vectorized stores vs 8 scalar. Zero scalar st.global.f32.
+3. **Incremental K-loop addressing**: Precompute A/B stride once, `gaddr += stride` per tile
+   (1 add_u64 vs ~14 instructions for recomputing address). Result: 45.5 TFLOP/s (+12%).
+4. **In-place mma.sync (D=C)**: `mma_sync_m16n8k16_inplace` eliminates 8 mov per K-tile.
+   ptxas already optimized this — no additional perf but cleaner PTX.
+5. **Loop-invariant hoisting**: `a_warp_bytes`, `b_base_smem` computed once before loop.
+
+Best result: **45.5 TFLOP/s at 1024** (peak **49.8 at 4096**). +12% over cp.async baseline.
+vs cuBLAS: **0.42×** at 1024 (was 0.39×), **0.33×** at 4096.
 
 **Bottleneck analysis**: CTA WMMA at 18.4 TFLOP/s (22% of FP32 peak) is limited by
 **serialized load-compute**: the K-loop does `bar_sync → load smem → bar_sync → WMMA`
