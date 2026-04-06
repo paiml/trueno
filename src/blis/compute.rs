@@ -1502,14 +1502,36 @@ unsafe fn pack_b_block_nr32_avx512(
         let nr_local = nr.min(nc - j_start);
 
         if nr_local == 32 {
-            // Full panel: SIMD copy — 2 zmm per K step
-            for p in 0..kc {
-                let src = b.as_ptr().add((pc + p) * ldb + jc + j_start);
-                let dst = packed.as_mut_ptr().add(panel * nr * kc + p * nr);
+            // Full panel: SIMD copy — 2 zmm per K step, 2-way K-unrolled.
+            // CGP-DBUF: unrolling amortizes loop overhead (~1 cycle/iter saved).
+            let panel_base = panel * nr * kc;
+            let b_col = jc + j_start;
+            let kc2 = kc / 2 * 2;
+            let mut p = 0;
+            while p < kc2 {
+                let src0 = b.as_ptr().add((pc + p) * ldb + b_col);
+                let src1 = b.as_ptr().add((pc + p + 1) * ldb + b_col);
+                let dst0 = packed.as_mut_ptr().add(panel_base + p * nr);
+                let dst1 = packed.as_mut_ptr().add(panel_base + (p + 1) * nr);
+                let v0a = _mm512_loadu_ps(src0);
+                let v0b = _mm512_loadu_ps(src0.add(16));
+                let v1a = _mm512_loadu_ps(src1);
+                let v1b = _mm512_loadu_ps(src1.add(16));
+                _mm512_storeu_ps(dst0, v0a);
+                _mm512_storeu_ps(dst0.add(16), v0b);
+                _mm512_storeu_ps(dst1, v1a);
+                _mm512_storeu_ps(dst1.add(16), v1b);
+                p += 2;
+            }
+            // Remainder K
+            while p < kc {
+                let src = b.as_ptr().add((pc + p) * ldb + b_col);
+                let dst = packed.as_mut_ptr().add(panel_base + p * nr);
                 let v0 = _mm512_loadu_ps(src);
                 let v1 = _mm512_loadu_ps(src.add(16));
                 _mm512_storeu_ps(dst, v0);
                 _mm512_storeu_ps(dst.add(16), v1);
+                p += 1;
             }
         } else {
             // Edge panel: scalar with zero-padding
