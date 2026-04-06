@@ -3152,7 +3152,7 @@ Analysis via `decy audit` + `pmat query` + direct source comparison.
 ### Current State Summary (updated 2026-04-05)
 
 **cgp tool**: 18/18 CLI commands implemented (only `cgp tui` is STUB).
-3619 tests passing (updated 2026-04-06). 11 FALSIFY-UNINIT tests added.
+3621 tests passing (updated 2026-04-06). 14 FALSIFY tests: 11 UNINIT + 3 PARALLEL.
 65 peer-reviewed citations [1]-[65]. 11 provable-contracts.
 All 11 contracts pass (53 checks pass, 0 fail, 44 skip).
 
