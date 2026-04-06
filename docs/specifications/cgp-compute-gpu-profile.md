@@ -3152,7 +3152,7 @@ Analysis via `decy audit` + `pmat query` + direct source comparison.
 ### Current State Summary (updated 2026-04-05)
 
 **cgp tool**: 18/18 CLI commands implemented (only `cgp tui` is STUB).
-3608 tests passing (updated 2026-04-05 post uninit-alloc sweep).
+3619 tests passing (updated 2026-04-06 post fused-ops SIMD + FALSIFY tests).
 65 peer-reviewed citations [1]-[65]. 11 provable-contracts.
 All 11 contracts pass (53 checks pass, 0 fail, 44 skip).
 
@@ -3190,8 +3190,18 @@ Projected realizr impact: AttentionScore 44.3% → ~15%. **~30% end-to-end infer
 
 **Q4K quantized inference**: 14.6 tok/s composite (Llama-7B, 4 layer sizes).
 Q4K ceiling at ~83 GFLOPS — FMA dependency chain limited [65].
-Updated 2026-04-05 post uninit-alloc: Q4K 4096×4096 **87.4 GFLOPS** (+5% from
+Updated 2026-04-05 post uninit-alloc: Q4K 4096×4096 **85 GFLOPS** (+5% from
 eliminating output buffer zero-fill).
+
+**Fused ops optimization (2026-04-06, CGP-DBUF continued)**:
+
+- FusedQkvOp: scalar nested loops → SIMD dot (AttentionOp::simd_dot). 3×hidden_size
+  scalar iterations replaced by AVX2 4-accumulator vectorized dot per row.
+- FusedGateUpOp: eliminated 2×intermediate_size Vector::from_slice_with_backend
+  allocations (38K heap allocs for Qwen 3B) → direct simd_dot on slices.
+- MatmulOp: result.as_slice().to_vec() → result.data (move, zero copies).
+- 11 new FALSIFY tests (FALSIFY-UNINIT-001 through 007) verify correctness:
+  sqrt, recip, softmax, matvec, Q4K determinism, attention bounds, QKV SIMD parity.
 
 **Uninit allocation sweep (2026-04-05, CGP-DBUF)**:
 
