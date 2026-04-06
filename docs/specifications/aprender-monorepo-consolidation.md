@@ -66,12 +66,13 @@ These crates live in their own repos but depend on the core stack:
 | simular | 0.3.2 | 93 | Simulation framework | **MERGE** — used by training |
 | verificar | 0.5.0 | 52 | Verification/testing | **MERGE** — used by CI/quality |
 | probar | 1.0.3 | 1 (workspace: 4 crates) | WASM/browser test framework | **MERGE** — depends on trueno+presentar |
+| provable-contracts | 0.2.2 | 1 (workspace: 3 crates) | Contract macros + YAML | **MERGE** — trueno build.rs reads its binding.yaml via path dep |
 
 **Updated totals with satellites:**
-- **Merge into monorepo**: 5 core + 13 satellites = 18 repos
-- **Keep separate**: manzana, whisper.apr (+ pmat, which is its own product)
+- **Merge into monorepo**: 5 core + 14 satellites = 19 repos
+- **Keep separate**: manzana, whisper.apr, forjar (+ pmat, which is its own product)
 - **Total .rs files**: ~5500+
-- **Total workspace crates**: ~45
+- **Total workspace crates**: ~48
 
 ### Dependency Graph (Current)
 
@@ -349,6 +350,9 @@ cargo test --workspace
 | probar-derive | aprender-test-derive | Yes |
 | probar-cli | aprender-test-cli | Yes |
 | probar-js-gen | aprender-test-js-gen | Yes |
+| provable-contracts | aprender-contracts | Yes (provable-contracts 0.3) |
+| provable-contracts-macros | aprender-contracts-macros | Yes |
+| provable-contracts-cli | aprender-contracts-cli | Yes |
 
 ### Appendix B: Kept Separate (NOT merged)
 
@@ -357,6 +361,7 @@ cargo test --workspace
 | pmat / paiml-mcp-agent-toolkit | Separate product, own release cycle, 3830 .rs files |
 | manzana | Platform-specific (Apple only) |
 | whisper.apr | Application built ON the stack, not part of it |
+| forjar | Standalone IaC tool, zero stack deps (1180 files) |
 | ruchy | Separate language/runtime project |
 | apr-cookbook | Becomes `aprender/cookbook/` (content, not a crate) |
 
