@@ -223,6 +223,7 @@ impl FusedGateUpOp {
     /// ONE PATH: Delegates to `crate::activations::silu_scalar` (UCBD §4).
     #[inline]
     pub fn silu(x: f32) -> f32 {
+        contract_pre_silu!();
         crate::activations::silu_scalar(x)
     }
 }

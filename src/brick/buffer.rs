@@ -101,6 +101,7 @@ impl WatermarkedBuffer {
 
     /// Write data to the buffer.
     pub fn write(&mut self, data: &[u8]) {
+        contract_pre_write!();
         self.data.extend_from_slice(data);
     }
 

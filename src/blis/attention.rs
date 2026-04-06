@@ -34,6 +34,7 @@ pub fn fused_attention_decode(
     seq_len: usize,
     output: &mut [f32],
 ) {
+    contract_pre_attention!();
     assert_eq!(q.len(), head_dim);
     assert_eq!(k_cache.len(), seq_len * head_dim);
     assert_eq!(v_cache.len(), seq_len * head_dim);

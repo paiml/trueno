@@ -72,6 +72,7 @@ pub fn gemm_blis_parallel(
     c: &mut [f32],
 ) -> Result<(), TruenoError> {
     use rayon::prelude::*;
+    contract_pre_amdahl_speedup!();
 
     // Dimension validation
     if a.len() != m * k || b.len() != k * n || c.len() != m * n {

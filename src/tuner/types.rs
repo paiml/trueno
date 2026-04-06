@@ -41,6 +41,7 @@ impl QuantType {
 
     /// Bytes per parameter (approximate)
     pub fn bytes_per_param(self) -> f32 {
+        contract_pre_bytes_per_param!();
         match self {
             QuantType::Q4_0 | QuantType::Q4_1 | QuantType::Q4K => 0.5625, // 4.5 bits
             QuantType::Q5K => 0.6875,                                     // 5.5 bits

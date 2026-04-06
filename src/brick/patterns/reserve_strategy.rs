@@ -63,6 +63,7 @@ impl StrategicBuffer {
 
     /// Write bytes to the buffer.
     pub fn write(&mut self, bytes: &[u8]) {
+        contract_pre_write!();
         self.reserve(bytes.len());
         self.data.extend_from_slice(bytes);
     }

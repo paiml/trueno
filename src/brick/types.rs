@@ -101,6 +101,7 @@ impl ComputeAssertion {
 
     /// Create bounds assertion.
     pub fn bounds(min: f64, max: f64) -> Self {
+        contract_pre_bounds!();
         Self::Bounds { min, max }
     }
 

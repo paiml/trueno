@@ -65,6 +65,7 @@ impl VectorBackend for ScalarBackend {
     #[inline(always)]
     // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
+        contract_pre_dot_product!();
         let len = a.len();
         let chunks = len / 4;
 
@@ -347,6 +348,7 @@ impl VectorBackend for ScalarBackend {
     // 2. Clamping prevents exp() overflow
     // 3. Marked unsafe only to match VectorBackend trait interface
     unsafe fn swish(a: &[f32], result: &mut [f32]) {
+        contract_pre_silu!();
         // Swish: x * sigmoid(x) = x / (1 + exp(-x))
         for (i, &x) in a.iter().enumerate() {
             if x < -50.0 {

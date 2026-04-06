@@ -34,6 +34,7 @@ impl GpuCommandBatch {
     /// - **Invariant**: Pipeline compiled at most once per unique shader source
     /// - **Invariant**: Single `queue.submit()` per `execute()` call
     pub async fn execute(&mut self) -> Result<(), String> {
+        contract_pre_single_encoder_batch!();
         let mut local_cache = dispatch::PipelineCache::new();
         self.execute_inner(&mut local_cache)
     }
@@ -110,6 +111,7 @@ impl GpuCommandBatch {
     ///
     /// Must call `execute()` first.
     pub async fn read(&self, buffer_id: BufferId) -> Result<Vec<f32>, String> {
+        contract_pre_read!();
         let buffer_info = self.buffers.get(&buffer_id).ok_or("Invalid buffer ID")?;
 
         let gpu_buffer = buffer_info

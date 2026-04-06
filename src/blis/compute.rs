@@ -826,6 +826,7 @@ pub fn gemm_blis(
     c: &mut [f32],
     mut profiler: Option<&mut BlisProfiler>,
 ) -> Result<(), TruenoError> {
+    contract_pre_flops_per_tile!();
     validate_gemm_dims(m, n, k, a, b, c)?;
 
     if m == 0 || n == 0 || k == 0 {

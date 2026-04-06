@@ -180,6 +180,7 @@ impl GpuCommandBatch {
         k: u32,
         n: u32,
     ) -> Result<(), String> {
+        contract_pre_tiled_naive_equivalence!();
         let a_info = self.buffers.get(a).ok_or("Invalid buffer A ID")?;
         let b_info = self.buffers.get(b).ok_or("Invalid buffer B ID")?;
         let output_info = self.buffers.get(output).ok_or("Invalid output buffer ID")?;

@@ -9,6 +9,7 @@ use super::{parse_q4k_header, SUPER_BLOCK_BYTES, SUPER_BLOCK_SIZE};
 /// This function fully dequantizes Q4K data to F32, matching the
 /// `dequantize_q4_k_to_f32` in aprender/src/format/converter.rs.
 pub fn dequantize_q4k_to_f32(data: &[u8], num_elements: usize) -> Vec<f32> {
+    contract_pre_dequant!();
     let num_blocks = (num_elements + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
     let mut result = vec![0.0f32; num_blocks * SUPER_BLOCK_SIZE];
 

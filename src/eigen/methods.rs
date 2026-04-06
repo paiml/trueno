@@ -90,6 +90,7 @@ impl SymmetricEigen {
     ///
     /// The eigenvector as a Vector, or None if index out of bounds
     pub fn eigenvector(&self, i: usize) -> Option<Vector<f32>> {
+        contract_pre_eigenvector!();
         if i >= self.eigenvalues.len() {
             return None;
         }

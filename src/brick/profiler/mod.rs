@@ -198,6 +198,7 @@ impl BrickProfiler {
     /// - `Deferred`: Sync once per forward pass (default, fast)
     /// - `None`: No synchronization
     pub fn set_sync_mode(&mut self, mode: SyncMode) {
+        contract_pre_sync_verification!();
         self.sync_mode = mode;
     }
 
@@ -262,6 +263,7 @@ impl BrickProfiler {
     #[inline]
     #[must_use]
     pub fn brick_stats(&self, brick_id: BrickId) -> &BrickStats {
+        contract_pre_brick_ordering!();
         &self.brick_stats[brick_id as usize]
     }
 
@@ -436,12 +438,14 @@ impl BrickProfiler {
     /// Get total tokens processed.
     #[must_use]
     pub fn total_tokens(&self) -> u64 {
+        contract_pre_token_accounting!();
         self.total_tokens
     }
 
     /// Get total time in nanoseconds.
     #[must_use]
     pub fn total_ns(&self) -> u64 {
+        contract_pre_wall_coverage!();
         self.total_ns
     }
 }

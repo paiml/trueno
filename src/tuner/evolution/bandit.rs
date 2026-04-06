@@ -134,6 +134,7 @@ impl KernelBandit {
 
     /// Update arm with observed reward
     pub fn update(&mut self, kernel: KernelType, reward: f32) {
+        contract_pre_update!();
         let idx = kernel.to_index();
         if idx < self.arms.len() {
             self.arms[idx].pulls += 1;

@@ -30,6 +30,7 @@ impl GpuDevice {
         k: usize,
         n: usize,
     ) -> Result<(), String> {
+        contract_pre_matmul!();
         // Guard: if B exceeds max buffer binding, chunk along N dimension.
         // Each chunk computes result[:, n_start..n_end] = A @ B[:, n_start..n_end]
         // This handles lm_head (152064 × 3584 × 4 = 2.18 GB > 2 GB limit).
