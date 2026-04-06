@@ -220,7 +220,8 @@ regression — was 0.77x on 32×32). But overlap benefit is minimal because
 loads and stores are still interleaved. To get true overlap, need separated-loads
 on 64×64 tiles OR async copy (`cp.async`) to decouple global→shared transfer.
 
-**Best result so far**: CTA64 at 1024 = **30 TFLOP/s** (vs 18.4 initial → **+63%**).
+**Best result so far**: CTA 64×128 at 1024 = **57.0 TFLOP/s** (vs 18.4 initial → **+210%**).
+Peak: **61.0 TFLOP/s at 4096**. 0.52× cuBLAS at 1024 — target met.
 
 **cp.async PTX builder support (2026-04-05)**:
 
@@ -268,11 +269,11 @@ with 8KB shared memory (2× 4KB buffers). Requires sm_80+ target module.
      bottleneck — WMMA compute-bound. Deeper pipeline adds cycle overhead
      (mod arithmetic, 2 epilogue WMMA instead of 1).
 
-**Conclusion**: At 40.5 TFLOP/s the kernel is **compute-bound on WMMA instruction
-throughput**, not memory-bound. Further gains require larger tiles (128×128+) or
-FP16 accumulation for 2× tensor core throughput.
+**Conclusion (updated 2026-04-06)**: At 57-61 TFLOP/s the 64×128 kernel benefits from
+higher AI (42.7 vs 32 FLOP/byte). Further gains require 128×128 tiles (AI=64) but
+need 1024 threads (lower occupancy) or 32×32 per-warp tiles (32 accumulator regs).
 
-**Note**: GPU pure-Rust PTX vs cuBLAS is not expected to hit 1.5x — cuBLAS uses hand-tuned SASS and proprietary tensor core scheduling. The GPU target is to close the gap from 0.38x toward 0.5x+ (competitive for deployment where vendor lock-in is unacceptable).
+**Note**: GPU pure-Rust PTX vs cuBLAS is not expected to hit 1.5x — cuBLAS uses hand-tuned SASS and proprietary tensor core scheduling. The GPU target was to close the gap from 0.38x toward 0.5x+ (competitive for deployment where vendor lock-in is unacceptable). **TARGET MET: 0.52× cuBLAS at 1024** with 64×128 mma.sync tile.
 
 ### What Exists Today (Fragmented)
 
