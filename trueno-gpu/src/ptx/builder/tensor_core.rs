@@ -274,4 +274,71 @@ impl<'a> KernelBuilder<'a> {
                 .space(PtxStateSpace::Global),
         );
     }
+
+    // ===== MMA.sync (SM 8.0+ — higher IPC than WMMA) =====
+
+    /// mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32
+    ///
+    /// Computes a 16×8 output fragment per warp. Per-thread register layout:
+    ///   A: 4 B32 regs (8 FP16 values) — 16×16 fragment
+    ///   B: 2 B32 regs (4 FP16 values) — 16×8 fragment
+    ///   C: 4 F32 regs (4 FP32 accumulators) — 16×8 fragment
+    ///   D: 4 F32 regs (4 FP32 results)
+    ///
+    /// To cover a full 16×16 output, issue TWO mma.sync with different B halves.
+    ///
+    /// Returns 4 destination registers (D fragment).
+    pub fn mma_sync_m16n8k16(
+        &mut self,
+        a_regs: &[VirtualReg; 4],
+        b_regs: &[VirtualReg; 2],
+        c_regs: &[VirtualReg; 4],
+    ) -> [VirtualReg; 4] {
+        let d0 = self.registers.allocate_virtual(PtxType::F32);
+        let d1 = self.registers.allocate_virtual(PtxType::F32);
+        let d2 = self.registers.allocate_virtual(PtxType::F32);
+        let d3 = self.registers.allocate_virtual(PtxType::F32);
+
+        let mut instr = PtxInstruction::new(PtxOp::MmaSync, PtxType::F32);
+        // Destinations: D[0..3]
+        instr = instr.dst(Operand::Reg(d0));
+        instr.dsts.push(Operand::Reg(d1));
+        instr.dsts.push(Operand::Reg(d2));
+        instr.dsts.push(Operand::Reg(d3));
+        // Sources: A[0..3], B[0..1], C[0..3]
+        for &a in a_regs {
+            instr = instr.src(Operand::Reg(a));
+        }
+        for &b in b_regs {
+            instr = instr.src(Operand::Reg(b));
+        }
+        for &c in c_regs {
+            instr = instr.src(Operand::Reg(c));
+        }
+        self.instructions.push(instr);
+        [d0, d1, d2, d3]
+    }
+
+    /// ldmatrix.sync.aligned.m8n8.x4.shared.b16
+    ///
+    /// Loads 4 8×8 FP16 matrices from shared memory in one instruction.
+    /// Each thread provides one source address (its row within the tile).
+    /// Returns 4 B32 registers containing 4 matrix fragments.
+    ///
+    /// Replaces ~16 individual ld.shared instructions.
+    pub fn ldmatrix_x4(&mut self, addr: VirtualReg) -> [VirtualReg; 4] {
+        let d0 = self.registers.allocate_virtual(PtxType::B32);
+        let d1 = self.registers.allocate_virtual(PtxType::B32);
+        let d2 = self.registers.allocate_virtual(PtxType::B32);
+        let d3 = self.registers.allocate_virtual(PtxType::B32);
+
+        let mut instr = PtxInstruction::new(PtxOp::LdMatrix, PtxType::B16);
+        instr = instr.dst(Operand::Reg(d0));
+        instr.dsts.push(Operand::Reg(d1));
+        instr.dsts.push(Operand::Reg(d2));
+        instr.dsts.push(Operand::Reg(d3));
+        instr = instr.src(Operand::Reg(addr));
+        self.instructions.push(instr);
+        [d0, d1, d2, d3]
+    }
 }

@@ -173,8 +173,88 @@ pub(crate) fn emit_wmma_store(prefix: String, instr: &PtxInstruction) -> String 
 pub(crate) fn is_wmma_op(op: &PtxOp) -> bool {
     matches!(
         op,
-        PtxOp::WmmaLoadA | PtxOp::WmmaLoadB | PtxOp::WmmaLoadC | PtxOp::WmmaMma | PtxOp::WmmaStoreD
+        PtxOp::WmmaLoadA
+            | PtxOp::WmmaLoadB
+            | PtxOp::WmmaLoadC
+            | PtxOp::WmmaMma
+            | PtxOp::WmmaStoreD
+            | PtxOp::MmaSync
+            | PtxOp::LdMatrix
     )
+}
+
+/// Emit mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32
+///
+/// Per-thread register layout:
+///   A: d0..d3 (4 regs, 8 FP16 values)
+///   B: d4..d5 (2 regs, 4 FP16 values)
+///   C: d6..d9 (4 regs, 4 FP32 accumulators)
+///   D: dst0..dst3 (4 regs, 4 FP32 results)
+///
+/// PTX: mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32
+///        {d0,d1,d2,d3}, {a0,a1,a2,a3}, {b0,b1}, {c0,c1,c2,c3};
+pub(crate) fn emit_mma_sync(prefix: String, instr: &PtxInstruction) -> String {
+    let mut s = prefix;
+
+    // Destinations (D: 4 FP32 regs)
+    s.push_str("mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32\n");
+    s.push_str("        {");
+    for (i, d) in instr.dsts.iter().enumerate() {
+        if i > 0 {
+            s.push_str(", ");
+        }
+        s.push_str(&emit_operand(d));
+    }
+    s.push_str("},\n        {");
+
+    // Sources: first 4 = A regs, next 2 = B regs, last 4 = C regs
+    let sources = &instr.srcs;
+    // A fragment (4 regs)
+    for i in 0..4 {
+        if i > 0 {
+            s.push_str(", ");
+        }
+        s.push_str(&emit_operand(&sources[i]));
+    }
+    s.push_str("},\n        {");
+    // B fragment (2 regs)
+    for i in 4..6 {
+        if i > 4 {
+            s.push_str(", ");
+        }
+        s.push_str(&emit_operand(&sources[i]));
+    }
+    s.push_str("},\n        {");
+    // C accumulator (4 regs)
+    for i in 6..10 {
+        if i > 6 {
+            s.push_str(", ");
+        }
+        s.push_str(&emit_operand(&sources[i]));
+    }
+    s.push_str("};\n");
+    s
+}
+
+/// Emit ldmatrix.sync.aligned.m8n8.x4.shared.b16
+///
+/// Loads 4 8×8 FP16 matrices from shared memory. Each thread provides
+/// one source address (its row within the 8×8 tile).
+///
+/// PTX: ldmatrix.sync.aligned.m8n8.x4.shared.b16 {d0,d1,d2,d3}, [addr];
+pub(crate) fn emit_ldmatrix(prefix: String, instr: &PtxInstruction) -> String {
+    let mut s = prefix;
+    s.push_str("ldmatrix.sync.aligned.m8n8.x4.shared.b16 {");
+    for (i, d) in instr.dsts.iter().enumerate() {
+        if i > 0 {
+            s.push_str(", ");
+        }
+        s.push_str(&emit_operand(d));
+    }
+    s.push_str("}, [");
+    s.push_str(&emit_operand(&instr.srcs[0]));
+    s.push_str("];\n");
+    s
 }
 
 #[cfg(test)]

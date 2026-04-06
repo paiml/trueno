@@ -151,6 +151,18 @@ pub enum PtxOp {
     /// WMMA store accumulator
     WmmaStoreD,
 
+    // ===== Tensor Core (MMA.sync — SM 8.0+) =====
+    /// mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32
+    /// Smaller fragments than WMMA (16×8 output vs 16×16), higher IPC.
+    /// Per thread: A=4 regs (8 FP16), B=2 regs (4 FP16), C/D=4 regs (4 FP32).
+    MmaSync,
+
+    // ===== Matrix Load (ldmatrix — SM 7.5+) =====
+    /// ldmatrix.sync.aligned.m8n8.x4.shared.b16
+    /// Loads 4 8×8 FP16 matrices from shared memory in one instruction.
+    /// Each thread loads one row (8 FP16). Replaces ~16 ld.shared instructions.
+    LdMatrix,
+
     // ===== DP4A Integer Dot Product =====
     /// DP4A unsigned dot product (4 u8 pairs to u32)
     Dp4a,

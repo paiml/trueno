@@ -66,6 +66,8 @@ fn emit_wmma_dispatch(s: String, instr: &PtxInstruction) -> String {
         PtxOp::WmmaLoadC => wmma::emit_wmma_load(s, instr, "c"),
         PtxOp::WmmaMma => wmma::emit_wmma_mma(s, instr),
         PtxOp::WmmaStoreD => wmma::emit_wmma_store(s, instr),
+        PtxOp::MmaSync => wmma::emit_mma_sync(s, instr),
+        PtxOp::LdMatrix => wmma::emit_ldmatrix(s, instr),
         _ => s,
     }
 }
