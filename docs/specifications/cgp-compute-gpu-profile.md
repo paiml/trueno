@@ -106,8 +106,21 @@ IPC than Rust intrinsics. Shared-B packing tested and disproven (see negative re
 | 2048 | 119.4 | 143.8 | 43.6% | — | — |
 | 4096 | 916.0 | 150.0 | 45.5% | — | — |
 
-cuBLAS peaks at 150 TFLOP/s (45.5%) at 4096. Our PTX at 40.5 = 0.39× cuBLAS at 1024.
+cuBLAS peaks at 168 TFLOP/s (51%) at 4096. Our PTX at 40.5 = 0.39× cuBLAS at 1024.
 Note: previous cuBLAS column used nsys estimates; these are direct cublasGemmEx measurements.
+
+**Pipeline PTX measured via `cgp profile compare --backends cuda,cublas` (2026-04-06)**:
+
+| Size | Pipeline (µs) | cuBLAS (µs) | Pipeline TF/s | cuBLAS TF/s | Ratio |
+|------|---------------|-------------|---------------|-------------|-------|
+| 256 | 10.7 | 3.1 | 3.1 | 10.7 | 0.29× |
+| 512 | 19.2 | 5.8 | 14.0 | 46.2 | 0.30× |
+| 1024 | 44.7 | 19.7 | 48.0 | 108.9 | 0.44× |
+| 2048 | 289.6 | 112.5 | 59.3 | 152.8 | 0.39× |
+| 4096 | 2300 | 819.7 | 58.9 | 167.7 | 0.35× |
+
+`cgp` now measures both cuBLAS and our pipeline kernel directly via `--backends cuda,cublas`.
+cuBLAS peaks at 168 TFLOP/s at 4096 (51% of FP16 peak). Pipeline peaks at 59.3 at 2048.
 
 **mma.sync + coalesced v2 stores (measured 2026-04-06, RTX 4090 SM 8.9)**:
 

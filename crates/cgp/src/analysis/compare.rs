@@ -179,6 +179,85 @@ fn measure_cublas_gemm(size: u32) -> Option<(f64, f64)> {
     Some((per_call_us, tflops))
 }
 
+/// Measure our best PTX GEMM kernel (64×128 pipeline) on GPU.
+/// Returns (time_us, tflops) or None if CUDA unavailable.
+#[cfg(feature = "cuda")]
+fn measure_ptx_gemm(size: u32) -> Option<(f64, f64)> {
+    use std::ffi::c_void;
+    use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
+    use trueno_gpu::kernels::build_cta64x128_mma_pipeline_fp16;
+    use trueno_gpu::ptx::PtxModule;
+
+    let ctx = CudaContext::new(0).ok()?;
+    let stream = CudaStream::new(&ctx).ok()?;
+
+    let n = size as usize;
+    let a16 = vec![0x3C00u16; n * n];
+    let b16 = vec![0x3C00u16; n * n];
+    let c32 = vec![0.0f32; n * n];
+
+    let a_buf = GpuBuffer::from_host(&ctx, &a16).ok()?;
+    let b_buf = GpuBuffer::from_host(&ctx, &b16).ok()?;
+    let c_buf = GpuBuffer::from_host(&ctx, &c32).ok()?;
+
+    let kernel = build_cta64x128_mma_pipeline_fp16(n as u32, n as u32, n as u32);
+    let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+    let mut module = CudaModule::from_ptx(&ctx, &ptx).ok()?;
+
+    let cfg = LaunchConfig {
+        grid: (((n + 127) / 128) as u32, ((n + 63) / 64) as u32, 1),
+        block: (512, 1, 1),
+        shared_mem: 18432,
+    };
+
+    let mut a_ptr = a_buf.as_ptr();
+    let mut b_ptr = b_buf.as_ptr();
+    let mut c_ptr = c_buf.as_ptr();
+    let mut m_v = n as u32;
+    let mut n_v = n as u32;
+    let mut k_v = n as u32;
+    let mut args: Vec<*mut c_void> = vec![
+        &mut a_ptr as *mut _ as *mut c_void,
+        &mut b_ptr as *mut _ as *mut c_void,
+        &mut c_ptr as *mut _ as *mut c_void,
+        &mut m_v as *mut _ as *mut c_void,
+        &mut n_v as *mut _ as *mut c_void,
+        &mut k_v as *mut _ as *mut c_void,
+    ];
+
+    // Warmup
+    for _ in 0..5 {
+        unsafe {
+            stream
+                .launch_kernel(&mut module, "gemm_cta64x128_mma_pipeline_fp16", &cfg, &mut args)
+                .ok()?;
+        }
+    }
+    stream.synchronize().ok()?;
+
+    let iters: u32 = if n <= 512 {
+        100
+    } else if n <= 1024 {
+        50
+    } else {
+        20
+    };
+    let start = std::time::Instant::now();
+    for _ in 0..iters {
+        unsafe {
+            stream
+                .launch_kernel(&mut module, "gemm_cta64x128_mma_pipeline_fp16", &cfg, &mut args)
+                .ok()?;
+        }
+    }
+    stream.synchronize().ok()?;
+    let per_call_us = start.elapsed().as_micros() as f64 / iters as f64;
+    let flops = 2.0 * (n as f64).powi(3);
+    let tflops = flops / (per_call_us * 1e6);
+
+    Some((per_call_us, tflops))
+}
+
 /// Run cross-backend comparison.
 pub fn run_compare(kernel: &str, size: u32, backends_str: &str, json: bool) -> Result<()> {
     let backends: Vec<&str> = backends_str.split(',').map(|s| s.trim()).collect();
@@ -220,7 +299,20 @@ pub fn run_compare(kernel: &str, size: u32, backends_str: &str, json: bool) -> R
             }
             "cuda" => {
                 let avail = which::which("nvidia-smi").is_ok();
-                (estimate_cuda_time_us(size), avail, false)
+                #[cfg(feature = "cuda")]
+                if avail {
+                    if let Some((time_us, _tflops)) = measure_ptx_gemm(size) {
+                        (time_us, true, true)
+                    } else {
+                        (estimate_cuda_time_us(size), avail, false)
+                    }
+                } else {
+                    (estimate_cuda_time_us(size), avail, false)
+                }
+                #[cfg(not(feature = "cuda"))]
+                {
+                    (estimate_cuda_time_us(size), avail, false)
+                }
             }
             "cublas" => {
                 let avail = which::which("nvidia-smi").is_ok();
