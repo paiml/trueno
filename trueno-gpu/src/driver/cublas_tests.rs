@@ -932,7 +932,7 @@ fn cta64_vs_cta32_vs_cublas_fp16() {
     use crate::driver::module::CudaModule;
     use crate::kernels::gemm::basic::tensor_core::cta64_wmma::{
         build_cta64_mma_fp16_cpasync, build_cta64_wmma_fp16, build_cta64_wmma_fp16_cpasync,
-        build_cta64_wmma_fp16_dbuf,
+        build_cta64_wmma_fp16_dbuf, build_cta64x128_mma_fp16_cpasync,
     };
     use crate::kernels::gemm::basic::tensor_core::cta_wmma::build_cta_wmma_fp16;
     use crate::ptx::PtxModule;
@@ -1285,8 +1285,64 @@ fn cta64_vs_cta32_vs_cublas_fp16() {
         };
         let mma_tflops = flops / (mma_us * 1e6);
 
+        // ─── 64×128 mma.sync (wider tile, +33% AI) ───
+        let mma128_us = if n >= 256 {
+            let kernel_128 = build_cta64x128_mma_fp16_cpasync(m as u32, n as u32, k as u32);
+            let ptx_128 = PtxModule::new().target("sm_80").add_kernel(kernel_128).emit();
+            match CudaModule::from_ptx(&ctx, &ptx_128) {
+                Ok(mut mod_128) => {
+                    let cfg_128 = LaunchConfig {
+                        grid: (((n + 127) / 128) as u32, ((m + 63) / 64) as u32, 1),
+                        block: (512, 1, 1),
+                        shared_mem: 12288,
+                    };
+                    a_ptr = a_buf.as_ptr();
+                    b_ptr = b_buf.as_ptr();
+                    c_ptr = c_buf.as_ptr();
+                    m_v = m as u32;
+                    n_v = n as u32;
+                    k_v = k as u32;
+                    for _ in 0..5 {
+                        unsafe {
+                            stream
+                                .launch_kernel(
+                                    &mut mod_128,
+                                    "gemm_cta64x128_mma_fp16",
+                                    &cfg_128,
+                                    &mut args,
+                                )
+                                .ok();
+                        }
+                    }
+                    stream.synchronize().ok();
+                    let start = Instant::now();
+                    for _ in 0..iters {
+                        unsafe {
+                            stream
+                                .launch_kernel(
+                                    &mut mod_128,
+                                    "gemm_cta64x128_mma_fp16",
+                                    &cfg_128,
+                                    &mut args,
+                                )
+                                .ok();
+                        }
+                    }
+                    stream.synchronize().ok();
+                    start.elapsed().as_micros() as f64 / iters as f64
+                }
+                Err(e) => {
+                    eprintln!("  64x128 compile failed: {e}");
+                    f64::INFINITY
+                }
+            }
+        } else {
+            f64::INFINITY
+        };
+        let mma128_tflops = flops / (mma128_us * 1e6);
+
         eprintln!(
-            "{:<6} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>5.2}x | mma: {:>8.1} {:>8.1}",
+            "{:<6} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>8.1} {:>5.2}x | mma: {:>8.1} {:>8.1} | 128: {:>8.1} {:>8.1}",
             n,
             cta32_us,
             cta64_us,
@@ -1297,6 +1353,8 @@ fn cta64_vs_cta32_vs_cublas_fp16() {
             cp_vs_cublas,
             mma_us,
             mma_tflops,
+            mma128_us,
+            mma128_tflops,
         );
     }
     eprintln!();

@@ -43,7 +43,7 @@ These targets apply per-backend, per-operation. Competing solutions:
 | CPU GEMM 1024 (1T) | faer 0.24 | **0.98x** | 1.0x | **NEAR PARITY** |
 | CPU GEMM 1024 (1T) | ndarray 0.17 | **1.17x** | 1.0x | **FASTER** |
 | CPU GEMM 1024 (8T) | NumPy OpenBLAS | **0.82x** | 1.0x | **GAP — ASM microkernel IPC** |
-| GPU GEMM 1024 FP16 | cuBLAS | **0.42x** (mma.sync: 45.5 TF/s) | 0.5x | +150% from baseline via mma.sync+v2 |
+| GPU GEMM 1024 FP16 | cuBLAS | **0.52x** (64×128: 57.0 TF/s) | 0.5x | **TARGET MET** — +210% from 18.4 baseline |
 | Q4K GEMV 4096 (CPU) | llama.cpp ~110 | **0.81x** | 1.50x | **89 GFLOPS measured** — FMA ceiling [65] |
 | Q4K GEMV (GPU DP4A) | llama.cpp CUDA | TBD | 1.50x | MEASURE |
 
@@ -130,8 +130,31 @@ Note: previous cuBLAS column used nsys estimates; these are direct cublasGemmEx 
    ptxas already optimized this — no additional perf but cleaner PTX.
 5. **Loop-invariant hoisting**: `a_warp_bytes`, `b_base_smem` computed once before loop.
 
-Best result: **45.5 TFLOP/s at 1024** (peak **49.8 at 4096**). +12% over cp.async baseline.
-vs cuBLAS: **0.42×** at 1024 (was 0.39×), **0.33×** at 4096.
+Best result (64×64): **45.5 TFLOP/s at 1024**. +12% over cp.async baseline.
+
+**64×128 wider tile — BREAKTHROUGH (measured 2026-04-06, POSITIVE RESULT)**:
+
+Implemented 64×128 CTA: same 16 warps (4×4 grid), each warp computes 16×32 output
+(4 mma.sync per K-tile instead of 2). A tile unchanged (64×16, 2KB), B tile doubled
+(16×128, 4KB). B-threads use 16-byte cp.async (vs 8-byte for A-threads).
+AI = 42.7 FLOP/byte (+33% over 64×64's 32 FLOP/byte). Smem = 12KB double-buffered.
+
+| Size | mma 64×64 (µs) | **mma 64×128 (µs)** | cuBLAS (µs) | 64×64 TF/s | **64×128 TF/s** | cuBLAS TF/s | **128 vs cuBLAS** |
+|------|----------------|---------------------|-------------|------------|-----------------|-------------|-------------------|
+| 512 | 13.3 | 19.4 | 5.9 | 20.2 | 13.9 | 45.5 | 0.31x |
+| **1024** | 45.4 | **37.7** | 19.7 | 47.3 | **57.0** | 109 | **0.52x** |
+| **2048** | 340 | **307** | 118 | 49.6 | **55.9** | 146 | **0.38x** |
+| **4096** | 2831 | **2326** | 791 | 48.6 | **59.1** | 174 | **0.34x** |
+
+**57.0 TFLOP/s at 1024** — exceeds 50.0 TFLOP/s contract target!
+**0.52× cuBLAS at 1024** — exceeds the 0.5× target for pure Rust PTX!
+Peak: **59.1 TFLOP/s at 4096** (was 49.8 with 64×64).
++41% over original 40.5 TFLOP/s cp.async baseline. +210% over 18.4 initial CTA WMMA.
+
+Why 64×128 helps: the wider B tile doubles reuse of each loaded A element (8 column
+warps share the same A, vs 4 in 64×64). The 16-byte cp.async for B also provides
+higher transfer throughput. At sizes <512, the 64×128 tile produces fewer CTAs
+(half as many in N dimension), reducing SM occupancy — hence worse at small sizes.
 
 **Bottleneck analysis**: CTA WMMA at 18.4 TFLOP/s (22% of FP32 peak) is limited by
 **serialized load-compute**: the K-loop does `bar_sync → load smem → bar_sync → WMMA`

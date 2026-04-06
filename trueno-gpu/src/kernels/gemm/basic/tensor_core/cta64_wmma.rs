@@ -582,6 +582,385 @@ pub fn build_cta64_mma_fp16_cpasync(_m: u32, n: u32, k: u32) -> PtxKernel {
         })
 }
 
+/// 64×128 CTA mma.sync kernel — 33% higher arithmetic intensity than 64×64.
+///
+/// Architecture: 16 warps in 4×4 grid, each warp handles 16×32 output
+/// (4 mma.sync.m16n8k16 per warp per K-tile: 2 row-halves × 2 col-halves).
+/// A: 64×16 FP16 (2KB), B: 16×128 FP16 (4KB) → smem per buffer = 6KB.
+/// AI = 42.7 FLOP/byte (vs 32 for 64×64 → +33%).
+///
+/// Loading: 256 A-threads × 8B cp.async = 2048B (A).
+///          256 B-threads × 16B cp.async = 4096B (B).
+/// Grid: ((N+127)/128, (M+63)/64), block(512,1,1)
+pub fn build_cta64x128_mma_fp16_cpasync(_m: u32, n: u32, k: u32) -> PtxKernel {
+    let tile_m: u32 = 64;
+    let tile_n: u32 = 128;
+    let tile_k: u32 = 16;
+    let a_smem_bytes = (tile_m * tile_k * 2) as usize; // 2048
+    let b_smem_bytes = (tile_k * tile_n * 2) as usize; // 4096
+    let smem_single = a_smem_bytes + b_smem_bytes; // 6144
+    let smem_bytes = smem_single * 2; // double buffer
+    let n_k_tiles = (k + tile_k - 1) / tile_k;
+    let a_threads: u32 = 256;
+
+    PtxKernel::new("gemm_cta64x128_mma_fp16")
+        .param(PtxType::U64, "a_ptr")
+        .param(PtxType::U64, "b_ptr")
+        .param(PtxType::U64, "c_ptr")
+        .param(PtxType::U32, "m_param")
+        .param(PtxType::U32, "n_param")
+        .param(PtxType::U32, "k_param")
+        .shared_memory(smem_bytes)
+        .build(move |ctx| {
+            let tid = ctx.special_reg(PtxReg::TidX);
+            let ctaid_x = ctx.special_reg(PtxReg::CtaIdX);
+            let ctaid_y = ctx.special_reg(PtxReg::CtaIdY);
+
+            // === Constants ===
+            let c_1 = ctx.mov_u32_imm(1);
+            let c_2 = ctx.mov_u32_imm(2);
+            let c_3 = ctx.mov_u32_imm(3);
+            let c_4 = ctx.mov_u32_imm(4);
+            let c_5 = ctx.mov_u32_imm(5);
+            let c_7 = ctx.mov_u32_imm(7);
+            let c_8 = ctx.mov_u32_imm(8);
+            let c_16 = ctx.mov_u32_imm(16);
+            let c_32 = ctx.mov_u32_imm(32);
+            let c_64 = ctx.mov_u32_imm(64);
+            let c_128 = ctx.mov_u32_imm(128);
+            let c_256 = ctx.mov_u32_imm(a_threads);
+            let c_a_smem = ctx.mov_u32_imm(a_smem_bytes as u32);
+            let k_const = ctx.mov_u32_imm(k);
+            let n_const = ctx.mov_u32_imm(n);
+            let n_k_tiles_reg = ctx.mov_u32_imm(n_k_tiles);
+            let smem_single_reg = ctx.mov_u32_imm(smem_single as u32);
+
+            let cta_row = ctx.mul_u32_reg(ctaid_y, c_64); // CTA covers 64 rows
+            let cta_col = ctx.mul_u32_reg(ctaid_x, c_128); // CTA covers 128 cols
+            let m_param = ctx.load_param_u32("m_param");
+            let n_param = ctx.load_param_u32("n_param");
+            let _k_param = ctx.load_param_u32("k_param");
+
+            let cta_oob = ctx.setp_ge_u32(cta_row, m_param);
+            ctx.branch_if(cta_oob, "exit");
+            let cta_oob2 = ctx.setp_ge_u32(cta_col, n_param);
+            ctx.branch_if(cta_oob2, "exit");
+
+            let a_ptr = ctx.load_param_u64("a_ptr");
+            let b_ptr = ctx.load_param_u64("b_ptr");
+            let c_ptr = ctx.load_param_u64("c_ptr");
+
+            // === Warp layout: 4×4 grid, each warp handles 16×32 output ===
+            let warp_id = ctx.shr_u32(tid, c_5);
+            let c_31 = ctx.mov_u32_imm(31);
+            let lane_id = ctx.and_u32(tid, c_31);
+            let warp_row = ctx.shr_u32(warp_id, c_2); // warp_id / 4
+            let warp_col = ctx.and_u32(warp_id, c_3); // warp_id % 4
+            let warp_m_off = ctx.mul_u32_reg(warp_row, c_16); // 0, 16, 32, 48
+            let warp_n_off = ctx.mul_u32_reg(warp_col, c_32); // 0, 32, 64, 96
+
+            let smem_base = ctx.shared_base_addr();
+            let is_a_thread = ctx.setp_lt_u32(tid, c_256);
+
+            // === cp.async load offsets ===
+            // A-threads (0..255): same as 64×64 — 8 bytes each, 4 FP16
+            let c_mask3 = ctx.mov_u32_imm(3);
+            let a_row_in_tile = ctx.shr_u32(tid, c_2); // t/4
+            let a_col_mod = ctx.and_u32(tid, c_mask3); // t%4
+            let a_col_in_tile = ctx.mul_u32_reg(a_col_mod, c_4); // (t%4)*4
+            let a_global_row = ctx.add_u32_reg(cta_row, a_row_in_tile);
+
+            // B-threads (256..511): 16 bytes each (8 FP16) via cp.async(16)
+            // B tile: 16 rows × 128 cols = 2048 elements, 256 threads × 8 = 2048
+            // local = tid-256, row = local/8, col = (local%8)*16 (16 FP16 = 32 bytes per chunk)
+            // Wait: 256 threads × 16 bytes = 4096 bytes. B = 16×128×2 = 4096. OK!
+            let b_local = ctx.sub_u32_reg(tid, c_256);
+            let b_row_in_tile = ctx.shr_u32(b_local, c_3); // local/8 (32 rows across 256 threads? No...)
+                                                           // 256 threads, 4096 bytes: each thread loads 16 bytes
+                                                           // B has 16 rows × 128 cols × 2 bytes = 4096 bytes
+                                                           // Arrange: thread loads 8 consecutive FP16 elements
+                                                           // local*8 gives element index, row = local*8/128, col = (local*8)%128
+                                                           // Actually: 256 threads × 16 bytes = 4096 bytes total.
+                                                           // Each thread loads 16 contiguous bytes = 8 FP16 elements.
+                                                           // Element index start = local * 8
+                                                           // Row = (local * 8) / 128 = local / 16
+                                                           // Col = (local * 8) % 128 = (local % 16) * 8
+            let c_mask15 = ctx.mov_u32_imm(15);
+            let b_row_in_tile = ctx.shr_u32(b_local, c_4); // local/16
+            let b_col_mod = ctx.and_u32(b_local, c_mask15); // local%16
+            let b_col_in_tile = ctx.mul_u32_reg(b_col_mod, c_8); // (local%16)*8
+            let b_global_col = ctx.add_u32_reg(cta_col, b_col_in_tile);
+
+            // Smem offsets: A-threads use tid*8, B-threads use a_smem + local*16
+            let a_smem_off = ctx.mul_u32_reg(tid, c_8);
+            let b_local_16 = ctx.mul_u32_reg(b_local, c_16);
+            let b_smem_off = ctx.add_u32_reg(c_a_smem, b_local_16);
+            let base_smem_off = ctx.selp_u32(is_a_thread, a_smem_off, b_smem_off);
+
+            // === mma.sync accumulators: 4 per mma × 4 mma = 16 regs ===
+            // Warp 16×32 output = 2 horizontal blocks of 16×16:
+            //   left block: cols warp_n_off+0..15 (2 mma: left-left 0-7, left-right 8-15)
+            //   right block: cols warp_n_off+16..31 (2 mma: right-left, right-right)
+            let acc_ll0 = ctx.mov_f32_imm(0.0);
+            let acc_ll1 = ctx.mov_f32_imm(0.0);
+            let acc_ll2 = ctx.mov_f32_imm(0.0);
+            let acc_ll3 = ctx.mov_f32_imm(0.0);
+            let acc_lr0 = ctx.mov_f32_imm(0.0);
+            let acc_lr1 = ctx.mov_f32_imm(0.0);
+            let acc_lr2 = ctx.mov_f32_imm(0.0);
+            let acc_lr3 = ctx.mov_f32_imm(0.0);
+            let acc_rl0 = ctx.mov_f32_imm(0.0);
+            let acc_rl1 = ctx.mov_f32_imm(0.0);
+            let acc_rl2 = ctx.mov_f32_imm(0.0);
+            let acc_rl3 = ctx.mov_f32_imm(0.0);
+            let acc_rr0 = ctx.mov_f32_imm(0.0);
+            let acc_rr1 = ctx.mov_f32_imm(0.0);
+            let acc_rr2 = ctx.mov_f32_imm(0.0);
+            let acc_rr3 = ctx.mov_f32_imm(0.0);
+
+            let store_buf_off = ctx.mov_u32_imm(0);
+
+            // === ldmatrix address pre-computation ===
+            // A: same as 64×64 (stride = 32 bytes per row in A tile)
+            let lane_sub = ctx.shr_u32(lane_id, c_3);
+            let lane_row_in_8 = ctx.and_u32(lane_id, c_7);
+            let sub_half = ctx.shr_u32(lane_sub, c_1);
+            let sub_col = ctx.and_u32(lane_sub, c_1);
+            let phys_row = ctx.mad_lo_u32(sub_half, c_8, lane_row_in_8);
+            let col_bytes = ctx.mul_u32_reg(sub_col, c_16);
+            let a_row_bytes = ctx.mul_u32_reg(phys_row, c_32);
+            let a_ldm_off_base = ctx.add_u32_reg(a_row_bytes, col_bytes);
+
+            // B: stride = tile_n * 2 = 256 bytes per row (was 128 for 64-col tile)
+            let c_tile_n_bytes = ctx.mov_u32_imm(tile_n * 2); // 256
+            let b_lane_row = ctx.and_u32(lane_id, c_mask15);
+            let b_row_bytes_ldm = ctx.mul_u32_reg(b_lane_row, c_tile_n_bytes);
+
+            // === Prologue: cp.async tile 0 + stride setup ===
+            let a_addr_init;
+            let b_addr_init;
+            {
+                let a_rowk = ctx.mul_u32_reg(a_global_row, k_const);
+                let a_flat = ctx.add_u32_reg(a_rowk, a_col_in_tile);
+                let a_byte_off = ctx.mul_wide_u32(a_flat, 2);
+                a_addr_init = ctx.add_u64(a_ptr, a_byte_off);
+                let b_flat = ctx.mad_lo_u32(b_row_in_tile, n_const, b_global_col);
+                let b_byte_off = ctx.mul_wide_u32(b_flat, 2);
+                b_addr_init = ctx.add_u64(b_ptr, b_byte_off);
+            }
+            let gaddr_run = ctx.selp_u64(is_a_thread, a_addr_init, b_addr_init);
+            // A: 8-byte cp.async, B: 16-byte cp.async
+            // Use selp for cp.async size: A gets 8, B gets 16
+            // Actually cp.async size is a compile-time constant in the instruction...
+            // We need separate cp.async calls for A and B threads.
+            // Use branch on is_a_thread.
+            ctx.branch_if(is_a_thread, "pro_a");
+            ctx.cp_async_global_to_shared(base_smem_off, gaddr_run, 16);
+            ctx.branch("pro_done");
+            ctx.label("pro_a");
+            ctx.cp_async_global_to_shared(base_smem_off, gaddr_run, 8);
+            ctx.label("pro_done");
+            ctx.cp_async_commit_group();
+            ctx.cp_async_wait_group(0);
+            ctx.bar_sync(0);
+
+            // Incremental stride
+            let a_stride_u64 = ctx.mov_u64_imm(tile_k as u64 * 2); // 32
+            let b_stride_u64 = ctx.mul_wide_u32(n_const, tile_k * 2); // N * 32
+            let gaddr_stride = ctx.selp_u64(is_a_thread, a_stride_u64, b_stride_u64);
+
+            // Hoisted smem offsets
+            let a_warp_bytes = ctx.mul_u32_reg(warp_m_off, c_32);
+            let b_warp_bytes = ctx.mul_u32_reg(warp_n_off, c_2);
+            let b_base_smem = ctx.add_u32_reg(c_a_smem, b_warp_bytes);
+
+            // === Main K-loop ===
+            let k_tile = ctx.mov_u32_imm(1);
+            ctx.label("k_loop128");
+            let k_done = ctx.setp_ge_u32(k_tile, n_k_tiles_reg);
+            ctx.branch_if(k_done, "mma_epi128");
+
+            let new_store = ctx.sub_u32_reg(smem_single_reg, store_buf_off);
+            ctx.mov_u32_reg(store_buf_off, new_store);
+            let compute_off = ctx.sub_u32_reg(smem_single_reg, store_buf_off);
+
+            // cp.async next tile (branching for different sizes)
+            {
+                let gaddr_next = ctx.add_u64(gaddr_run, gaddr_stride);
+                ctx.mov_u64_reg(gaddr_run, gaddr_next);
+                let smem_off_buf = ctx.add_u32_reg(base_smem_off, store_buf_off);
+                ctx.branch_if(is_a_thread, "loop_cpa");
+                ctx.cp_async_global_to_shared(smem_off_buf, gaddr_run, 16);
+                ctx.branch("loop_cpdone");
+                ctx.label("loop_cpa");
+                ctx.cp_async_global_to_shared(smem_off_buf, gaddr_run, 8);
+                ctx.label("loop_cpdone");
+            }
+            ctx.cp_async_commit_group();
+
+            // === 4× mma.sync on compute buffer (16×32 per warp) ===
+            {
+                // A fragment: same for all 4 mma.sync (shared across column halves)
+                let a_tile_base = ctx.add_u32_reg(a_warp_bytes, compute_off);
+                let a_addr_u32 = ctx.add_u32_reg(a_tile_base, a_ldm_off_base);
+                let a_frags = ctx.ldmatrix_x4(a_addr_u32);
+
+                // B: 4 ldmatrix.x2.trans (one per 8-col block within warp's 32-col span)
+                let b_tile_base = ctx.add_u32_reg(b_base_smem, compute_off);
+                let b_row_addr = ctx.add_u32_reg(b_tile_base, b_row_bytes_ldm);
+
+                // Block 0: cols 0-7 (left-left)
+                let b_frags_ll = ctx.ldmatrix_x2_trans(b_row_addr);
+                // Block 1: cols 8-15 (left-right), +16 bytes
+                let b_addr_lr = ctx.add_u32_reg(b_row_addr, c_16);
+                let b_frags_lr = ctx.ldmatrix_x2_trans(b_addr_lr);
+                // Block 2: cols 16-23 (right-left), +32 bytes
+                let b_addr_rl = ctx.add_u32_reg(b_row_addr, c_32);
+                let b_frags_rl = ctx.ldmatrix_x2_trans(b_addr_rl);
+                // Block 3: cols 24-31 (right-right), +48 bytes
+                let c_48 = ctx.mov_u32_imm(48);
+                let b_addr_rr = ctx.add_u32_reg(b_row_addr, c_48);
+                let b_frags_rr = ctx.ldmatrix_x2_trans(b_addr_rr);
+
+                // 4× mma.sync in-place
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_ll,
+                    &[acc_ll0, acc_ll1, acc_ll2, acc_ll3],
+                );
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_lr,
+                    &[acc_lr0, acc_lr1, acc_lr2, acc_lr3],
+                );
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_rl,
+                    &[acc_rl0, acc_rl1, acc_rl2, acc_rl3],
+                );
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_rr,
+                    &[acc_rr0, acc_rr1, acc_rr2, acc_rr3],
+                );
+            }
+
+            ctx.cp_async_wait_group(0);
+            ctx.bar_sync(0);
+            ctx.add_u32_inplace(k_tile, 1);
+            ctx.branch("k_loop128");
+
+            // === Epilogue ===
+            ctx.label("mma_epi128");
+            {
+                let a_tile_base = ctx.add_u32_reg(a_warp_bytes, store_buf_off);
+                let a_addr_u32 = ctx.add_u32_reg(a_tile_base, a_ldm_off_base);
+                let a_frags = ctx.ldmatrix_x4(a_addr_u32);
+
+                let b_tile_base = ctx.add_u32_reg(b_base_smem, store_buf_off);
+                let b_row_addr = ctx.add_u32_reg(b_tile_base, b_row_bytes_ldm);
+
+                let b_frags_ll = ctx.ldmatrix_x2_trans(b_row_addr);
+                let b_addr_lr = ctx.add_u32_reg(b_row_addr, c_16);
+                let b_frags_lr = ctx.ldmatrix_x2_trans(b_addr_lr);
+                let b_addr_rl = ctx.add_u32_reg(b_row_addr, c_32);
+                let b_frags_rl = ctx.ldmatrix_x2_trans(b_addr_rl);
+                let c_48 = ctx.mov_u32_imm(48);
+                let b_addr_rr = ctx.add_u32_reg(b_row_addr, c_48);
+                let b_frags_rr = ctx.ldmatrix_x2_trans(b_addr_rr);
+
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_ll,
+                    &[acc_ll0, acc_ll1, acc_ll2, acc_ll3],
+                );
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_lr,
+                    &[acc_lr0, acc_lr1, acc_lr2, acc_lr3],
+                );
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_rl,
+                    &[acc_rl0, acc_rl1, acc_rl2, acc_rl3],
+                );
+                ctx.mma_sync_m16n8k16_inplace(
+                    &a_frags,
+                    &b_frags_rr,
+                    &[acc_rr0, acc_rr1, acc_rr2, acc_rr3],
+                );
+            }
+
+            // === Store C: 8 v2 stores (4 per 16×16 block × 2 blocks) ===
+            {
+                let c_row_base = ctx.add_u32_reg(cta_row, warp_m_off);
+                let c_col_base = ctx.add_u32_reg(cta_col, warp_n_off);
+
+                let group = ctx.shr_u32(lane_id, c_2);
+                let tid_in_grp = ctx.and_u32(lane_id, c_3);
+                let row0_local = ctx.mul_u32_reg(group, c_2);
+                let row1_local = ctx.add_u32_reg(row0_local, c_1);
+                let col0_local = ctx.mul_u32_reg(tid_in_grp, c_2);
+
+                let row0 = ctx.add_u32_reg(c_row_base, row0_local);
+                let row1 = ctx.add_u32_reg(c_row_base, row1_local);
+                let n_param_val = n_param;
+
+                // Left block (cols 0-15 within warp): 4 v2 stores
+                let col0_ll = ctx.add_u32_reg(c_col_base, col0_local);
+                let col0_lr = ctx.add_u32_reg(col0_ll, c_8);
+
+                let off = ctx.mad_lo_u32(row0, n_param_val, col0_ll);
+                let off_b = ctx.mul_wide_u32(off, 4);
+                let addr = ctx.add_u64(c_ptr, off_b);
+                ctx.st_global_f32_v2(addr, acc_ll0, acc_ll1);
+
+                let off = ctx.mad_lo_u32(row1, n_param_val, col0_ll);
+                let off_b = ctx.mul_wide_u32(off, 4);
+                let addr = ctx.add_u64(c_ptr, off_b);
+                ctx.st_global_f32_v2(addr, acc_ll2, acc_ll3);
+
+                let off = ctx.mad_lo_u32(row0, n_param_val, col0_lr);
+                let off_b = ctx.mul_wide_u32(off, 4);
+                let addr = ctx.add_u64(c_ptr, off_b);
+                ctx.st_global_f32_v2(addr, acc_lr0, acc_lr1);
+
+                let off = ctx.mad_lo_u32(row1, n_param_val, col0_lr);
+                let off_b = ctx.mul_wide_u32(off, 4);
+                let addr = ctx.add_u64(c_ptr, off_b);
+                ctx.st_global_f32_v2(addr, acc_lr2, acc_lr3);
+
+                // Right block (cols 16-31 within warp): 4 v2 stores
+                let col0_rl = ctx.add_u32_reg(col0_ll, c_16);
+                let c_24 = ctx.mov_u32_imm(24);
+                let col0_rr = ctx.add_u32_reg(col0_ll, c_24);
+
+                let off = ctx.mad_lo_u32(row0, n_param_val, col0_rl);
+                let off_b = ctx.mul_wide_u32(off, 4);
+                let addr = ctx.add_u64(c_ptr, off_b);
+                ctx.st_global_f32_v2(addr, acc_rl0, acc_rl1);
+
+                let off = ctx.mad_lo_u32(row1, n_param_val, col0_rl);
+                let off_b = ctx.mul_wide_u32(off, 4);
+                let addr = ctx.add_u64(c_ptr, off_b);
+                ctx.st_global_f32_v2(addr, acc_rl2, acc_rl3);
+
+                let off = ctx.mad_lo_u32(row0, n_param_val, col0_rr);
+                let off_b = ctx.mul_wide_u32(off, 4);
+                let addr = ctx.add_u64(c_ptr, off_b);
+                ctx.st_global_f32_v2(addr, acc_rr0, acc_rr1);
+
+                let off = ctx.mad_lo_u32(row1, n_param_val, col0_rr);
+                let off_b = ctx.mul_wide_u32(off, 4);
+                let addr = ctx.add_u64(c_ptr, off_b);
+                ctx.st_global_f32_v2(addr, acc_rr2, acc_rr3);
+            }
+
+            ctx.label("exit");
+            ctx.ret();
+        })
+}
+
 fn build_cta64_wmma_fp16_impl(_m: u32, n: u32, k: u32, double_buffer: bool) -> PtxKernel {
     let tile_m: u32 = 64;
     let tile_n: u32 = 64;
@@ -1339,5 +1718,64 @@ mod tests {
             "  compute:      {compute_insts} ({:.1}%)",
             100.0 * compute_insts as f64 / total_insts.max(1) as f64
         );
+    }
+
+    // ── 64×128 mma.sync FALSIFY tests ──
+
+    /// FALSIFY-CTA64x128-001: 64×128 kernel generates valid PTX
+    #[test]
+    fn test_cta64x128_valid_ptx() {
+        let kernel = build_cta64x128_mma_fp16_cpasync(1024, 1024, 1024);
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+        assert!(ptx.contains(".entry gemm_cta64x128_mma_fp16"));
+        assert!(ptx.contains("mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32"));
+        assert!(ptx.contains("cp.async.ca.shared.global"));
+    }
+
+    /// FALSIFY-CTA64x128-002: 12KB shared memory (6KB × 2 buffers)
+    #[test]
+    fn test_cta64x128_smem_size() {
+        let kernel = build_cta64x128_mma_fp16_cpasync(512, 512, 512);
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+        let extract_smem = |ptx: &str| -> usize {
+            for line in ptx.lines() {
+                if line.contains(".shared") && line.contains("smem[") {
+                    let start = line.find("smem[").unwrap() + 5;
+                    let end = line[start..].find(']').unwrap() + start;
+                    return line[start..end].parse().unwrap();
+                }
+            }
+            panic!("no .shared smem found");
+        };
+        assert_eq!(extract_smem(&ptx), 12288, "64×128 double-buffer needs 12288 bytes (2×6144)");
+    }
+
+    /// FALSIFY-CTA64x128-003: 4× mma.sync per K-tile (8 total: loop + epilogue)
+    #[test]
+    fn test_cta64x128_mma_count() {
+        let kernel = build_cta64x128_mma_fp16_cpasync(512, 512, 512);
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+        let mma_count = ptx.matches("mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32").count();
+        assert_eq!(mma_count, 8, "need 8 mma.sync (4 loop + 4 epilogue), got {mma_count}");
+    }
+
+    /// FALSIFY-CTA64x128-004: 8 v2 stores (2× more than 64×64)
+    #[test]
+    fn test_cta64x128_v2_store_count() {
+        let kernel = build_cta64x128_mma_fp16_cpasync(512, 512, 512);
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+        let v2_count = ptx.matches("st.global.v2.f32").count();
+        assert_eq!(v2_count, 8, "64×128 needs 8 st.global.v2.f32 stores, got {v2_count}");
+    }
+
+    /// FALSIFY-CTA64x128-005: both 8-byte and 16-byte cp.async (A uses 8, B uses 16)
+    #[test]
+    fn test_cta64x128_mixed_cpasync_sizes() {
+        let kernel = build_cta64x128_mma_fp16_cpasync(512, 512, 512);
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+        let has_8 = ptx.lines().any(|l| l.contains("cp.async") && l.contains(", 8;"));
+        let has_16 = ptx.lines().any(|l| l.contains("cp.async") && l.contains(", 16;"));
+        assert!(has_8, "must have 8-byte cp.async for A tile");
+        assert!(has_16, "must have 16-byte cp.async for B tile");
     }
 }
