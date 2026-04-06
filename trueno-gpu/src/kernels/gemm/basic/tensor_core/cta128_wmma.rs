@@ -442,4 +442,100 @@ mod tests {
         assert!((ratio_128 - 64.0).abs() < 0.1);
         assert!(ratio_128 >= ratio_64 * 1.99); // Must be ~2×
     }
+
+    /// Build a minimal kernel that uses mma.sync.m16n8k16 to validate PTX emission.
+    /// This is a compile-only test — it verifies ptxas accepts the generated PTX.
+    #[test]
+    fn test_mma_sync_ptx_emission() {
+        use crate::ptx::{PtxKernel, PtxModule, PtxReg, PtxType};
+
+        let kernel = PtxKernel::new("test_mma_sync").param(PtxType::U64, "dummy").build(|ctx| {
+            // Allocate registers for mma.sync m16n8k16
+            // A: 4 B32 regs, B: 2 B32 regs, C: 4 F32 regs
+            let a0 = ctx.mov_u32_imm(0);
+            let a1 = ctx.mov_u32_imm(0);
+            let a2 = ctx.mov_u32_imm(0);
+            let a3 = ctx.mov_u32_imm(0);
+            let b0 = ctx.mov_u32_imm(0);
+            let b1 = ctx.mov_u32_imm(0);
+            let c0 = ctx.mov_f32_imm(0.0);
+            let c1 = ctx.mov_f32_imm(0.0);
+            let c2 = ctx.mov_f32_imm(0.0);
+            let c3 = ctx.mov_f32_imm(0.0);
+
+            let _d = ctx.mma_sync_m16n8k16(&[a0, a1, a2, a3], &[b0, b1], &[c0, c1, c2, c3]);
+
+            ctx.ret();
+        });
+
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+        assert!(
+            ptx.contains("mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32"),
+            "PTX must contain mma.sync instruction"
+        );
+        // Print the PTX for manual inspection
+        eprintln!("=== mma.sync test PTX ===\n{ptx}");
+    }
+
+    /// Build a minimal ldmatrix kernel to validate PTX emission.
+    #[test]
+    fn test_ldmatrix_ptx_emission() {
+        use crate::ptx::{PtxKernel, PtxModule, PtxType};
+
+        let kernel = PtxKernel::new("test_ldmatrix")
+            .param(PtxType::U64, "dummy")
+            .shared_memory(1024)
+            .build(|ctx| {
+                let addr = ctx.mov_u32_imm(0); // offset 0 in smem
+                let _frags = ctx.ldmatrix_x4(addr);
+                ctx.ret();
+            });
+
+        let ptx = PtxModule::new().target("sm_75").add_kernel(kernel).emit();
+        assert!(
+            ptx.contains("ldmatrix.sync.aligned.m8n8.x4.shared.b16"),
+            "PTX must contain ldmatrix instruction"
+        );
+    }
+
+    /// Hardware compilation test: verify ptxas accepts mma.sync PTX.
+    /// Requires CUDA device (skip if unavailable).
+    #[test]
+    fn test_mma_sync_compiles_on_gpu() {
+        use crate::ptx::{PtxKernel, PtxModule, PtxType};
+
+        let kernel = PtxKernel::new("test_mma_sync_hw").param(PtxType::U64, "dummy").build(|ctx| {
+            // A/B operands MUST be .b32 (not .u32) — ptxas rejects .u32 for mma.sync
+            let a0 = ctx.mov_b32_imm(0);
+            let a1 = ctx.mov_b32_imm(0);
+            let a2 = ctx.mov_b32_imm(0);
+            let a3 = ctx.mov_b32_imm(0);
+            let b0 = ctx.mov_b32_imm(0);
+            let b1 = ctx.mov_b32_imm(0);
+            let c0 = ctx.mov_f32_imm(0.0);
+            let c1 = ctx.mov_f32_imm(0.0);
+            let c2 = ctx.mov_f32_imm(0.0);
+            let c3 = ctx.mov_f32_imm(0.0);
+
+            let _d = ctx.mma_sync_m16n8k16(&[a0, a1, a2, a3], &[b0, b1], &[c0, c1, c2, c3]);
+            ctx.ret();
+        });
+
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+
+        // Try to compile with ptxas via CudaModule
+        #[cfg(feature = "cuda")]
+        {
+            use crate::driver::{CudaContext, CudaModule};
+
+            if let Ok(ctx) = CudaContext::new(0) {
+                match CudaModule::from_ptx(&ctx, &ptx) {
+                    Ok(_) => eprintln!("mma.sync PTX compiled successfully on GPU!"),
+                    Err(e) => panic!("mma.sync PTX failed to compile: {e}\nPTX:\n{ptx}"),
+                }
+            } else {
+                eprintln!("No CUDA device — skipping hardware compilation test");
+            }
+        }
+    }
 }

@@ -196,36 +196,33 @@ pub(crate) fn is_wmma_op(op: &PtxOp) -> bool {
 pub(crate) fn emit_mma_sync(prefix: String, instr: &PtxInstruction) -> String {
     let mut s = prefix;
 
-    // Destinations (D: 4 FP32 regs)
-    s.push_str("mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32\n");
-    s.push_str("        {");
-    for (i, d) in instr.dsts.iter().enumerate() {
-        if i > 0 {
-            s.push_str(", ");
-        }
+    // Destinations (D: 4 FP32 regs — dst + dsts)
+    s.push_str("mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32 {");
+    if let Some(ref d) = instr.dst {
         s.push_str(&emit_operand(d));
     }
-    s.push_str("},\n        {");
+    for d in &instr.dsts {
+        s.push_str(", ");
+        s.push_str(&emit_operand(d));
+    }
+    s.push_str("}, {");
 
     // Sources: first 4 = A regs, next 2 = B regs, last 4 = C regs
     let sources = &instr.srcs;
-    // A fragment (4 regs)
     for i in 0..4 {
         if i > 0 {
             s.push_str(", ");
         }
         s.push_str(&emit_operand(&sources[i]));
     }
-    s.push_str("},\n        {");
-    // B fragment (2 regs)
+    s.push_str("}, {");
     for i in 4..6 {
         if i > 4 {
             s.push_str(", ");
         }
         s.push_str(&emit_operand(&sources[i]));
     }
-    s.push_str("},\n        {");
-    // C accumulator (4 regs)
+    s.push_str("}, {");
     for i in 6..10 {
         if i > 6 {
             s.push_str(", ");
@@ -245,10 +242,11 @@ pub(crate) fn emit_mma_sync(prefix: String, instr: &PtxInstruction) -> String {
 pub(crate) fn emit_ldmatrix(prefix: String, instr: &PtxInstruction) -> String {
     let mut s = prefix;
     s.push_str("ldmatrix.sync.aligned.m8n8.x4.shared.b16 {");
-    for (i, d) in instr.dsts.iter().enumerate() {
-        if i > 0 {
-            s.push_str(", ");
-        }
+    if let Some(ref d) = instr.dst {
+        s.push_str(&emit_operand(d));
+    }
+    for d in &instr.dsts {
+        s.push_str(", ");
         s.push_str(&emit_operand(d));
     }
     s.push_str("}, [");

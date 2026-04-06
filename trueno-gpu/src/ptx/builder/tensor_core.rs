@@ -275,6 +275,20 @@ impl<'a> KernelBuilder<'a> {
         );
     }
 
+    // ===== B32 register helpers (for mma.sync/ldmatrix fragments) =====
+
+    /// Allocate a .b32 register initialized to an immediate value.
+    /// mma.sync A/B operands MUST be .b32 (not .u32) — ptxas enforces this.
+    pub fn mov_b32_imm(&mut self, val: u32) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::B32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mov, PtxType::B32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::ImmI64(val as i64)),
+        );
+        dst
+    }
+
     // ===== MMA.sync (SM 8.0+ — higher IPC than WMMA) =====
 
     /// mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32
