@@ -83,9 +83,10 @@ These crates live in their own repos but depend on the core stack:
 | verificar | 0.5.0 | 52 | Verification/testing | **MERGE** — used by CI/quality |
 | probar | 1.0.3 | 1 (workspace: 4 crates) | WASM/browser test framework | **MERGE** — depends on trueno+presentar |
 | provable-contracts | 0.2.2 | 1 (workspace: 3 crates) | Contract macros + YAML | **MERGE** — trueno build.rs reads its binding.yaml via path dep |
+| pacha | 0.2.6 | 35 | Model/data registry + lineage | **MERGE** — depends on aprender+trueno-graph |
 
 **Updated totals with satellites:**
-- **Merge into monorepo**: 5 core + 14 satellites = 19 repos
+- **Merge into monorepo**: 5 core + 15 satellites = 20 repos
 - **Keep separate**: manzana, whisper.apr, forjar (+ pmat, which is its own product)
 - **Total .rs files**: ~5500+
 - **Total workspace crates**: ~48
@@ -337,6 +338,7 @@ gh api -X PATCH repos/paiml/simular -f archived=true
 gh api -X PATCH repos/paiml/verificar -f archived=true
 gh api -X PATCH repos/paiml/probar -f archived=true
 gh api -X PATCH repos/paiml/provable-contracts -f archived=true
+gh api -X PATCH repos/paiml/pacha -f archived=true
 ```
 
 Archiving preserves: issues, PRs, stars, forks, git history, wiki.
@@ -595,6 +597,7 @@ The following infra specs must be updated BEFORE or DURING migration:
 | provable-contracts | aprender-contracts | Yes (provable-contracts 0.3) |
 | provable-contracts-macros | aprender-contracts-macros | Yes |
 | provable-contracts-cli | aprender-contracts-cli | Yes |
+| pacha | aprender-registry | Yes (pacha 0.3) |
 
 ### Appendix B: Kept Separate (NOT merged)
 
