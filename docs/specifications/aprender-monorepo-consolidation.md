@@ -1,17 +1,33 @@
 # APR-MONO: Sovereign Stack Monorepo Consolidation
 
-**Version**: 1.0
+**Version**: 1.3
 **Date**: 2026-04-06
 **Status**: PROPOSAL — Ready for Review
 **Priority**: P0 — Unblocks daily apr-cli releases
 **Author**: PAIML Team + Claude
+**Contract**: `contracts/cgp/cgp-monorepo-consolidation-v1.yaml`
+**Falsification**: 9 conditions (FALSIFY-MONO-001 through 009)
+
+### Citations
+
+| # | Reference | Relevance |
+|---|-----------|-----------|
+| [1] | Potvin & Levenberg, "Why Google Stores Billions of Lines of Code in a Single Repository," CACM 59(7), July 2016. DOI: 10.1145/2854146 | Monorepo enables atomic changes, unified tooling. Scale: 2B lines, 45K commits/day. |
+| [2] | Brousse, "The Issue of Monorepo and Polyrepo in Large Enterprises," ACM ICSE Companion 2019, pp. 150-159. DOI: 10.1109/ICSE-Companion.2019.00062 | Taxonomy: monorepo wins for tightly-coupled projects; polyrepo for independent products. |
+| [3] | Brito et al., "On the Use of Monorepos in Open Source Projects," MSR 2023 | Empirical: 377 monorepos, median 8 packages. Motivation: shared deps, atomic changes. |
+| [4] | Rastogi et al., "Dependency Smells in JavaScript Monorepo Projects," ICSME 2023 | Diamond dep elimination is the #1 measurable benefit. Version skew drops to zero. |
+| [5] | PAIML clean-room-spec.md | 9 whack-a-mole patterns, 19 broken publishes from `[patch.crates-io]`. |
+| [6] | PAIML release-system.md | Trusted Publishing, OIDC, tag-triggered releases. |
+| [7] | PAIML unified-ci-pipeline.md | sovereign-ci.yml reusable workflow, 20/20 repos GREEN. |
 
 ---
 
 ## Executive Summary
 
-Merge **5 repositories** (trueno, aprender, entrenar, realizar, batuta) into
-a **single `paiml/aprender` monorepo** with ~30 workspace crates under the
+Merge **19 repositories** (trueno, aprender, entrenar, realizar, batuta,
+presentar, renacer, certeza, provable-contracts, trueno-{db,graph,rag,viz,zram},
+alimentar, simular, repartir, verificar, probar) into
+a **single `paiml/aprender` monorepo** with ~48 workspace crates under the
 `aprender-*` namespace. This eliminates the cross-repo version sync problem
 that has caused **19 broken crates.io publishes** (paiml/aprender#701) and
 enables daily `apr-cli` releases from a single `cargo publish -p apr-cli`.
@@ -291,7 +307,7 @@ cargo test --workspace
 
 | Option | Impact | Effort | Risk | Recommendation |
 |--------|--------|--------|------|---------------|
-| **A: Full monorepo** (this spec, 17 repos → 1) | **Critical** | **5-7 days** | **Low** | **RECOMMENDED — matches industry standard** |
+| **A: Full monorepo** (this spec, 19 repos → 1) | **Critical** | **5-7 days** | **Low** | **RECOMMENDED — matches industry standard [1][2][3]** |
 | B: Keep trueno separate | Medium | 2 days | Medium | Partial fix, version sync remains |
 | C: Do nothing | — | 0 | **High** | 19 incidents → 30+ incidents |
 
@@ -305,6 +321,63 @@ cargo test --workspace
 4. Old crate names (`trueno`, `entrenar`, `realizar`, `batuta`) still resolve via shims
 5. Daily apr-cli releases take < 5 minutes (publish + verify)
 6. Zero cross-crate version mismatch incidents for 90 days post-migration
+
+---
+
+## Falsification Conditions
+
+**Contract**: `contracts/cgp/cgp-monorepo-consolidation-v1.yaml`
+
+If ANY of these become true, the migration hypothesis is wrong:
+
+| ID | Condition | Threshold | Mitigation |
+|----|-----------|-----------|------------|
+| FALSIFY-MONO-001 | Incremental compile time regression | > 3× baseline (> 15s for 1-file change) | `default-members`, dep graph pruning |
+| FALSIFY-MONO-002 | CI gate time exceeds budget | > 10 min wall-clock for 1-file PR | `cargo nextest --partition`, sccache |
+| FALSIFY-MONO-003 | Merge conflict rate increases | > 2 conflicts/week (baseline ~0) | CODEOWNERS, directory ownership [2] |
+| FALSIFY-MONO-004 | Daily publish exceeds time budget | > 5 min for `make publish CRATE=apr-cli` | Topological publish ordering |
+| FALSIFY-MONO-005 | Broken publishes continue | > 2 incidents in 90 days (baseline 19/5mo) | Workspace eliminates version skew [4] |
+| FALSIFY-MONO-006 | Clone time exceeds threshold | > 30s for `git clone --depth 1` | .gitattributes LFS, shallow clone |
+| FALSIFY-MONO-007 | Git history lost during migration | `git log --follow` doesn't show pre-merge commits | Verify `git subtree` preservation |
+| FALSIFY-MONO-008 | Shim crates fail re-export | `trueno = "0.19"` produces type mismatches | Integration test shim crates in CI |
+| FALSIFY-MONO-009 | Workspace version bump breaks downstream | Patch bump causes API incompatibility | Polars pattern: shared version [1] |
+
+---
+
+## Infrastructure Requirements (paiml/infra updates)
+
+The following infra specs must be updated BEFORE or DURING migration:
+
+### INFRA-CI-MONO: Workspace-aware CI pipeline
+
+`unified-ci-pipeline.md` currently assumes single-crate repos. Changes:
+- `cargo test --workspace` replaces `cargo test`
+- `cargo clippy --workspace` replaces `cargo clippy`
+- sccache warmup for ~48 crate build graph
+- CI time budget: 30-90s → 3-5 min for full workspace
+- `cargo nextest --partition` for parallel test execution
+
+### INFRA-PUBLISH-MONO: Topological publish ordering
+
+`release-system.md` must support workspace publish ordering:
+- Cannot `cargo publish -p apr-cli` until all deps are published
+- Need topological sort: provable-contracts → compute → aprender → train/serve → apr-cli
+- Tool: `cargo-workspaces publish` or custom `xtask publish`
+- Trusted Publishing OIDC must work for ~48 crate names
+
+### INFRA-CLEAN-ROOM-MONO: Workspace resource budget
+
+`clean-room-spec.md` container must handle full workspace:
+- Disk: 2-3× current for ~48 crate build graph
+- Memory: monitor for OOM on parallel compilation
+- `cargo install apr-cli` post-publish smoke test unchanged
+
+### INFRA-ARCHIVE: Old repo archival
+
+19 repos archived as read-only (GitHub Settings → Archive):
+- README updated: "This repo has moved to paiml/aprender/crates/..."
+- No deletion — preserve issues, PRs, stars
+- Branch protection removed (read-only)
 
 ---
 
