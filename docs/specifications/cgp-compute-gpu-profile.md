@@ -3203,6 +3203,17 @@ eliminating output buffer zero-fill).
 - 11 new FALSIFY tests (FALSIFY-UNINIT-001 through 007) verify correctness:
   sqrt, recip, softmax, matvec, Q4K determinism, attention bounds, QKV SIMD parity.
 
+**Parallel threshold tuning (2026-04-06, CGP-DBUF continued)**:
+
+Previous thresholds were set with thread::scope (~40µs overhead). With Rayon
+dispatch (~3µs), lower thresholds are viable:
+- Transpose 1024: 4M→1M threshold → 290µs→221µs (**+31%**, 28.9→37.9 GB/s)
+- MatVec 2048: 4096→2048 rows → 177µs→137µs (**+29%**, 47→61 GFLOPS)
+
+**Negative result**: shared-B parallel GEMM (3rd attempt, per-(jc,pc) barrier):
+597→318 GFLOPS (-47%). Rayon barrier after each K-tile pack is worse than 8×
+redundant B packing. Future: producer-consumer model.
+
 **Uninit allocation sweep (2026-04-05, CGP-DBUF)**:
 
 Systematic audit of all `vec![0.0; n]` in hot paths. Replaced zero-fill with
@@ -3233,10 +3244,13 @@ accumulation patterns that require zero-initialized output buffers. Only
 operations with SET semantics (dot product, unary transform, local accumulator)
 benefit from uninit allocation.
 
-**Optimization experiments**: 14+11 total (5+6 positive, 9+5 negative/neutral).
+**Optimization experiments**: 14+14 total (5+8 positive, 9+6 negative/neutral).
 Positive: 8×32 NR, SIMD B-packing, 8T cap, fused attention (scalar+AVX2),
-uninit alloc (sqrt 3×, Q4K +5%, softmax, attention, fused ops).
-Negative: 8×48 KC, broadcast-B scatter, shared-B parallel (3×), AVX-512 GEMV,
+uninit alloc (sqrt 3×, Q4K +5%, softmax, attention, fused ops),
+SIMD fused QKV/GateUp, zero-copy MatmulOp, matmul_naive direct indexing,
+parallel transpose threshold 4M→1M (+31%), parallel matvec threshold 4096→2048 (+29%).
+Negative: 8×48 KC, broadcast-B scatter, shared-B parallel (4× — three 2026-04-05
+attempts + one 2026-04-06 per-(jc,pc) barrier attempt), AVX-512 GEMV,
 K-unroll, MC=192, prefetch, Q4K ceiling (6 attempts),
 matmul/batched_matmul/vecmat uninit (BLIS accumulates, requires zeros).
 All grounded with arXiv citations [44][45][60]-[65].
