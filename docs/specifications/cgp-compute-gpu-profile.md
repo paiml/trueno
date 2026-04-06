@@ -3152,7 +3152,7 @@ Analysis via `decy audit` + `pmat query` + direct source comparison.
 ### Current State Summary (updated 2026-04-05)
 
 **cgp tool**: 18/18 CLI commands implemented (only `cgp tui` is STUB).
-3621 tests passing (updated 2026-04-06). 14 FALSIFY tests: 11 UNINIT + 3 PARALLEL.
+3623 tests passing (updated 2026-04-06). 16 FALSIFY tests: 11 UNINIT + 3 PARALLEL + 2 SIMD.
 65 peer-reviewed citations [1]-[65]. 11 provable-contracts.
 All 11 contracts pass (53 checks pass, 0 fail, 44 skip).
 
@@ -3200,8 +3200,12 @@ eliminating output buffer zero-fill).
 - FusedGateUpOp: eliminated 2×intermediate_size Vector::from_slice_with_backend
   allocations (38K heap allocs for Qwen 3B) → direct simd_dot on slices.
 - MatmulOp: result.as_slice().to_vec() → result.data (move, zero copies).
-- 11 new FALSIFY tests (FALSIFY-UNINIT-001 through 007) verify correctness:
-  sqrt, recip, softmax, matvec, Q4K determinism, attention bounds, QKV SIMD parity.
+- AttentionOp weighted sum: scalar `*o += w*vi` → AVX2 VFMADD axpy (8 elements/inst).
+  For head_dim=128: 16 FMA iterations vs 128 scalar mul-adds.
+- B-packing: 2-way K-unroll in pack_b_block_nr32_avx512 (marginal, memory-bound).
+- 16 FALSIFY tests (UNINIT-001..007, PARALLEL-001..003, SIMD-001..001b):
+  sqrt, recip, softmax, matvec, Q4K determinism, attention bounds, QKV SIMD parity,
+  transpose/matvec parallel boundary, AVX2 axpy correctness + remainder path.
 
 **Parallel threshold tuning (2026-04-06, CGP-DBUF continued)**:
 
