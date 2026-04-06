@@ -622,6 +622,12 @@ impl WgslForwardPass {
         self.weight_buffers.len()
     }
 
+    /// Access a dequantized weight buffer by name (e.g. "layer.0.down_proj").
+    /// Used by backward pass for gradient propagation through frozen base weights.
+    pub fn weight_buffer(&self, name: &str) -> Option<&wgpu::Buffer> {
+        self.weight_buffers.get(name)
+    }
+
     /// Reference to the wgpu device.
     pub fn device_ref(&self) -> &wgpu::Device {
         &self.device
