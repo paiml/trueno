@@ -245,7 +245,7 @@ impl CudaModule {
     ///
     /// Returns `Err(GpuError::ModuleLoad)` if PTX is invalid or compilation fails.
     pub fn from_ptx(ctx: &CudaContext, ptx: &str) -> Result<Self, GpuError> {
-        eprintln!("[FROM_PTX] called, ptx_len={}", ptx.len());
+        // GH-611: Removed debug print — was spamming stderr with 50+ lines per inference
         let driver = get_driver()?;
 
         // F-PTX-002: Ensure context is current on this thread before JIT compilation.
