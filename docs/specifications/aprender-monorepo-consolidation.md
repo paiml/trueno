@@ -255,12 +255,174 @@ aprender = { path = "../aprender" }
 
 ### Phase 4: Publish & Shim (1 day)
 
-1. Publish all `aprender-*` crates from the monorepo
-2. Publish shim crates for old names (`trueno 0.19.0`, `entrenar 0.8.0`, etc.)
+1. Publish all `aprender-*` crates from the monorepo in topological order
+2. Publish shim crates for old names (see Phase 4a below)
 3. Verify `cargo install apr-cli` works from crates.io
-4. Archive old repositories (read-only, link to monorepo)
+4. Post-publish smoke test: `cargo install apr-cli --force` on clean machine
 
-### Phase 5: Daily workflow (ongoing)
+#### Phase 4a: Shim Crate Publishing
+
+Each old crate name gets a final version that re-exports the new name:
+
+```rust
+// trueno 0.19.0/src/lib.rs — published to crates.io
+//! `trueno` has moved to `aprender-compute`.
+//! This crate re-exports `aprender-compute` for backward compatibility.
+//! New code should depend on `aprender-compute` directly.
+pub use aprender_compute::*;
+```
+
+```toml
+# trueno 0.19.0/Cargo.toml
+[package]
+name = "trueno"
+version = "0.19.0"
+description = "DEPRECATED: Use aprender-compute instead. This crate re-exports aprender-compute."
+repository = "https://github.com/paiml/aprender"
+keywords = ["deprecated", "moved"]
+
+[dependencies]
+aprender-compute = "0.29"
+```
+
+Repeat for all 19+ old crate names (see Appendix A).
+Shim crates are ~10 lines each. Publish once, never update again.
+
+### Phase 5: Archive Old Repositories (1 day)
+
+For each of the 19 merged repositories:
+
+#### 5a. Update README with redirect
+
+```markdown
+# ⚠️ This repository has moved
+
+**This project is now part of the [aprender monorepo](https://github.com/paiml/aprender).**
+
+- New location: `paiml/aprender/crates/aprender-compute/` (was `paiml/trueno`)
+- New crate name: `aprender-compute` (old name `trueno` still works via re-export)
+- Issues: File at [paiml/aprender/issues](https://github.com/paiml/aprender/issues)
+
+## For existing users
+
+```toml
+# This still works (re-export shim):
+trueno = "0.19"
+
+# Preferred (direct dependency):
+aprender-compute = "0.29"
+```
+```
+
+#### 5b. Archive repository
+
+```bash
+# Via GitHub API (or Settings → Danger Zone → Archive)
+gh api -X PATCH repos/paiml/trueno -f archived=true
+gh api -X PATCH repos/paiml/entrenar -f archived=true
+gh api -X PATCH repos/paiml/realizar -f archived=true
+gh api -X PATCH repos/paiml/Batuta -f archived=true
+gh api -X PATCH repos/paiml/presentar -f archived=true
+gh api -X PATCH repos/paiml/renacer -f archived=true
+gh api -X PATCH repos/paiml/certeza -f archived=true
+gh api -X PATCH repos/paiml/trueno-db -f archived=true
+gh api -X PATCH repos/paiml/trueno-graph -f archived=true
+gh api -X PATCH repos/paiml/trueno-rag -f archived=true
+gh api -X PATCH repos/paiml/trueno-viz -f archived=true
+gh api -X PATCH repos/paiml/trueno-zram -f archived=true
+gh api -X PATCH repos/paiml/batuta-common -f archived=true
+gh api -X PATCH repos/paiml/repartir -f archived=true
+gh api -X PATCH repos/paiml/alimentar -f archived=true
+gh api -X PATCH repos/paiml/simular -f archived=true
+gh api -X PATCH repos/paiml/verificar -f archived=true
+gh api -X PATCH repos/paiml/probar -f archived=true
+gh api -X PATCH repos/paiml/provable-contracts -f archived=true
+```
+
+Archiving preserves: issues, PRs, stars, forks, git history, wiki.
+Disables: push, new issues, new PRs. Read-only forever.
+
+#### 5c. crates.io namespace reservation
+
+Old crate names on crates.io remain owned by PAIML. The shim versions
+(trueno 0.19, entrenar 0.8, etc.) ensure the names can't be squatted.
+`cargo install` continues to work via re-export.
+
+**crates.io ownership audit** — verify all old crate names list the
+PAIML team as owner:
+
+```bash
+for crate in trueno trueno-gpu trueno-quant trueno-db trueno-viz \
+             trueno-explain trueno-rag trueno-graph trueno-gemm-codegen \
+             trueno-zram-core trueno-zram-adaptive trueno-cuda-edge \
+             trueno-fft trueno-sparse trueno-solve trueno-rand \
+             trueno-image trueno-tensor entrenar entrenar-common \
+             entrenar-lora realizar batuta batuta-common repartir \
+             presentar renacer certeza verificar probar \
+             provable-contracts provable-contracts-macros; do
+  echo -n "$crate: "
+  cargo owner --list $crate 2>/dev/null | head -1
+done
+```
+
+### Phase 6: Documentation Update (1 day)
+
+#### 6a. Unified book
+
+Merge book content from all repos into `aprender/book/`:
+
+```
+book/src/
+├── introduction.md
+├── getting-started/
+│   └── installation.md          # cargo install apr-cli
+├── compute/                     # was trueno book
+│   ├── simd-backends.md
+│   ├── gpu-compute.md
+│   └── inference.md
+├── training/                    # was entrenar docs
+│   ├── training-loops.md
+│   └── lora.md
+├── serving/                     # was realizar docs
+│   ├── inference-server.md
+│   └── api-reference.md
+├── orchestration/               # was batuta docs
+│   ├── agents.md
+│   └── rag-oracle.md
+├── cli-reference/               # auto-generated from clap
+│   ├── apr-run.md
+│   ├── apr-serve.md
+│   └── ...
+└── appendix/
+    ├── changelog.md             # unified changelog
+    ├── migration-guide.md       # trueno → aprender-compute
+    └── crate-rename-table.md
+```
+
+#### 6b. Auto-generated CLI reference
+
+Add to CI/Makefile:
+
+```makefile
+docs-cli:
+	@for cmd in run serve inspect debug validate diff tensors trace \
+	            lint explain canary export import pull list rm convert \
+	            compile merge quantize tui check gpu code; do \
+	    echo "## apr $$cmd" > book/src/cli-reference/apr-$$cmd.md; \
+	    echo '```' >> book/src/cli-reference/apr-$$cmd.md; \
+	    cargo run -p apr-cli -- $$cmd --help >> book/src/cli-reference/apr-$$cmd.md 2>&1; \
+	    echo '```' >> book/src/cli-reference/apr-$$cmd.md; \
+	done
+```
+
+#### 6c. Update external references
+
+- crates.io descriptions: all `aprender-*` crates link to monorepo
+- docs.rs: ensure workspace docs build (`cargo doc --workspace`)
+- GitHub topics: add "monorepo" tag to paiml/aprender
+- README badges: update CI, coverage, crates.io links
+
+### Phase 7: Daily workflow (ongoing)
 
 ```bash
 # Daily apr-cli release (ONE command):
@@ -271,6 +433,9 @@ cargo publish -p aprender-compute && cargo publish -p apr-cli
 
 # Workspace-wide test (catches ALL breakage):
 cargo test --workspace
+
+# Publish with topological ordering (when multiple crates changed):
+cargo workspaces publish --from-git
 ```
 
 ---
@@ -279,14 +444,18 @@ cargo test --workspace
 
 | Problem | Before (5 repos) | After (1 repo) |
 |---------|------------------|----------------|
-| Version sync | Manual, 19 failures (#701) | Automatic (workspace) |
+| Version sync | Manual, 19 failures (#701) | Automatic (workspace) [4] |
 | Daily apr-cli | 5-repo coordination | `cargo publish -p apr-cli` |
-| Diamond deps | `trueno 0.17` vs `0.18` | Impossible (one version) |
-| `[patch.crates-io]` | Required, leaks to publish | Eliminated |
-| Circular deps | aprender↔trueno blocked | Workspace siblings |
-| CI coverage | 5 separate pipelines | 1 pipeline, 1 report |
-| New contributor setup | Clone 5 repos | Clone 1 repo |
-| Cross-crate refactoring | 5 PRs, coordinated merge | 1 PR |
+| Diamond deps | `trueno 0.17` vs `0.18` | Impossible (one version) [4] |
+| `[patch.crates-io]` | Required, leaks to publish | Eliminated [5] |
+| Circular deps | aprender↔trueno blocked | Workspace siblings [1] |
+| CI coverage | 19 separate pipelines | 1 pipeline, 1 report [7] |
+| New contributor setup | Clone 5+ repos | Clone 1 repo [1] |
+| Cross-crate refactoring | 5+ PRs, coordinated merge | 1 PR [1] |
+| Crate namespace | 4 prefixes (trueno/aprender/entrenar/realizar) | 1 prefix (aprender-*) |
+| crates.io names | 32+ names, version sync hell | ~48 names, workspace-locked |
+| Documentation | 5+ separate books | 1 unified book |
+| Old repos | Active, diverging | Archived read-only, redirect READMEs |
 
 ---
 
