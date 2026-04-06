@@ -92,9 +92,22 @@ IPC than Rust intrinsics. Shared-B packing tested and disproven (see negative re
 | Size | CTA WMMA (µs) | cuBLAS (µs) | CTA TFLOP/s | cuBLAS TFLOP/s | Ratio |
 |------|---------------|-------------|-------------|----------------|-------|
 | 128 | 4.4 | 3.2 | 1.0 | 1.3 | 0.71x |
-| 256 | 7.0 | 3.4 | 4.8 | 9.9 | 0.49x |
-| 512 | 17.6 | 6.2 | 15.3 | 43.3 | 0.35x |
-| 1024 | 116.7 | 44.0 | 18.4 | 48.9 | 0.38x |
+| 256 | 7.0 | 3.3 | 4.8 | 10.3 | 0.47x |
+| 512 | 17.6 | 6.0 | 15.3 | 44.4 | 0.34x |
+| 1024 | 116.7 | 20.5 | 18.4 | 104.9 | 0.18x |
+
+**cuBLAS FP16 measured directly via `cgp profile compare --features cuda` (2026-04-06)**:
+
+| Size | cuBLAS (µs) | cuBLAS TFLOP/s | % of 330 FP16 peak | cp.async TFLOP/s | Ratio |
+|------|-------------|----------------|-------------------|-----------------|-------|
+| 256 | 3.3 | 10.3 | 3.1% | — | — |
+| 512 | 6.0 | 44.4 | 13.4% | 16.8 | 0.38x |
+| 1024 | 20.5 | 104.9 | 31.8% | 40.5 | 0.39x |
+| 2048 | 119.4 | 143.8 | 43.6% | — | — |
+| 4096 | 916.0 | 150.0 | 45.5% | — | — |
+
+cuBLAS peaks at 150 TFLOP/s (45.5%) at 4096. Our PTX at 40.5 = 0.39× cuBLAS at 1024.
+Note: previous cuBLAS column used nsys estimates; these are direct cublasGemmEx measurements.
 
 **Bottleneck analysis**: CTA WMMA at 18.4 TFLOP/s (22% of FP32 peak) is limited by
 **serialized load-compute**: the K-loop does `bar_sync → load smem → bar_sync → WMMA`
