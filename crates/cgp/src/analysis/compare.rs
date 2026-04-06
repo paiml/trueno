@@ -104,6 +104,81 @@ fn estimate_cublas_time_us(size: u32) -> f64 {
     estimate_cuda_time_us(size) / 3.0
 }
 
+/// Measure actual cuBLAS FP16 GEMM throughput via trueno-gpu driver.
+/// Returns (time_us, tflops) or None if CUDA unavailable.
+#[cfg(feature = "cuda")]
+fn measure_cublas_gemm(size: u32) -> Option<(f64, f64)> {
+    use trueno_gpu::driver::{CublasHandle, CudaContext, CudaStream, GemmOp, GpuBuffer};
+
+    let ctx = CudaContext::new(0).ok()?;
+    let stream = CudaStream::new(&ctx).ok()?;
+    let handle = CublasHandle::new(&ctx).ok()?;
+    handle.set_stream(&stream).ok()?;
+
+    let n = size as usize;
+    let a_data = vec![0x3C00u16; n * n]; // 1.0 in FP16
+    let b_data = vec![0x3C00u16; n * n];
+    let c_data = vec![0u16; n * n];
+
+    let a_buf = GpuBuffer::from_host(&ctx, &a_data).ok()?;
+    let b_buf = GpuBuffer::from_host(&ctx, &b_data).ok()?;
+    let c_buf = GpuBuffer::from_host(&ctx, &c_data).ok()?;
+
+    // Warmup
+    for _ in 0..5 {
+        let _ = handle.gemm_f16(
+            GemmOp::NoTrans,
+            GemmOp::NoTrans,
+            n as i32,
+            n as i32,
+            n as i32,
+            1.0,
+            a_buf.as_ptr(),
+            n as i32,
+            b_buf.as_ptr(),
+            n as i32,
+            0.0,
+            c_buf.as_ptr(),
+            n as i32,
+        );
+    }
+    stream.synchronize().ok()?;
+
+    let iters: u32 = if n <= 512 {
+        200
+    } else if n <= 1024 {
+        100
+    } else {
+        30
+    };
+    let start = std::time::Instant::now();
+    for _ in 0..iters {
+        let _ = handle.gemm_f16(
+            GemmOp::NoTrans,
+            GemmOp::NoTrans,
+            n as i32,
+            n as i32,
+            n as i32,
+            1.0,
+            a_buf.as_ptr(),
+            n as i32,
+            b_buf.as_ptr(),
+            n as i32,
+            0.0,
+            c_buf.as_ptr(),
+            n as i32,
+        );
+    }
+    stream.synchronize().ok()?;
+    let elapsed = start.elapsed();
+
+    let per_call_us = elapsed.as_micros() as f64 / iters as f64;
+    let flops = 2.0 * (n as f64).powi(3);
+    let tflops = flops / (per_call_us * 1e6);
+
+    Some((per_call_us, tflops))
+}
+
 /// Run cross-backend comparison.
 pub fn run_compare(kernel: &str, size: u32, backends_str: &str, json: bool) -> Result<()> {
     let backends: Vec<&str> = backends_str.split(',').map(|s| s.trim()).collect();
@@ -149,7 +224,21 @@ pub fn run_compare(kernel: &str, size: u32, backends_str: &str, json: bool) -> R
             }
             "cublas" => {
                 let avail = which::which("nvidia-smi").is_ok();
-                (estimate_cublas_time_us(size), avail, false)
+                // CGP-DBUF: actual cuBLAS measurement when cuda feature enabled
+                #[cfg(feature = "cuda")]
+                if avail {
+                    if let Some((time_us, _tflops)) = measure_cublas_gemm(size) {
+                        (time_us, true, true)
+                    } else {
+                        (estimate_cublas_time_us(size), avail, false)
+                    }
+                } else {
+                    (estimate_cublas_time_us(size), avail, false)
+                }
+                #[cfg(not(feature = "cuda"))]
+                {
+                    (estimate_cublas_time_us(size), avail, false)
+                }
             }
             "wgpu" => {
                 let avail = which::which("nvidia-smi").is_ok();

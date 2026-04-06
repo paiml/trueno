@@ -31,6 +31,12 @@ num_cpus = "1.17"
 # Output formatting
 comfy-table = "7"
 colored = "3"
+# GPU profiling: direct cuBLAS measurement (OWN THE STACK)
+trueno-gpu = { path = "../../trueno-gpu", features = ["cuda"], optional = true }
+
+[features]
+default = []
+cuda = ["dep:trueno-gpu"]
 
 [dev-dependencies]
 proptest = "1.9"

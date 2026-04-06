@@ -1803,3 +1803,105 @@ roadmap:
   estimated_effort: null
   labels: []
   notes: null
+- id: PMAT-022
+  github_issue: null
+  item_type: task
+  title: 'CGP-DBUF Phase 3: parallel thresholds + shared-B negative result'
+  status: planned
+  priority: high
+  assigned_to: null
+  created: 2026-04-06T06:13:07Z
+  updated: 2026-04-06T06:13:07Z
+  spec: null
+  acceptance_criteria:
+  - Transpose threshold 4M→1M (+31% at 1024). MatVec threshold 4096→2048 (+29% at 2048). Shared-B parallel GEMM negative result (4th attempt, -47%). 28 total experiments documented.
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: PMAT-023
+  github_issue: null
+  item_type: task
+  title: 'CGP-DBUF Phase 4: parallel thresholds + from_slice elimination + FALSIFY'
+  status: planned
+  priority: high
+  assigned_to: null
+  created: 2026-04-06T07:25:05Z
+  updated: 2026-04-06T07:25:05Z
+  spec: null
+  acceptance_criteria:
+  - Transpose 4M→1M (+31%), matvec 4096→2048 (+29%), shared-B GEMM 4th negative (-47%), from_slice→from_vec in matvec/vecmat, 14 FALSIFY tests (11 UNINIT + 3 PARALLEL). 3621 tests pass.
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: PMAT-024
+  github_issue: null
+  item_type: task
+  title: 'CGP-DBUF Phase 5: SIMD axpy, B-pack unroll, copy elimination'
+  status: planned
+  priority: high
+  assigned_to: null
+  created: 2026-04-06T07:33:12Z
+  updated: 2026-04-06T07:33:12Z
+  spec: null
+  acceptance_criteria:
+  - 'AVX2 SIMD axpy in attention weighted sum (head_dim=128: 16 FMA vs 128 scalar). B-packing 2-way K-unroll. from_slice→from_vec in matvec/vecmat. 16 FALSIFY tests. 3623 tests pass.'
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: PMAT-025
+  github_issue: null
+  item_type: task
+  title: 'CGP-DBUF Phase 6: AVX2 softmax sweep — attention + brick pipeline'
+  status: planned
+  priority: high
+  assigned_to: null
+  created: 2026-04-06T07:39:54Z
+  updated: 2026-04-06T07:39:54Z
+  spec: null
+  acceptance_criteria:
+  - 'AttentionOp scalar exp→AVX2 fast_exp polynomial (seq_len=512: 64 SIMD vs 512 scalar). SoftmaxOp 4-step→1-call delegation to blis (eliminates 3 allocs). B-pack 2-way K-unroll. 16 FALSIFY tests. 3623 tests pass.'
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: PMAT-026
+  github_issue: null
+  item_type: task
+  title: 'CGP-DBUF Phase 7: llama.cpp head-to-head + softmax SIMD + cleanup'
+  status: planned
+  priority: high
+  assigned_to: null
+  created: 2026-04-06T07:54:10Z
+  updated: 2026-04-06T07:54:10Z
+  spec: null
+  acceptance_criteria:
+  - 'P3b DONE: llama.cpp 22 tok/s 1T vs trueno 0.81× Q4K GEMV — near FMA ceiling. AttentionOp AVX2 softmax (scalar→polynomial fast_exp). SoftmaxOp 3-alloc→1-call delegation. 230 lines dead code removed. Vec collect eliminated in Q4K/Q6K dispatch. 3623 tests, 16 FALSIFY.'
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: PMAT-027
+  github_issue: null
+  item_type: task
+  title: 'CGP spec audit: 7/10 priorities complete'
+  status: planned
+  priority: medium
+  assigned_to: null
+  created: 2026-04-06T09:07:49Z
+  updated: 2026-04-06T09:07:49Z
+  spec: null
+  acceptance_criteria:
+  - 'Verified P1a (codegen, 6 variants), P2b (compare auto-measure), P3a (14/14 contracts pass). Combined with previous: P1c, P3b, CGP-DBUF. Decision matrix updated. Remaining: P1d (VBMI2), P2a (TUI), P2c (GPU roofline), P3c (GPU PTX).'
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null

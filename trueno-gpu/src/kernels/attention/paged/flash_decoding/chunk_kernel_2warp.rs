@@ -170,8 +170,11 @@ impl Kernel for FlashDecodingChunkKernel2Warp {
                 let log2e = ctx.mov_f32_imm(std::f32::consts::LOG2_E);
                 let scale_reg = ctx.mov_f32_imm(scale);
 
-                // Shared memory base for cross-warp reduction
-                let smem_base = ctx.shared_base_addr();
+                // Shared memory offsets (u32, like rmsnorm pattern)
+                // smem[0] = warp 0 partial, smem[4] = warp 1 partial
+                let smem_off_warp = ctx.mul_u32(warp_id, 4); // u32: 0 or 4
+                let smem_off_0 = ctx.mov_u32_imm(0);
+                let smem_off_1 = ctx.mov_u32_imm(4);
 
                 // Main loop
                 let pos = chunk_start;
@@ -201,39 +204,30 @@ impl Kernel for FlashDecodingChunkKernel2Warp {
                     ctx.add_f32_inplace(dot, other);
                 }
 
-                // Cross-warp reduction via shared memory
-                // Lane 0 of each warp stores its partial to smem[warp_id]
+                // Cross-warp reduction via shared memory (u32 offsets)
+                // Lane 0 of each warp stores its partial to smem[warp_id*4]
                 let zero_u32 = ctx.mov_u32_imm(0);
                 let is_lane0 = ctx.setp_eq_u32(lane_id, zero_u32);
-                let warp_smem_off = ctx.mul_wide_u32_reg(warp_id, four);
-                let warp_smem_addr = ctx.add_u64(smem_base, warp_smem_off);
                 ctx.branch_if_not(is_lane0, "fd2w_skip_st");
-                ctx.st_shared_f32(warp_smem_addr, dot);
+                ctx.st_shared_f32(smem_off_warp, dot);
                 ctx.label("fd2w_skip_st");
 
                 ctx.bar_sync(0);
 
-                // Lane 0 of warp 0 combines both partials
+                // All threads read both partials and combine
                 let zero_warp = ctx.mov_u32_imm(0);
                 let is_warp0 = ctx.setp_eq_u32(warp_id, zero_warp);
-                let smem0_addr = smem_base;
-                let one_u32 = ctx.mov_u32_imm(1);
-                let four_u64_wide = ctx.mul_wide_u32_reg(four, one_u32);
-                let smem1_addr = ctx.add_u64(smem_base, four_u64_wide);
-
-                // All threads in warp 0 read combined score
-                // (only need lane 0 but broadcast via shfl_idx below)
-                let partial0 = ctx.ld_shared_f32(smem0_addr);
-                let partial1 = ctx.ld_shared_f32(smem1_addr);
+                let partial0 = ctx.ld_shared_f32(smem_off_0);
+                let partial1 = ctx.ld_shared_f32(smem_off_1);
                 let total_dot = ctx.add_f32(partial0, partial1);
 
-                // Broadcast to ALL lanes in both warps via shared memory
+                // Broadcast combined score: warp0 lane0 writes, all read after barrier
                 ctx.branch_if_not(is_lane0, "fd2w_skip_bcast");
                 ctx.branch_if_not(is_warp0, "fd2w_skip_bcast");
-                ctx.st_shared_f32(smem0_addr, total_dot);
+                ctx.st_shared_f32(smem_off_0, total_dot);
                 ctx.label("fd2w_skip_bcast");
                 ctx.bar_sync(1);
-                let score_raw = ctx.ld_shared_f32(smem0_addr);
+                let score_raw = ctx.ld_shared_f32(smem_off_0);
 
                 // Scale score
                 let score = ctx.mul_f32(score_raw, scale_reg);
