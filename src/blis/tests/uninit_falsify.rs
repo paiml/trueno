@@ -234,6 +234,60 @@ fn falsify_uninit_007_fused_qkv_simd_vs_scalar() {
 }
 
 // ========================================================================
+// FALSIFY-SIMD-001: AVX2 axpy in attention matches scalar reference
+// ========================================================================
+
+#[test]
+fn falsify_simd_001_axpy_correctness() {
+    use crate::brick::AttentionOp;
+
+    // head_dim=128 (typical LLM): exercises full AVX2 path (128/8=16 iterations)
+    let n = 128;
+    let x: Vec<f32> = (0..n).map(|i| (i as f32) * 0.1).collect();
+    let alpha = 0.75f32;
+
+    let mut out_simd = vec![1.0f32; n]; // non-zero initial values
+    AttentionOp::simd_axpy(alpha, &x, &mut out_simd);
+
+    // Scalar reference
+    let mut out_ref = vec![1.0f32; n];
+    for i in 0..n {
+        out_ref[i] += alpha * x[i];
+    }
+
+    for i in 0..n {
+        assert!(
+            (out_simd[i] - out_ref[i]).abs() < 1e-5,
+            "FALSIFY-SIMD-001: axpy[{i}] got={}, expected={}",
+            out_simd[i],
+            out_ref[i]
+        );
+    }
+}
+
+#[test]
+fn falsify_simd_001b_axpy_remainder() {
+    use crate::brick::AttentionOp;
+
+    // head_dim=17: tests remainder path (17 % 8 = 1)
+    let n = 17;
+    let x: Vec<f32> = (0..n).map(|i| ((i * 3 + 1) as f32) * 0.1).collect();
+    let alpha = -0.5f32;
+
+    let mut out = vec![2.0f32; n];
+    AttentionOp::simd_axpy(alpha, &x, &mut out);
+
+    for i in 0..n {
+        let expected = 2.0 + alpha * x[i];
+        assert!(
+            (out[i] - expected).abs() < 1e-5,
+            "FALSIFY-SIMD-001b: axpy[{i}] got={}, expected={expected}",
+            out[i]
+        );
+    }
+}
+
+// ========================================================================
 // FALSIFY-PARALLEL-001: Parallel transpose matches serial at boundary
 // ========================================================================
 
