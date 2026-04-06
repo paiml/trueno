@@ -44,6 +44,34 @@ Every successful large Rust project uses this pattern:
 | batuta | 544 | 0.7.3 | 2 | Orchestration, agents, RAG oracle |
 | **Total** | **4752** | — | **32** | — |
 
+### Satellite Crates (separate repos, stack-dependent)
+
+These crates live in their own repos but depend on the core stack:
+
+| Repo | Version | Files | Role | Disposition |
+|------|---------|-------|------|-------------|
+| presentar | 0.3.5 | 1 | TUI framework (workspace) | **MERGE** — core UI for cbtop, batuta |
+| renacer | 0.10.2 | 119 | Profiling/tracing | **MERGE** — used by all 5 core crates |
+| certeza | 0.1.1 | 9 | Quality validation | **MERGE** — tiny, used in CI |
+| trueno-db | 0.3.17 | 27 | Embedded analytics DB | **MERGE** — already trueno-namespaced |
+| trueno-graph | 0.1.18 | 23 | Graph database | **MERGE** — already trueno-namespaced |
+| trueno-rag | 0.2.5 | 42 | RAG pipeline | **MERGE** — already trueno-namespaced |
+| trueno-viz | 0.2.4 | 114 | Visualization | **MERGE** — already trueno-namespaced |
+| trueno-zram | 0.3.1 | 3 | Compressed RAM (workspace) | **MERGE** — already trueno-namespaced |
+| batuta-common | 0.1.0 | 6 | Shared batuta types | **MERGE** — folded into aprender-orchestrate |
+| repartir | 2.0.4 | 23 | Distributed computing | **MERGE** — used by batuta |
+| manzana | 0.1.0 | 10 | Apple hardware interfaces | KEEP SEPARATE — platform-specific |
+| whisper.apr | 0.2.8 | 197 | Whisper speech model | KEEP SEPARATE — application, not framework |
+| alimentar | 0.2.9 | 83 | Data loading/synthetic data | **MERGE** — core data pipeline |
+| simular | 0.3.2 | 93 | Simulation framework | **MERGE** — used by training |
+| verificar | 0.5.0 | 52 | Verification/testing | **MERGE** — used by CI/quality |
+
+**Updated totals with satellites:**
+- **Merge into monorepo**: 5 core + 12 satellites = 17 repos
+- **Keep separate**: manzana, whisper.apr (+ pmat, which is its own product)
+- **Total .rs files**: ~5500+
+- **Total workspace crates**: ~40-45
+
 ### Dependency Graph (Current)
 
 ```
@@ -99,11 +127,19 @@ paiml/aprender/                          # THE monorepo
 │   │ ── Visualization & Tooling ──
 │   ├── aprender-viz/                    # Was: trueno-viz
 │   ├── aprender-explain/                # Was: trueno-explain
+│   ├── aprender-profile/               # Was: renacer (profiling/tracing)
+│   ├── aprender-present/               # Was: presentar (TUI framework)
 │   ├── aprender-shell/                  # REPL (already in aprender)
+│   ├── aprender-verify/                # Was: certeza (quality validation)
 │   │
 │   │ ── Training sub-crates ──
 │   ├── aprender-train-common/           # Was: entrenar-common
 │   ├── aprender-train-lora/             # Was: entrenar-lora
+│   │
+│   │ ── Data & Simulation ──
+│   ├── aprender-data/                   # Was: alimentar (data loading, synthetic data)
+│   ├── aprender-simulate/              # Was: simular (simulation framework)
+│   ├── aprender-distribute/            # Was: repartir (distributed computing)
 │   │
 │   │ ── Edge / Specialized ──
 │   ├── aprender-cuda-edge/              # Was: trueno-cuda-edge
@@ -126,9 +162,11 @@ paiml/aprender/                          # THE monorepo
 └── docs/specifications/                 # Specs (merged)
 ```
 
-### Crate Count: ~30 workspace members
+### Crate Count: ~42 workspace members
 
-This matches Polars (28), Burn (33), Nushell (30+).
+Comparable to Polars (28), Burn (33), Nushell (30+). Slightly larger
+but includes infrastructure that Polars gets from external deps
+(we own the full stack: DB, graph, profiler, TUI, distributed compute).
 
 ---
 
@@ -251,7 +289,7 @@ cargo test --workspace
 
 | Option | Impact | Effort | Risk | Recommendation |
 |--------|--------|--------|------|---------------|
-| **A: Full monorepo** (this spec) | **Critical** | **4-5 days** | **Low** | **RECOMMENDED — matches industry standard** |
+| **A: Full monorepo** (this spec, 17 repos → 1) | **Critical** | **5-7 days** | **Low** | **RECOMMENDED — matches industry standard** |
 | B: Keep trueno separate | Medium | 2 days | Medium | Partial fix, version sync remains |
 | C: Do nothing | — | 0 | **High** | 19 incidents → 30+ incidents |
 
@@ -259,7 +297,7 @@ cargo test --workspace
 
 ## Success Criteria
 
-1. `cargo test --workspace` passes (all 4752+ files compile together)
+1. `cargo test --workspace` passes (all 5500+ files compile together)
 2. `cargo publish -p apr-cli` succeeds without `[patch.crates-io]`
 3. `cargo install apr-cli` works from a clean machine
 4. Old crate names (`trueno`, `entrenar`, `realizar`, `batuta`) still resolve via shims
@@ -298,8 +336,26 @@ cargo test --workspace
 | batuta | aprender-orchestrate | Yes (batuta 0.8) |
 | apr-cli | apr-cli | No rename needed |
 | aprender | aprender | No rename needed |
+| presentar | aprender-present | Yes (presentar 0.4) |
+| renacer | aprender-profile | Yes (renacer 0.11) |
+| certeza | aprender-verify | Yes (certeza 0.2) |
+| batuta-common | (folded into aprender-orchestrate) | Yes |
+| repartir | aprender-distribute | Yes (repartir 2.1) |
+| alimentar | aprender-data | Yes (alimentar 0.3) |
+| simular | aprender-simulate | Yes (simular 0.4) |
+| verificar | aprender-verify-ml | Yes (verificar 0.6) |
 
-### Appendix B: Polars Reference Architecture
+### Appendix B: Kept Separate (NOT merged)
+
+| Crate | Reason |
+|-------|--------|
+| pmat / paiml-mcp-agent-toolkit | Separate product, own release cycle, 3830 .rs files |
+| manzana | Platform-specific (Apple only) |
+| whisper.apr | Application built ON the stack, not part of it |
+| ruchy | Separate language/runtime project |
+| apr-cookbook | Becomes `aprender/cookbook/` (content, not a crate) |
+
+### Appendix C: Polars Reference Architecture
 
 ```
 pola-rs/polars/Cargo.toml:
