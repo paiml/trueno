@@ -538,4 +538,66 @@ mod tests {
             }
         }
     }
+
+    /// FALSIFY-MMA-SYNC-001b: Combined ldmatrix + mma.sync compiles on GPU.
+    /// This validates the full compute pipeline PTX is accepted by ptxas.
+    #[test]
+    fn test_ldmatrix_mma_sync_combined_compiles() {
+        use crate::ptx::{PtxKernel, PtxModule, PtxType};
+
+        let kernel = PtxKernel::new("test_ldmatrix_mma_combined")
+            .param(PtxType::U64, "dummy")
+            .shared_memory(4096) // 4KB smem for test data
+            .build(|ctx| {
+                let smem_base = ctx.shared_base_addr();
+
+                // ldmatrix for A fragment: load 4 8×8 tiles from smem
+                let lane_id = ctx.special_reg(crate::ptx::PtxReg::TidX);
+                let c_32_bytes = ctx.mov_u32_imm(32); // stride = 16 FP16 = 32 bytes
+                let c_8 = ctx.mov_u32_imm(8);
+                let c_7 = ctx.mov_u32_imm(7);
+                let row_in_sub = ctx.and_u32(lane_id, c_7);
+                let a_row_off = ctx.mul_u32_reg(row_in_sub, c_32_bytes);
+                let a_smem_off = ctx.cvt_u64_u32(a_row_off);
+                let a_addr = ctx.add_u64(smem_base, a_smem_off);
+                // Convert to shared-space u32 for ldmatrix
+                let a_shared_off = a_row_off;
+                let a_frags = ctx.ldmatrix_x4(a_shared_off);
+
+                // ldmatrix.trans for B fragment: load 2 8×8 tiles transposed
+                let b_base = ctx.mov_u32_imm(2048); // B starts at offset 2KB
+                let b_row_off = ctx.mul_u32_reg(row_in_sub, c_8); // stride = 8 FP16 cols * 2 = 16 bytes... simplified
+                let b_smem_off = ctx.add_u32_reg(b_base, b_row_off);
+                let b_frags = ctx.ldmatrix_x2_trans(b_smem_off);
+
+                // Zero accumulators
+                let c0 = ctx.mov_f32_imm(0.0);
+                let c1 = ctx.mov_f32_imm(0.0);
+                let c2 = ctx.mov_f32_imm(0.0);
+                let c3 = ctx.mov_f32_imm(0.0);
+
+                // mma.sync: A[4] × B[2] + C[4] → D[4]
+                let _d = ctx.mma_sync_m16n8k16(&a_frags, &b_frags, &[c0, c1, c2, c3]);
+
+                let _ = a_addr;
+                ctx.ret();
+            });
+
+        let ptx = PtxModule::new().target("sm_80").add_kernel(kernel).emit();
+        assert!(ptx.contains("ldmatrix.sync.aligned.m8n8.x4.shared.b16"));
+        assert!(ptx.contains("ldmatrix.sync.aligned.m8n8.x2.trans.shared.b16"));
+        assert!(ptx.contains("mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32"));
+
+        #[cfg(feature = "cuda")]
+        {
+            use crate::driver::{CudaContext, CudaModule};
+
+            if let Ok(ctx) = CudaContext::new(0) {
+                match CudaModule::from_ptx(&ctx, &ptx) {
+                    Ok(_) => eprintln!("ldmatrix + mma.sync combined PTX compiled!"),
+                    Err(e) => panic!("Combined PTX failed: {e}\nPTX:\n{ptx}"),
+                }
+            }
+        }
+    }
 }

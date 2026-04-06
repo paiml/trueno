@@ -355,4 +355,22 @@ impl<'a> KernelBuilder<'a> {
         self.instructions.push(instr);
         [d0, d1, d2, d3]
     }
+
+    /// ldmatrix.sync.aligned.m8n8.x2.trans.shared.b16
+    ///
+    /// Transposed variant: loads 2 8×8 FP16 matrices with implicit transpose.
+    /// Used for B fragment of mma.sync.row.col — B stored row-major in smem,
+    /// loaded as col-major into registers.
+    /// Returns 2 B32 registers.
+    pub fn ldmatrix_x2_trans(&mut self, addr: VirtualReg) -> [VirtualReg; 2] {
+        let d0 = self.registers.allocate_virtual(PtxType::B32);
+        let d1 = self.registers.allocate_virtual(PtxType::B32);
+
+        let mut instr = PtxInstruction::new(PtxOp::LdMatrixTrans, PtxType::B16);
+        instr = instr.dst(Operand::Reg(d0));
+        instr.dsts.push(Operand::Reg(d1));
+        instr = instr.src(Operand::Reg(addr));
+        self.instructions.push(instr);
+        [d0, d1]
+    }
 }

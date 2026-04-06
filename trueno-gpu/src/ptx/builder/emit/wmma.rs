@@ -180,6 +180,7 @@ pub(crate) fn is_wmma_op(op: &PtxOp) -> bool {
             | PtxOp::WmmaStoreD
             | PtxOp::MmaSync
             | PtxOp::LdMatrix
+            | PtxOp::LdMatrixTrans
     )
 }
 
@@ -242,6 +243,24 @@ pub(crate) fn emit_mma_sync(prefix: String, instr: &PtxInstruction) -> String {
 pub(crate) fn emit_ldmatrix(prefix: String, instr: &PtxInstruction) -> String {
     let mut s = prefix;
     s.push_str("ldmatrix.sync.aligned.m8n8.x4.shared.b16 {");
+    if let Some(ref d) = instr.dst {
+        s.push_str(&emit_operand(d));
+    }
+    for d in &instr.dsts {
+        s.push_str(", ");
+        s.push_str(&emit_operand(d));
+    }
+    s.push_str("}, [");
+    s.push_str(&emit_operand(&instr.srcs[0]));
+    s.push_str("];\n");
+    s
+}
+
+/// Emit ldmatrix.sync.aligned.m8n8.x2.trans.shared.b16
+/// Transposed variant for B fragment of mma.sync.row.col.
+pub(crate) fn emit_ldmatrix_trans(prefix: String, instr: &PtxInstruction) -> String {
+    let mut s = prefix;
+    s.push_str("ldmatrix.sync.aligned.m8n8.x2.trans.shared.b16 {");
     if let Some(ref d) = instr.dst {
         s.push_str(&emit_operand(d));
     }

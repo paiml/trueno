@@ -162,6 +162,10 @@ pub enum PtxOp {
     /// Loads 4 8×8 FP16 matrices from shared memory in one instruction.
     /// Each thread loads one row (8 FP16). Replaces ~16 ld.shared instructions.
     LdMatrix,
+    /// ldmatrix.sync.aligned.m8n8.x2.trans.shared.b16
+    /// Transposed variant: loads 2 8×8 matrices with transpose.
+    /// Used for B fragment of mma.sync.row.col (B stored row-major, needed col-major).
+    LdMatrixTrans,
 
     // ===== DP4A Integer Dot Product =====
     /// DP4A unsigned dot product (4 u8 pairs to u32)
