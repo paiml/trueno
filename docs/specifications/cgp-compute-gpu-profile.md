@@ -3152,7 +3152,7 @@ Analysis via `decy audit` + `pmat query` + direct source comparison.
 ### Current State Summary (updated 2026-04-05)
 
 **cgp tool**: 18/18 CLI commands implemented (only `cgp tui` is STUB).
-3619 tests passing (updated 2026-04-06 post fused-ops SIMD + FALSIFY tests).
+3619 tests passing (updated 2026-04-06). 11 FALSIFY-UNINIT tests added.
 65 peer-reviewed citations [1]-[65]. 11 provable-contracts.
 All 11 contracts pass (53 checks pass, 0 fail, 44 skip).
 
@@ -3176,7 +3176,7 @@ async DMA directly global→shared.
 |--------|--------|------|-------|---------|----------|
 | 1T GFLOPS (1024) | **140** | 142 | 129 | 119 | 115 |
 | vs trueno | 1.00x | 1.02x | 0.92x | 0.85x | 0.82x |
-| 8T GFLOPS (1024) | **561** (measured) | — | 763 | — | — |
+| 8T GFLOPS (1024) | **633** (measured 2026-04-06) | — | 763 | — | — |
 | 1T GFLOPS (512) | **145** | 148 | 137 | 118 | 118 |
 
 **Fused attention (FlashAttention-style [64], AVX2, online softmax)**:
