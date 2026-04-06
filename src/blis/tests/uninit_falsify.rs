@@ -232,3 +232,75 @@ fn falsify_uninit_007_fused_qkv_simd_vs_scalar() {
         assert!((v[i] - exp_v).abs() < 1e-4, "FALSIFY-UNINIT-007: V[{i}]");
     }
 }
+
+// ========================================================================
+// FALSIFY-PARALLEL-001: Parallel transpose matches serial at boundary
+// ========================================================================
+
+#[test]
+fn falsify_parallel_001_transpose_boundary() {
+    // 1000×1000 = 1M elements: right at PARALLEL_THRESHOLD=1M.
+    // Both parallel and serial paths must produce identical results.
+    let rows = 1000;
+    let cols = 1000;
+    let data: Vec<f32> = (0..rows * cols).map(|i| (i as f32) * 0.001).collect();
+
+    let mut result = vec![0.0f32; rows * cols];
+    crate::blis::transpose::transpose(rows, cols, &data, &mut result).unwrap();
+
+    // Verify: result[j*rows+i] == data[i*cols+j]
+    for i in 0..rows.min(100) {
+        for j in 0..cols.min(100) {
+            let expected = data[i * cols + j];
+            let got = result[j * rows + i];
+            assert!(
+                (got - expected).abs() < 1e-6,
+                "FALSIFY-PARALLEL-001: transpose[{j},{i}] got={got}, expected={expected}"
+            );
+        }
+    }
+}
+
+// ========================================================================
+// FALSIFY-PARALLEL-002: Parallel matvec matches serial at boundary
+// ========================================================================
+
+#[test]
+fn falsify_parallel_002_matvec_boundary() {
+    // 2048 rows: right at PARALLEL_THRESHOLD=2048 for matvec.
+    let rows = 2048;
+    let cols = 64;
+    let data: Vec<f32> = (0..rows * cols).map(|i| ((i % 31) as f32) * 0.1).collect();
+    let v_data: Vec<f32> = (0..cols).map(|i| ((i % 11) as f32) * 0.2).collect();
+
+    let m = Matrix::from_vec(rows, cols, data.clone()).unwrap();
+    let v = Vector::from_slice(&v_data);
+    let result = m.matvec(&v).unwrap();
+
+    // Scalar reference
+    for r in 0..rows {
+        let expected: f32 = (0..cols).map(|c| data[r * cols + c] * v_data[c]).sum();
+        let got = result.as_slice()[r];
+        assert!(
+            (got - expected).abs() < expected.abs() * 1e-5 + 1e-5,
+            "FALSIFY-PARALLEL-002: matvec[{r}] got={got}, expected={expected}"
+        );
+    }
+}
+
+// ========================================================================
+// FALSIFY-PARALLEL-003: Parallel transpose deterministic
+// ========================================================================
+
+#[test]
+fn falsify_parallel_003_transpose_deterministic() {
+    let rows = 1024;
+    let cols = 1024;
+    let data: Vec<f32> = (0..rows * cols).map(|i| (i as f32) * 0.001).collect();
+
+    let mut r1 = vec![0.0f32; rows * cols];
+    let mut r2 = vec![0.0f32; rows * cols];
+    crate::blis::transpose::transpose(rows, cols, &data, &mut r1).unwrap();
+    crate::blis::transpose::transpose(rows, cols, &data, &mut r2).unwrap();
+    assert_eq!(r1, r2, "FALSIFY-PARALLEL-003: transpose non-deterministic");
+}
