@@ -149,9 +149,8 @@ fn matmul_q4k_f32_parallel(
     thread::scope(|s| {
         let input_ref = input;
         let q4k_ref = q4k_data;
-        let chunks: Vec<_> = output.chunks_mut(chunk_size).enumerate().collect();
-
-        for (chunk_idx, chunk) in chunks {
+        // CGP-DBUF: iterate directly instead of collecting into Vec.
+        for (chunk_idx, chunk) in output.chunks_mut(chunk_size).enumerate() {
             let start_row = chunk_idx * chunk_size;
 
             s.spawn(move || {
