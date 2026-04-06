@@ -220,18 +220,29 @@ RTX 4090 SM: 100 KB shared memory per SM. With opt-in:
 - 4-stage 128×128: 64 KB → fits with CTA occupancy of 1
 - 3-stage: 48 KB → static only, CTA occupancy of 2
 
-### Expected Cumulative Impact
+### Status and Measured Results (2026-04-06)
 
-| Phase | Technique | Est. TFLOP/s | vs cuBLAS |
-|-------|-----------|-------------|-----------|
-| Current | 64×64 wmma 2-stage | 40.5 | 0.39x |
-| Phase 1 | mma.sync m16n8k16 | ~49 | 0.47x |
-| Phase 2 | 128×128 4-stage | ~69 | 0.66x |
-| Phase 3 | ldmatrix + swizzle | ~79 | 0.75x |
-| Phase 4 | >48KB smem opt-in | ~85 | 0.81x |
+| Phase | Technique | Status | Result |
+|-------|-----------|--------|--------|
+| Phase 1 | mma.sync m16n8k16 PTX support | ✅ DONE | Builder methods + emission |
+| Phase 2 | 128×128 CTA kernel | ⚠️ **NEGATIVE** | 28.4 vs 40.5 TFLOP/s (occupancy loss) |
+| Phase 2b | 3-stage pipeline (64×64) | ⚠️ **NEUTRAL** | +3% at 512, -3% at 1024 |
+| Phase 3 | ldmatrix + swizzle | NOT STARTED | PTX ops added, kernel TBD |
+| Phase 4 | cuFuncSetAttribute | NOT STARTED | — |
 
-**Target: 0.6x cuBLAS** achievable with Phases 1+2.
-**Stretch: 0.75x** with all 4 phases.
+**128×128 negative result root cause**: 24KB smem/CTA → fewer concurrent CTAs.
+The 2× compute-to-load ratio improvement is offset by occupancy loss.
+CUTLASS compensates with mma.sync + ldmatrix (8× fewer smem load instructions)
++ more pipeline stages.
+
+**Revised estimate**: 0.5x cuBLAS achievable with mma.sync+ldmatrix at 64×64.
+0.6x+ requires solving the occupancy/tile-size tradeoff (needs warp specialization).
+
+### Production Path (Available Now)
+
+The cuBLAS optional backend (`--features cuda`) provides **105-150 TFLOP/s**
+production throughput via `Matrix::matmul`. Pure-Rust PTX development continues
+as a Track 2 research effort toward vendor independence.
 
 ## What We Cannot Match (cuBLAS advantages)
 
