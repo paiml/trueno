@@ -3441,7 +3441,17 @@ and Graviton are deployment targets that need dedicated 8x8 NEON microkernels.
 | P3c GPU PTX | Medium | High | High | IN PROGRESS | cuBLAS backend ✅ + 128×128 scaffold |
 | **CGP-DBUF micro-opt** | **Medium** | **Low** | **Low** | ✅ **7 PHASES DONE** | **Diminishing returns** |
 
-**CGP-DBUF conclusion**: After 7 phases and 35+ experiments, the CPU optimization
+**MANDATORY**: All performance changes require a Level A provable-contract
+(../provable-contracts) BEFORE any code is written. The contract must include:
+- FALSIFY clauses (what would disprove the optimization hypothesis)
+- Performance bounds (min TFLOP/s, max regression %)
+- Hardware specification (target GPU/CPU)
+Violations of this policy were caught during the CGP-DBUF work when:
+- mma.sync emitted .u32 instead of .b32 (caught by FALSIFY-MMA-SYNC-001)
+- st.global.v2.f32 missing braces (caught by ptxas compilation contract)
+- 128×128 CTA occupancy loss (caught by FALSIFY benchmarking)
+
+**CGP-DBUF conclusion**: After 7+ phases and 35+ experiments, the CPU optimization
 surface is exhausted for the current architecture:
 - **P1a codegen**: ✅ Done (6 variants, 8×32 optimal for row-major C)
 - **P1b shared-B**: ⚠️ 4× negative (barrier overhead > redundant packing)
